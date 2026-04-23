@@ -4,13 +4,12 @@ import json
 from pathlib import Path
 
 from tinygrad import nn
-from tinygrad.helpers import Context
 
 from .config import GemmaConditionalConfig, GemmaConfig, load_config_dict
 from .model import GemmaForCausalLM
 from .multimodal import GemmaForConditionalGeneration
 from .quantization import dequantize_state_dict, load_quantization_manifest
-from .runtime import prepare_device
+from .runtime import temporary_default_device
 
 
 GemmaAnyConfig = GemmaConfig | GemmaConditionalConfig
@@ -96,8 +95,7 @@ def load_pretrained(
     model = model_type(config)  # type: ignore[arg-type]
     nn.state.load_state_dict(model, state_dict, strict=strict, verbose=verbose, consume=True)
     return model
-  target_device = prepare_device(device)
-  with Context(DEV=target_device):
+  with temporary_default_device(device):
     model = model_type(config)  # type: ignore[arg-type]
     nn.state.load_state_dict(model, state_dict, strict=strict, verbose=verbose, consume=True)
   return model

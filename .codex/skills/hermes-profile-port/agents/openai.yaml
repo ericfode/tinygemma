@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hermes Profile Port"
+  short_description: "Port Hermes profiles into Codex"
+  default_prompt: "Import a Hermes profile into this repo as Codex-friendly AGENTS and persona artifacts."

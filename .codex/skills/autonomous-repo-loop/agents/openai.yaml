@@ -1,0 +1,4 @@
+interface:
+  display_name: "Autonomous Repo Loop"
+  short_description: "Run deterministic repo loops"
+  default_prompt: "Recover repo state, cohere one narrow increment, implement it, review it, and close with explicit gates."

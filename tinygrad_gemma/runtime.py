@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import platform
 
 from tinygrad import Device
@@ -72,3 +74,18 @@ def prepare_device(device: str | None) -> str:
     if not metal_is_usable():
       raise RuntimeError("tinygrad METAL backend is unavailable in this process")
   return normalized
+
+
+@contextmanager
+def temporary_default_device(device: str | None) -> Iterator[str]:
+  target_device = prepare_device(device)
+  missing = object()
+  previous = Device.__dict__.get("DEFAULT", missing)
+  Device.DEFAULT = target_device
+  try:
+    yield target_device
+  finally:
+    if previous is missing:
+      Device.__dict__.pop("DEFAULT", None)
+    else:
+      Device.DEFAULT = previous

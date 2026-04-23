@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repo Harness Bootstrap"
+  short_description: "Bootstrap a Codex repo harness"
+  default_prompt: "Set up AGENTS.md, repo state, and installable Codex harness extensions for a project."

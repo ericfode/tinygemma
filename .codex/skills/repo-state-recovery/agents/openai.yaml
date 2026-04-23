@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repo State Recovery"
+  short_description: "Recover repo state after interruption"
+  default_prompt: "Reconstruct where work stood using sessions, git state, tests, and repo plans."

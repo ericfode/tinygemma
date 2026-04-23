@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "project": "tinygrad-gemma",
+  "current_checkpoint": "codex-local-environment-bootstrap",
+  "accepted_increments": [
+    {
+      "id": "codex-local-env-001",
+      "summary": "Initialized repo-local Codex harness state, environment actions, reusable workflow skill copies, Python 3.11 venv setup, and tinygrad 0.12 device-context compatibility for tinygrad-gemma.",
+      "artifacts": [
+        "AGENTS.md",
+        ".codex/environments/environment.toml",
+        "configs/repo-loop-state.json",
+        "docs/plans/2026-04-23-codex-local-environment-bootstrap.md",
+        "state/evolution-log.md",
+        "state/procedure-candidates.json",
+        "scripts/smoke_metal.py",
+        "tinygrad_gemma/runtime.py",
+        "tinygrad_gemma/loader.py",
+        "tests/test_tinygrad_gemma.py"
+      ]
+    }
+  ],
+  "gates": [
+    ".venv/bin/python -m pytest -q",
+    ".venv/bin/tinygrad-gemma --help",
+    ".venv/bin/python scripts/smoke_metal.py"
+  ],
+  "next_target": "e2b-int8-metal-decode-floor",
+  "next_target_plan": "Make E2B int8 METAL beam=1 1000-token generation complete with durable progress and at least 10 tok/s sustained generation, per benchmarks/gemma4-metal-speed-targets.md, once local checkpoints are available.",
+  "updated_at": "2026-04-23T16:51:43-0700"
+}
