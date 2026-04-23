@@ -1,0 +1,679 @@
+from __future__ import annotations
+
+import json
+import math
+import wave
+from pathlib import Path
+
+import numpy as np
+import pytest
+from tinygrad import Tensor, nn
+from tinygrad.helpers import Context
+
+from tinygrad_gemma import (
+  DEFAULT_IGNORE_INDEX,
+  GemmaAudioConfig,
+  GemmaCache,
+  GemmaConditionalConfig,
+  GemmaConfig,
+  GemmaForCausalLM,
+  GemmaForConditionalGeneration,
+  GemmaMultimodalProcessor,
+  GemmaTrainingBatch,
+  GemmaVisionConfig,
+  build_causal_labels,
+  build_optimizer,
+  causal_language_model_loss,
+  load_pretrained,
+  load_optimizer_state,
+  load_text_config,
+  save_training_checkpoint,
+  set_trainable,
+  train_step,
+)
+from tinygrad_gemma.cli import DEFAULT_MAX_BEAM, resolve_beam
+from tinygrad_gemma.tokenizer import GemmaTokenizer
+
+
+def gelu_pytorch_tanh_np(x: np.ndarray) -> np.ndarray:
+  return x * 0.5 * (1.0 + np.tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)))
+
+
+def apply_activation_np(name: str, x: np.ndarray) -> np.ndarray:
+  if name in ("gelu", "gelu_new"):
+    return 0.5 * x * (1.0 + np.vectorize(math.erf)(x / math.sqrt(2.0)))
+  if name == "gelu_pytorch_tanh":
+    return gelu_pytorch_tanh_np(x)
+  if name == "silu":
+    return x / (1.0 + np.exp(-x))
+  raise ValueError(name)
+
+
+def rms_norm_np(
+  x: np.ndarray,
+  weight: np.ndarray | None,
+  eps: float,
+  *,
+  with_scale: bool = True,
+  plus_one_scale: bool = False,
+) -> np.ndarray:
+  normed = x.astype(np.float32) * (np.mean(np.square(x.astype(np.float32)), axis=-1, keepdims=True) + eps) ** -0.5
+  if not with_scale:
+    return normed
+  scale = (1.0 + weight.astype(np.float32)) if plus_one_scale else weight.astype(np.float32)
+  return normed * scale
+
+
+def rotate_half_np(x: np.ndarray) -> np.ndarray:
+  half = x.shape[-1] // 2
+  return np.concatenate([-x[..., half:], x[..., :half]], axis=-1)
+
+
+def apply_rotary_np(
+  x: np.ndarray,
+  position_ids: np.ndarray,
+  head_dim: int,
+  rope_theta: float,
+  partial_rotary_factor: float = 1.0,
+) -> np.ndarray:
+  rot_dim = max(0, int(head_dim * partial_rotary_factor))
+  rot_dim -= rot_dim % 2
+  if rot_dim == 0:
+    return x
+  inv_freq = 1.0 / (rope_theta ** (np.arange(0, rot_dim, 2, dtype=np.float32) / rot_dim))
+  freqs = position_ids[..., None].astype(np.float32) * inv_freq.reshape(1, 1, -1)
+  emb = np.concatenate([freqs, freqs], axis=-1)
+  cos = emb[:, :, None, :]
+  sin = emb[:, :, None, :]
+  rot = x[..., :rot_dim]
+  rest = x[..., rot_dim:]
+  rotated = rot * np.cos(cos) + rotate_half_np(rot) * np.sin(sin)
+  return np.concatenate([rotated, rest], axis=-1)
+
+
+def linear_np(x: np.ndarray, weight: np.ndarray) -> np.ndarray:
+  return x @ weight.T
+
+
+def build_mask_np(
+  query_len: int,
+  key_len: int,
+  past_seen_tokens: int,
+  sliding_window: int | None,
+  *,
+  causal: bool = True,
+) -> np.ndarray | None:
+  if query_len == 1 and sliding_window is None and causal:
+    return None
+  q_pos = np.arange(past_seen_tokens, past_seen_tokens + query_len, dtype=np.int32).reshape(query_len, 1)
+  key_start = past_seen_tokens + query_len - key_len
+  k_pos = np.arange(key_start, past_seen_tokens + query_len, dtype=np.int32).reshape(1, key_len)
+  allowed = (k_pos <= q_pos) if causal else np.ones((query_len, key_len), dtype=bool)
+  if sliding_window is not None:
+    if causal:
+      allowed &= k_pos >= (q_pos - sliding_window + 1)
+    else:
+      allowed &= np.abs(q_pos - k_pos) < sliding_window
+  mask = np.where(allowed, 0.0, -np.inf).astype(np.float32)
+  return mask.reshape(1, 1, query_len, key_len)
+
+
+def repeat_kv_np(x: np.ndarray, n_rep: int) -> np.ndarray:
+  if n_rep == 1:
+    return x
+  return np.repeat(x, n_rep, axis=1)
+
+
+def attention_params_for(config: GemmaConfig, layer_idx: int) -> dict[str, float | int | bool]:
+  assert config.layer_types is not None
+  layer_type = config.layer_types[layer_idx]
+  rope_params = (config.rope_parameters or {})[layer_type]
+  is_sliding = layer_type == "sliding_attention"
+  head_dim = config.head_dim if is_sliding else (config.global_head_dim or config.head_dim)
+  use_k_eq_v = bool(config.attention_k_eq_v and not is_sliding)
+  num_kv_heads = config.num_key_value_heads if (is_sliding or not use_k_eq_v) else (config.num_global_key_value_heads or config.num_key_value_heads)
+  return {
+    "layer_type": layer_type,
+    "head_dim": head_dim,
+    "num_kv_heads": num_kv_heads,
+    "num_kv_groups": config.num_attention_heads // num_kv_heads,
+    "rope_theta": float(rope_params.get("rope_theta", 10000.0)),
+    "partial_rotary_factor": float(rope_params.get("partial_rotary_factor", 1.0)),
+    "sliding_window": config.sliding_window if is_sliding else None,
+    "scaling": 1.0,
+    "use_k_eq_v": use_k_eq_v,
+  }
+
+
+def numpy_forward(config: GemmaConfig, params: dict[str, np.ndarray], input_ids: list[int]) -> np.ndarray:
+  token_ids = np.array(input_ids, dtype=np.int32).reshape(1, -1)
+  x = params["model.embed_tokens.weight"][token_ids] * (config.hidden_size ** 0.5)
+
+  per_layer_inputs = None
+  if config.hidden_size_per_layer_input:
+    token_identity = params["model.embed_tokens_per_layer.weight"][token_ids].reshape(
+      1, len(input_ids), config.num_hidden_layers, config.hidden_size_per_layer_input
+    ) * (config.hidden_size_per_layer_input ** 0.5)
+    context_projection = linear_np(x, params["model.per_layer_model_projection.weight"]) * (config.hidden_size ** -0.5)
+    context_projection = context_projection.reshape(1, len(input_ids), config.num_hidden_layers, config.hidden_size_per_layer_input)
+    context_projection = rms_norm_np(context_projection, params["model.per_layer_projection_norm.weight"], config.rms_norm_eps, plus_one_scale=False)
+    per_layer_inputs = (context_projection + token_identity) * (2.0 ** -0.5)
+
+  position_ids = np.arange(len(input_ids), dtype=np.int32).reshape(1, -1)
+  for layer_idx in range(config.num_hidden_layers):
+    prefix = f"model.layers.{layer_idx}."
+    attn_params = attention_params_for(config, layer_idx)
+
+    residual = x
+    attn_in = rms_norm_np(x, params[prefix + "input_layernorm.weight"], config.rms_norm_eps, plus_one_scale=False)
+    q = linear_np(attn_in, params[prefix + "self_attn.q_proj.weight"]).reshape(
+      1, len(input_ids), config.num_attention_heads, int(attn_params["head_dim"])
+    )
+    q = rms_norm_np(q, params[prefix + "self_attn.q_norm.weight"], config.rms_norm_eps, plus_one_scale=False)
+    q = apply_rotary_np(q, position_ids, int(attn_params["head_dim"]), float(attn_params["rope_theta"]), float(attn_params["partial_rotary_factor"]))
+    q = np.transpose(q, (0, 2, 1, 3))
+
+    raw_k = linear_np(attn_in, params[prefix + "self_attn.k_proj.weight"]).reshape(
+      1, len(input_ids), int(attn_params["num_kv_heads"]), int(attn_params["head_dim"])
+    )
+    raw_v = raw_k if attn_params["use_k_eq_v"] else linear_np(
+      attn_in, params[prefix + "self_attn.v_proj.weight"]
+    ).reshape(1, len(input_ids), int(attn_params["num_kv_heads"]), int(attn_params["head_dim"]))
+    k = rms_norm_np(raw_k, params[prefix + "self_attn.k_norm.weight"], config.rms_norm_eps, plus_one_scale=False)
+    k = apply_rotary_np(k, position_ids, int(attn_params["head_dim"]), float(attn_params["rope_theta"]), float(attn_params["partial_rotary_factor"]))
+    v = rms_norm_np(raw_v, None, config.rms_norm_eps, with_scale=False)
+    k = np.transpose(k, (0, 2, 1, 3))
+    v = np.transpose(v, (0, 2, 1, 3))
+
+    key = repeat_kv_np(k, int(attn_params["num_kv_groups"]))
+    value = repeat_kv_np(v, int(attn_params["num_kv_groups"]))
+    scores = np.matmul(q.astype(np.float32), np.swapaxes(key.astype(np.float32), -1, -2)) * float(attn_params["scaling"])
+    mask = build_mask_np(
+      len(input_ids),
+      len(input_ids),
+      0,
+      attn_params["sliding_window"],
+      causal=config.use_bidirectional_attention != "all",
+    )
+    if mask is not None:
+      scores = scores + mask
+    weights = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    weights = weights / np.sum(weights, axis=-1, keepdims=True)
+    attn_out = np.matmul(weights, value).transpose(0, 2, 1, 3).reshape(1, len(input_ids), -1)
+    attn_out = linear_np(attn_out, params[prefix + "self_attn.o_proj.weight"])
+    attn_out = rms_norm_np(attn_out, params[prefix + "post_attention_layernorm.weight"], config.rms_norm_eps, plus_one_scale=False)
+    x = residual + attn_out
+
+    residual = x
+    mlp_in = rms_norm_np(x, params[prefix + "pre_feedforward_layernorm.weight"], config.rms_norm_eps, plus_one_scale=False)
+    mlp = linear_np(
+      apply_activation_np(config.activation_name, linear_np(mlp_in, params[prefix + "mlp.gate_proj.weight"])) *
+      linear_np(mlp_in, params[prefix + "mlp.up_proj.weight"]),
+      params[prefix + "mlp.down_proj.weight"],
+    )
+    mlp = rms_norm_np(mlp, params[prefix + "post_feedforward_layernorm.weight"], config.rms_norm_eps, plus_one_scale=False)
+    x = residual + mlp
+
+    if per_layer_inputs is not None:
+      residual = x
+      ple = linear_np(x, params[prefix + "per_layer_input_gate.weight"])
+      ple = apply_activation_np(config.activation_name, ple)
+      ple = ple * per_layer_inputs[:, :, layer_idx, :]
+      ple = linear_np(ple, params[prefix + "per_layer_projection.weight"])
+      ple = rms_norm_np(ple, params[prefix + "post_per_layer_input_norm.weight"], config.rms_norm_eps, plus_one_scale=False)
+      x = residual + ple
+
+    x = x * params[prefix + "layer_scalar"]
+
+  x = rms_norm_np(x, params["model.norm.weight"], config.rms_norm_eps, plus_one_scale=False)
+  logits = linear_np(x, params["lm_head.weight"])
+  if config.final_logit_softcapping is not None:
+    logits = np.tanh(logits / config.final_logit_softcapping) * config.final_logit_softcapping
+  return logits
+
+
+def randomize_model(model, seed: int = 0) -> dict[str, np.ndarray]:
+  rng = np.random.default_rng(seed)
+  shared: dict[int, np.ndarray] = {}
+  params = {}
+  for name, tensor in nn.state.get_state_dict(model).items():
+    if tensor.shape:
+      arr = shared.setdefault(id(tensor), rng.standard_normal(tensor.shape, dtype=np.float32) * 0.05)
+    else:
+      arr = shared.setdefault(id(tensor), np.array(rng.standard_normal() * 0.05, dtype=np.float32))
+    params[name] = arr.astype(np.float32)
+  nn.state.load_state_dict(
+    model,
+    {name: Tensor(value.item()) if value.shape == () else Tensor(value) for name, value in params.items()},
+    strict=True,
+    verbose=False,
+  )
+  return params
+
+
+def make_config() -> GemmaConfig:
+  return GemmaConfig(
+    model_type="gemma4",
+    vocab_size=48,
+    hidden_size=12,
+    intermediate_size=24,
+    num_hidden_layers=2,
+    num_attention_heads=2,
+    num_key_value_heads=1,
+    num_global_key_value_heads=1,
+    head_dim=4,
+    global_head_dim=6,
+    hidden_activation="gelu_pytorch_tanh",
+    hidden_size_per_layer_input=2,
+    vocab_size_per_layer_input=48,
+    max_position_embeddings=64,
+    sliding_window=3,
+    layer_types=["sliding_attention", "full_attention"],
+    rope_parameters={
+      "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
+      "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.5, "rope_theta": 1000000.0},
+    },
+    attention_k_eq_v=True,
+    final_logit_softcapping=4.0,
+  )
+
+
+def make_conditional_config() -> GemmaConditionalConfig:
+  return GemmaConditionalConfig(
+    text_config=GemmaConfig(
+      model_type="gemma4_text",
+      vocab_size=64,
+      hidden_size=16,
+      intermediate_size=32,
+      num_hidden_layers=1,
+      num_attention_heads=4,
+      num_key_value_heads=2,
+      num_global_key_value_heads=2,
+      head_dim=4,
+      global_head_dim=4,
+      hidden_activation="gelu_pytorch_tanh",
+      hidden_size_per_layer_input=0,
+      max_position_embeddings=64,
+      sliding_window=3,
+      layer_types=["full_attention"],
+      rope_parameters={
+        "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
+        "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 1.0, "rope_theta": 1000000.0},
+      },
+      attention_k_eq_v=False,
+      final_logit_softcapping=None,
+    ),
+    vision_config=GemmaVisionConfig(
+      hidden_size=16,
+      intermediate_size=32,
+      num_hidden_layers=1,
+      num_attention_heads=4,
+      num_key_value_heads=4,
+      head_dim=4,
+      patch_size=2,
+      pooling_kernel_size=1,
+      position_embedding_size=16,
+      default_output_length=70,
+    ),
+    audio_config=GemmaAudioConfig(
+      hidden_size=16,
+      num_hidden_layers=1,
+      num_attention_heads=4,
+      subsampling_conv_channels=[4, 4],
+      output_proj_dims=16,
+    ),
+    tie_word_embeddings=True,
+  )
+
+
+def test_forward_matches_numpy_reference_for_gemma4():
+  config = make_config()
+  model = GemmaForCausalLM(config)
+  params = randomize_model(model, seed=13)
+  input_ids = [2, 5, 7, 11]
+  logits, _ = model.forward_ids(input_ids)
+  expected = numpy_forward(config, params, input_ids)
+  np.testing.assert_allclose(logits.numpy(), expected, rtol=1e-4, atol=1e-4)
+
+
+def test_cache_matches_full_forward_for_gemma4():
+  config = make_config()
+  model = GemmaForCausalLM(config)
+  randomize_model(model, seed=29)
+  prompt = [2, 4, 6]
+  cache = GemmaCache.empty(config.num_hidden_layers)
+  _, cache = model.forward_ids(prompt, cache=cache)
+  step_logits, _ = model.forward_ids([9], cache=cache)
+  full_logits, _ = model.forward_ids(prompt + [9])
+  np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
+
+
+def test_loader_roundtrip_for_nested_gemma4(tmp_path: Path):
+  config = make_config()
+  model = GemmaForCausalLM(config)
+  randomize_model(model, seed=37)
+  model_dir = tmp_path / "gemma4"
+  model_dir.mkdir()
+
+  (model_dir / "config.json").write_text(json.dumps({
+    "model_type": "gemma4",
+    "text_config": config.to_dict(),
+    "tie_word_embeddings": config.tie_word_embeddings,
+  }))
+
+  state_dict = nn.state.get_state_dict(model)
+  nested = {}
+  for name, value in state_dict.items():
+    nested["model.language_model." + name[len("model."):]] = value if name.startswith("model.") else value
+    if not name.startswith("model."):
+      nested[name] = value
+  nn.state.safe_save(nested, str(model_dir / "model.safetensors"))
+
+  reloaded = load_pretrained(model_dir, verbose=False)
+  input_ids = [2, 3, 5]
+  logits_a, _ = model.forward_ids(input_ids)
+  logits_b, _ = reloaded.forward_ids(input_ids)
+  np.testing.assert_allclose(logits_a.numpy(), logits_b.numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_loader_roundtrip_for_conditional_gemma4(tmp_path: Path):
+  config = make_conditional_config()
+  with Context(DEV="PYTHON"):
+    model = GemmaForConditionalGeneration(config)
+    randomize_model(model, seed=47)
+    model_dir = tmp_path / "gemma4-conditional"
+    model_dir.mkdir()
+
+    (model_dir / "config.json").write_text(json.dumps(config.to_dict()))
+
+    state_dict = dict(nn.state.get_state_dict(model))
+    state_dict.pop("lm_head.weight", None)
+    nn.state.safe_save(state_dict, str(model_dir / "model.safetensors"))
+
+    reloaded = load_pretrained(model_dir, verbose=False)
+    assert isinstance(reloaded, GemmaForConditionalGeneration)
+    assert load_text_config(model_dir).family == "gemma4"
+
+    input_ids = [2, config.image_token_id, 5] + [config.audio_token_id] * 5 + [7]
+    pixel_values = np.random.default_rng(1).random((1, 1, 12), dtype=np.float32)
+    image_position_ids = np.array([[[0, 0]]], dtype=np.int32)
+    input_features = np.random.default_rng(2).random((1, 20, 4), dtype=np.float32)
+    input_features_mask = np.ones((1, 20), dtype=bool)
+    logits_a, _ = model.forward_ids(
+      input_ids,
+      pixel_values=pixel_values,
+      image_position_ids=image_position_ids,
+      input_features=input_features,
+      input_features_mask=input_features_mask,
+    )
+    logits_b, _ = reloaded.forward_ids(
+      input_ids,
+      pixel_values=pixel_values,
+      image_position_ids=image_position_ids,
+      input_features=input_features,
+      input_features_mask=input_features_mask,
+    )
+  np.testing.assert_allclose(logits_a.numpy(), logits_b.numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_conditional_forward_handles_multimodal_placeholders():
+  config = make_conditional_config()
+  with Context(DEV="PYTHON"):
+    model = GemmaForConditionalGeneration(config)
+    randomize_model(model, seed=53)
+    input_ids = [2, config.image_token_id, 5] + [config.audio_token_id] * 5 + [7]
+    pixel_values = np.random.default_rng(3).random((1, 1, 12), dtype=np.float32)
+    image_position_ids = np.array([[[0, 0]]], dtype=np.int32)
+    input_features = np.random.default_rng(4).random((1, 20, 4), dtype=np.float32)
+    input_features_mask = np.ones((1, 20), dtype=bool)
+    logits, cache = model.forward_ids(
+      input_ids,
+      pixel_values=pixel_values,
+      image_position_ids=image_position_ids,
+      input_features=input_features,
+      input_features_mask=input_features_mask,
+    )
+    assert logits.shape == (1, len(input_ids), config.text_config.vocab_size)
+    assert cache is None
+
+
+def test_forward_loss_ids_matches_manual_shifted_loss():
+  config = make_config()
+  with Context(DEV="PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=59)
+    input_ids = [2, 5, 0, 11]
+    logits, _ = model.forward_ids(input_ids)
+    labels = build_causal_labels(input_ids, device=logits.device, ignore_index=DEFAULT_IGNORE_INDEX, ignore_token_ids={0})
+    expected = causal_language_model_loss(logits, labels)
+    actual = model.forward_loss_ids(input_ids)
+  np.testing.assert_allclose(actual.numpy(), expected.numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_conditional_forward_loss_ignores_multimodal_targets():
+  config = make_conditional_config()
+  with Context(DEV="PYTHON"):
+    model = GemmaForConditionalGeneration(config)
+    randomize_model(model, seed=61)
+    input_ids = [2, config.image_token_id, 5] + [config.audio_token_id] * 5 + [7]
+    pixel_values = np.random.default_rng(5).random((1, 1, 12), dtype=np.float32)
+    image_position_ids = np.array([[[0, 0]]], dtype=np.int32)
+    input_features = np.random.default_rng(6).random((1, 20, 4), dtype=np.float32)
+    input_features_mask = np.ones((1, 20), dtype=bool)
+    logits, _ = model.forward_ids(
+      input_ids,
+      pixel_values=pixel_values,
+      image_position_ids=image_position_ids,
+      input_features=input_features,
+      input_features_mask=input_features_mask,
+    )
+    labels = build_causal_labels(
+      input_ids,
+      device=logits.device,
+      ignore_index=DEFAULT_IGNORE_INDEX,
+      ignore_token_ids={config.text_config.pad_token_id, config.image_token_id, config.audio_token_id},
+    )
+    expected = causal_language_model_loss(logits, labels)
+    actual = model.forward_loss_ids(
+      input_ids,
+      pixel_values=pixel_values,
+      image_position_ids=image_position_ids,
+      input_features=input_features,
+      input_features_mask=input_features_mask,
+    )
+  np.testing.assert_allclose(actual.numpy(), expected.numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_gemma4_official_config_aliases_and_defaults():
+  config = GemmaConfig.from_dict({
+    "model_type": "gemma4",
+    "text_config": {
+      "model_type": "gemma4_text",
+      "vocab_size": 64,
+      "hidden_size": 16,
+      "intermediate_size": 32,
+      "num_hidden_layers": 2,
+      "num_attention_heads": 4,
+      "num_key_value_heads": 2,
+      "head_dim": 4,
+      "hidden_activation": "gelu_pytorch_tanh",
+      "use_bidirectional_attention": "all",
+      "enable_moe_block": True,
+      "num_experts": 8,
+      "top_k_experts": 2,
+      "expert_intermediate_size": 48,
+    },
+    "tie_word_embeddings": True,
+  })
+  assert config.family == "gemma4"
+  assert config.max_position_embeddings == 131072
+  assert config.sliding_window == 257
+  assert config.moe_intermediate_size == 48
+  assert config.tie_word_embeddings is True
+
+
+def test_gemma4_full_attention_uses_regular_kv_heads_without_k_eq_v():
+  config = GemmaConfig(
+    model_type="gemma4",
+    vocab_size=48,
+    hidden_size=16,
+    intermediate_size=32,
+    num_hidden_layers=1,
+    num_attention_heads=4,
+    num_key_value_heads=2,
+    num_global_key_value_heads=1,
+    head_dim=4,
+    global_head_dim=6,
+    hidden_activation="gelu_pytorch_tanh",
+    hidden_size_per_layer_input=0,
+    max_position_embeddings=64,
+    sliding_window=3,
+    layer_types=["full_attention"],
+    rope_parameters={
+      "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
+      "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.5, "rope_theta": 1000000.0},
+    },
+    attention_k_eq_v=False,
+    final_logit_softcapping=4.0,
+  )
+  model = GemmaForCausalLM(config)
+  params = randomize_model(model, seed=41)
+  input_ids = [2, 5, 7, 11]
+  logits, _ = model.forward_ids(input_ids)
+  expected = numpy_forward(config, params, input_ids)
+  np.testing.assert_allclose(logits.numpy(), expected, rtol=1e-4, atol=1e-4)
+
+
+def test_model_forward_ids_respects_model_device():
+  with Context(DEV="PYTHON"):
+    model = GemmaForCausalLM(make_config())
+    randomize_model(model, seed=43)
+    assert model.device == "PYTHON"
+    logits, _ = model.forward_ids([2, 5, 7])
+    assert logits.device == "PYTHON"
+
+
+def test_tokenizer_json_support(tmp_path: Path):
+  tokenizers = pytest.importorskip("tokenizers")
+
+  tokenizer = tokenizers.Tokenizer(tokenizers.models.WordLevel(
+    {"<pad>": 0, "<eos>": 1, "<bos>": 2, "<unk>": 3, "hello": 4, "world": 5},
+    unk_token="<unk>",
+  ))
+  tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Whitespace()
+  tokenizer.post_processor = tokenizers.processors.TemplateProcessing(
+    single="<bos> $A",
+    special_tokens=[("<bos>", 2)],
+  )
+  model_dir = tmp_path / "tokenizer-json"
+  model_dir.mkdir()
+  tokenizer.save(str(model_dir / "tokenizer.json"))
+  (model_dir / "tokenizer_config.json").write_text(json.dumps({
+    "bos_token": "<bos>",
+    "eos_token": "<eos>",
+    "pad_token": "<pad>",
+    "unk_token": "<unk>",
+  }))
+
+  loaded = GemmaTokenizer.from_pretrained(model_dir)
+  assert loaded.bos_id == 2
+  assert loaded.eos_id == 1
+  assert loaded.encode("hello world", add_bos=True) == [2, 4, 5]
+  assert loaded.encode("hello world", add_bos=False) == [4, 5]
+  assert loaded.decode([4, 5]) == "hello world"
+
+
+def test_multimodal_processor_expands_placeholders(tmp_path: Path):
+  pytest.importorskip("transformers")
+  pytest.importorskip("PIL")
+  model_dir = Path(__file__).resolve().parents[1] / "checkpoints" / "gemma-4-E2B"
+  if not model_dir.exists():
+    pytest.skip("real Gemma 4 checkpoint is not available in this workspace")
+
+  try:
+    from PIL import Image
+  except ImportError:  # pragma: no cover - importorskip above
+    raise AssertionError("PIL should be available")
+
+  image_path = tmp_path / "sample.png"
+  Image.fromarray(np.zeros((48, 48, 3), dtype=np.uint8)).save(image_path)
+
+  audio_path = tmp_path / "sample.wav"
+  waveform = (0.2 * np.sin(2 * np.pi * 440 * np.arange(1600, dtype=np.float32) / 16000.0) * 32767.0).astype(np.int16)
+  with wave.open(str(audio_path), "wb") as wav_file:
+    wav_file.setnchannels(1)
+    wav_file.setsampwidth(2)
+    wav_file.setframerate(16000)
+    wav_file.writeframes(waveform.tobytes())
+
+  processor = GemmaMultimodalProcessor.from_pretrained(model_dir)
+  prepared = processor.prepare_inputs("describe <|image|> <|audio|>", images=[image_path], audio=[audio_path])
+  assert prepared.pixel_values is not None
+  assert prepared.image_position_ids is not None
+  assert prepared.input_features is not None
+  assert prepared.input_features_mask is not None
+  assert prepared.input_ids[0] == processor.tokenizer.bos_id
+  valid_patches = int((prepared.image_position_ids[0, :, 0] != -1).sum())
+  pooling_area = processor.config.vision_config.pooling_kernel_size ** 2
+  assert sum(token == processor.tokenizer.image_token_id for token in prepared.input_ids) == valid_patches // pooling_area
+  expected_audio_tokens = int(prepared.input_features_mask[0, ::2][::2].sum())
+  assert sum(token == processor.tokenizer.audio_token_id for token in prepared.input_ids) == expected_audio_tokens
+
+
+def test_training_helpers_step_checkpoint_and_optimizer_roundtrip(tmp_path: Path):
+  config = make_config()
+  with Context(DEV="PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=67)
+    set_trainable(model, False)
+    selected = set_trainable(model, True, include_prefixes=["model.layers.0"])
+    assert selected
+    optimizer = build_optimizer(model, optimizer="adamw", include_prefixes=["model.layers.0"], freeze_unselected=True, lr=1e-2, weight_decay=0.0)
+    assert optimizer.params
+    frozen_names = [name for name, tensor in nn.state.get_state_dict(model).items() if tensor.requires_grad is False]
+    assert any(name.startswith("model.layers.1") for name in frozen_names)
+
+    set_trainable(model, True)
+    optimizer = build_optimizer(model, optimizer="adamw", lr=5e-2, weight_decay=0.0)
+
+    before_logits, _ = model.forward_ids([2, 5, 7, 11])
+    before_logits_np = before_logits.numpy().copy()
+    loss = train_step(model, optimizer, GemmaTrainingBatch(input_ids=[2, 5, 7, 11]))
+    after_logits, _ = model.forward_ids([2, 5, 7, 11])
+    after_logits_np = after_logits.numpy().copy()
+    assert float(loss.item()) > 0.0
+    assert not np.allclose(before_logits_np, after_logits_np)
+
+    checkpoint_dir = tmp_path / "train-ckpt"
+    save_training_checkpoint(model, checkpoint_dir, optimizer=optimizer, training_metadata={"step": 1, "phase": "finetune"})
+    assert (checkpoint_dir / "config.json").exists()
+    assert (checkpoint_dir / "model.safetensors").exists()
+    assert (checkpoint_dir / "optimizer.safetensors").exists()
+    assert json.loads((checkpoint_dir / "training.json").read_text())["step"] == 1
+
+    reloaded = load_pretrained(checkpoint_dir)
+    reload_logits, _ = reloaded.forward_ids([2, 5, 7, 11])
+    np.testing.assert_allclose(after_logits_np, reload_logits.numpy(), rtol=1e-5, atol=1e-5)
+
+    reloaded_optimizer = build_optimizer(reloaded, optimizer="adamw", lr=5e-2, weight_decay=0.0)
+    load_optimizer_state(reloaded_optimizer, checkpoint_dir / "optimizer.safetensors")
+    original_opt_state = nn.state.get_state_dict(optimizer)
+    reloaded_opt_state = nn.state.get_state_dict(reloaded_optimizer)
+    assert set(original_opt_state) == set(reloaded_opt_state)
+    for key in original_opt_state:
+      np.testing.assert_allclose(original_opt_state[key].numpy(), reloaded_opt_state[key].numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_gemma4_only_repo_rejects_older_models():
+  with pytest.raises(ValueError):
+    GemmaConfig(model_type="gemma")
+  with pytest.raises(ValueError):
+    GemmaConfig.from_dict({"model_type": "gemma2"})
+
+
+def test_resolve_beam_supports_max():
+  assert resolve_beam("0") == 0
+  assert resolve_beam("7") == 7
+  assert resolve_beam("max") == DEFAULT_MAX_BEAM
+  with pytest.raises(ValueError):
+    resolve_beam("-1")

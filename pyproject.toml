@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinygrad-gemma"
+version = "0.1.0"
+description = "Native tinygrad implementation of the Gemma 4 text model"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "tinygrad>=0.12.0",
+]
+
+[project.optional-dependencies]
+tokenizer = ["sentencepiece>=0.2.0", "tokenizers>=0.20.0"]
+multimodal = ["pillow>=12.0", "transformers>=5.6.0"]
+dev = ["numpy>=2.0", "pillow>=12.0", "pytest>=8.0", "tokenizers>=0.20.0", "transformers>=5.6.0"]
+
+[project.scripts]
+tinygrad-gemma = "tinygrad_gemma.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["tinygrad_gemma*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
