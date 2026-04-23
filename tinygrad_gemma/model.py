@@ -149,16 +149,24 @@ def build_attention_mask(
 class GemmaCacheEntry:
   key: Tensor
   value: Tensor
+  length: int | None = None
 
 
 @dataclass
 class GemmaCache:
   entries: list[GemmaCacheEntry | None]
   past_seen_tokens: int = 0
+  max_length: int | None = None
 
   @classmethod
-  def empty(cls, num_layers: int) -> "GemmaCache":
-    return cls(entries=[None] * num_layers, past_seen_tokens=0)
+  def empty(cls, num_layers: int, *, max_length: int | None = None) -> "GemmaCache":
+    return cls(entries=[None] * num_layers, past_seen_tokens=0, max_length=max_length)
+
+
+def active_cache_tensors(entry: GemmaCacheEntry) -> tuple[Tensor, Tensor]:
+  if entry.length is None:
+    return entry.key, entry.value
+  return entry.key[:, :, : entry.length, :], entry.value[:, :, : entry.length, :]
 
 
 class TextScaledEmbedding:
@@ -317,7 +325,7 @@ class GemmaAttention:
     past_seen_tokens = 0 if cache is None else cache.past_seen_tokens
     if self.is_kv_shared_layer:
       entry = self.shared_state(cache, shared_kv_states)
-      k, v = entry.key, entry.value
+      k, v = active_cache_tensors(entry)
     else:
       raw_k = self.k_proj(hidden_states).reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim)
       raw_v = self.v_proj(hidden_states).reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim) if self.v_proj is not None else raw_k
@@ -326,12 +334,27 @@ class GemmaAttention:
       v = self.v_norm(raw_v).transpose(1, 2)
 
       if cache is not None:
-        if (entry := cache.entries[self.layer_idx]) is not None:
-          k = entry.key.cat(k, dim=2)
-          v = entry.value.cat(v, dim=2)
-        cache.entries[self.layer_idx] = GemmaCacheEntry(key=k, value=v)
+        end_pos = past_seen_tokens + query_len
+        if cache.max_length is not None:
+          if end_pos > cache.max_length:
+            raise ValueError(f"cache capacity exceeded: need {end_pos}, capacity {cache.max_length}")
+          entry = cache.entries[self.layer_idx]
+          if entry is None:
+            key_cache = Tensor.zeros(batch, self.num_key_value_heads, cache.max_length, self.head_dim, device=k.device, dtype=k.dtype).contiguous().realize()
+            value_cache = Tensor.zeros(batch, self.num_key_value_heads, cache.max_length, self.head_dim, device=v.device, dtype=v.dtype).contiguous().realize()
+            entry = GemmaCacheEntry(key=key_cache, value=value_cache, length=0)
+            cache.entries[self.layer_idx] = entry
+          entry.key[:, :, past_seen_tokens:end_pos, :].assign(k).realize()
+          entry.value[:, :, past_seen_tokens:end_pos, :].assign(v).realize()
+          entry.length = end_pos
+          k, v = active_cache_tensors(entry)
+        else:
+          if (entry := cache.entries[self.layer_idx]) is not None:
+            k = entry.key.cat(k, dim=2)
+            v = entry.value.cat(v, dim=2)
+          cache.entries[self.layer_idx] = GemmaCacheEntry(key=k, value=v)
       if shared_kv_states is not None and self.store_full_length_kv:
-        shared_kv_states[self.layer_idx] = GemmaCacheEntry(key=k, value=v)
+        shared_kv_states[self.layer_idx] = cache.entries[self.layer_idx] if cache is not None else GemmaCacheEntry(key=k, value=v)
 
     key_states = repeat_kv(k, self.num_key_value_groups)
     value_states = repeat_kv(v, self.num_key_value_groups)
@@ -597,7 +620,7 @@ class GemmaForCausalLM:
     temperature: float = 0.0,
     stop_token_ids: set[int] | None = None,
   ):
-    cache = GemmaCache.empty(self.config.num_hidden_layers)
+    cache = GemmaCache.empty(self.config.num_hidden_layers, max_length=len(input_ids) + max_new_tokens)
     logits, cache = self.forward_ids(input_ids, cache=cache)
     for _ in range(max_new_tokens):
       next_token = self.sample_next(logits[:, -1, :], temperature=temperature)

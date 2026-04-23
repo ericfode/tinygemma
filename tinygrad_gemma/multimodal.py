@@ -720,7 +720,7 @@ class GemmaForConditionalGeneration:
     temperature: float = 0.0,
     stop_token_ids: set[int] | None = None,
   ):
-    cache = GemmaCache.empty(self.config.text_config.num_hidden_layers)
+    cache = GemmaCache.empty(self.config.text_config.num_hidden_layers, max_length=len(input_ids) + max_new_tokens)
     logits, cache = self.forward_ids(
       input_ids,
       cache=cache,
