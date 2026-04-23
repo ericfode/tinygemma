@@ -9,10 +9,11 @@ It loads standard Hugging Face `config.json` plus `.safetensors` checkpoints fro
 Implemented:
 
 - Gemma 4 only
+- Official Gemma 4 size configs: E2B, E4B, 26B A4B, and 31B
 - Gemma 4 text decoder stack, including per-layer embeddings, Q/K/V norms, mixed sliding/full attention, KV sharing, and MoE-capable config parsing
 - Native Gemma 4 multimodal loading for text, vision, and audio towers
 - Hugging Face safetensor loading
-- Fine-tuning surfaces for shifted-label loss, optimizer wiring, selective freezing, and resumable checkpoint save/load
+- Fine-tuning surfaces for shifted-label loss, optimizer wiring, selective freezing, resumable checkpoint save/load, and quantized-checkpoint reload into trainable weights
 - KV-cache generation
 - Hugging Face `tokenizer.json` and SentencePiece tokenizer support
 - Multimodal prompt preprocessing with image placeholder expansion and WAV audio placeholder expansion
@@ -21,7 +22,6 @@ Implemented:
 
 Non-goals for this package:
 
-- quantized checkpoints
 - distributed training orchestration
 
 ## Install
@@ -85,7 +85,7 @@ tinygrad-gemma \
   --max-new-tokens 16
 ```
 
-On CPU and Python backends, nonzero beam settings automatically set tinygrad `PARALLEL` to the local CPU count if it was unset. The default `--beam max` value is `16`; override it with `TINYGRAD_GEMMA_MAX_BEAM`.
+On CPU and Python backends, nonzero beam settings automatically set tinygrad `PARALLEL` to the local CPU count if it was unset. The default `--beam max` value is `4`; override it with `TINYGRAD_GEMMA_MAX_BEAM`.
 
 ## API
 
@@ -125,4 +125,16 @@ save_training_checkpoint(model, "/tmp/gemma4-finetune-step", optimizer=optimizer
 
 For multimodal fine-tuning, pass the processor outputs directly into `GemmaTrainingBatch`. If labels are omitted, the training helpers build shifted next-token labels automatically and ignore `pad`, `<|image|>`, and `<|audio|>` target tokens by default.
 
-The implementation is intentionally narrow and Gemma 4 only. The strong gate here is correctness against deterministic reference tests, cache/full-forward equivalence on tiny configs, training-step/save-load roundtrips, followed by real-checkpoint loader, tokenizer, and CLI smoke runs.
+Quantized checkpoints:
+
+```python
+from tinygrad_gemma import build_optimizer, load_pretrained, save_training_checkpoint
+
+save_training_checkpoint(model, "/tmp/gemma4-int8", quantize="int8")
+reloaded = load_pretrained("/tmp/gemma4-int8", device="CPU")
+optimizer = build_optimizer(reloaded, optimizer="adamw", lr=1e-5, weight_decay=0.0)
+```
+
+The quantized checkpoint format is repo-native and intentionally narrow: floating-point matrix-like weights are stored as symmetric row-wise `int8` plus scales in safetensors, and `load_pretrained` dequantizes them back into ordinary tinygrad tensors so the same optimizer and training path keeps working.
+
+The implementation is intentionally narrow and Gemma 4 only. E2B and E4B support text, image, and audio towers; 26B A4B and 31B support text plus image towers and use the Gemma 4 large-model vision attention mask. The strong gate here is correctness against deterministic reference tests, cache/full-forward equivalence on tiny configs, training-step/save-load roundtrips, followed by real-checkpoint loader, tokenizer, and CLI smoke runs.

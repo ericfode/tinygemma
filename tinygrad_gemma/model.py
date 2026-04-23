@@ -120,8 +120,9 @@ def build_attention_mask(
   dtype,
   device,
   causal: bool = True,
+  bidirectional_group_ids: Tensor | None = None,
 ) -> Tensor | None:
-  if query_len == 1 and sliding_window is None and causal:
+  if query_len == 1 and sliding_window is None and causal and bidirectional_group_ids is None:
     return None
   query_positions = Tensor.arange(past_seen_tokens, past_seen_tokens + query_len, device=device, dtype="int32").reshape(query_len, 1)
   key_start = past_seen_tokens + query_len - key_len
@@ -132,6 +133,15 @@ def build_attention_mask(
       allowed = allowed & (key_positions >= (query_positions - sliding_window + 1))
     else:
       allowed = allowed & ((query_positions - key_positions).abs() < sliding_window)
+  if bidirectional_group_ids is not None:
+    if bidirectional_group_ids.shape[1] != key_len:
+      raise ValueError("bidirectional_group_ids must span the current key length")
+    batch_size = bidirectional_group_ids.shape[0]
+    q_groups = bidirectional_group_ids[:, key_len - query_len : key_len].reshape(bidirectional_group_ids.shape[0], query_len, 1)
+    k_groups = bidirectional_group_ids.reshape(bidirectional_group_ids.shape[0], 1, key_len)
+    same_group = (q_groups == k_groups) & (q_groups >= 0)
+    allowed = allowed.reshape(1, query_len, key_len) | same_group
+    return allowed.where(0.0, float("-inf")).cast(dtype).reshape(batch_size, 1, query_len, key_len)
   return allowed.where(0.0, float("-inf")).cast(dtype).reshape(1, 1, query_len, key_len)
 
 
@@ -292,6 +302,7 @@ class GemmaAttention:
     position_ids: Tensor,
     cache: GemmaCache | None = None,
     attention_mask: Tensor | None = None,
+    bidirectional_group_ids: Tensor | None = None,
     shared_kv_states: dict[int, GemmaCacheEntry] | None = None,
   ) -> Tensor:
     batch, query_len, _ = hidden_states.shape
@@ -334,6 +345,7 @@ class GemmaAttention:
       scores.dtype,
       hidden_states.device,
       causal=self.causal,
+      bidirectional_group_ids=bidirectional_group_ids if self.is_sliding else None,
     )
     if attention_mask is not None:
       mask = attention_mask if mask is None else mask + attention_mask
@@ -375,11 +387,19 @@ class GemmaDecoderLayer:
     cache: GemmaCache | None = None,
     attention_mask: Tensor | None = None,
     per_layer_input: Tensor | None = None,
+    bidirectional_group_ids: Tensor | None = None,
     shared_kv_states: dict[int, GemmaCacheEntry] | None = None,
   ) -> Tensor:
     residual = hidden_states
     hidden_states = self.input_layernorm(hidden_states)
-    hidden_states = self.self_attn(hidden_states, position_ids, cache=cache, attention_mask=attention_mask, shared_kv_states=shared_kv_states)
+    hidden_states = self.self_attn(
+      hidden_states,
+      position_ids,
+      cache=cache,
+      attention_mask=attention_mask,
+      bidirectional_group_ids=bidirectional_group_ids,
+      shared_kv_states=shared_kv_states,
+    )
     hidden_states = self.post_attention_layernorm(hidden_states)
     hidden_states = residual + hidden_states
 
@@ -458,6 +478,7 @@ class GemmaModel:
     *,
     inputs_embeds: Tensor | None = None,
     per_layer_inputs: Tensor | None = None,
+    bidirectional_group_ids: Tensor | None = None,
   ) -> Tensor:
     if (input_ids is None) == (inputs_embeds is None):
       raise ValueError("provide exactly one of input_ids or inputs_embeds")
@@ -489,6 +510,7 @@ class GemmaModel:
         cache=cache,
         attention_mask=attention_mask,
         per_layer_input=layer_input,
+        bidirectional_group_ids=bidirectional_group_ids,
         shared_kv_states=shared_kv_states,
       )
     hidden_states = self.norm(hidden_states)

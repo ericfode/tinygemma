@@ -12,7 +12,7 @@ from .processing import GemmaMultimodalProcessor
 from .runtime import default_device
 from .tokenizer import GemmaTokenizer
 
-DEFAULT_MAX_BEAM = 16
+DEFAULT_MAX_BEAM = 4
 
 
 def parse_prompt_tokens(raw: str) -> list[int]:

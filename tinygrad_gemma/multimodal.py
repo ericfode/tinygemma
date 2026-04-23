@@ -35,6 +35,23 @@ def tensor_from_numpy(value: np.ndarray, *, device: str, dtype: str | None = Non
   return Tensor(value, device=device, dtype=dtype) if dtype is not None else Tensor(value, device=device)
 
 
+def multimodal_bidirectional_group_ids(rows: list[list[int]], *, image_token_id: int | None, video_token_id: int | None) -> np.ndarray:
+  group_rows = []
+  vision_ids = {token_id for token_id in (image_token_id, video_token_id) if token_id is not None}
+  for row in rows:
+    current_group = -1
+    previous_was_vision = False
+    group_row = []
+    for token_id in row:
+      is_vision = token_id in vision_ids
+      if is_vision and not previous_was_vision:
+        current_group += 1
+      group_row.append(current_group if is_vision else -1)
+      previous_was_vision = is_vision
+    group_rows.append(group_row)
+  return np.array(group_rows, dtype=np.int32)
+
+
 def flatten_valid_tokens(hidden_states: Tensor, valid_mask: Tensor) -> Tensor:
   pieces = [
     hidden_states[batch_idx : batch_idx + 1, token_idx : token_idx + 1, :].reshape(1, hidden_states.shape[-1])
@@ -625,12 +642,14 @@ class GemmaForConditionalGeneration:
     *,
     inputs_embeds: Tensor | None = None,
     per_layer_inputs: Tensor | None = None,
+    bidirectional_group_ids: Tensor | None = None,
   ) -> tuple[Tensor, GemmaCache | None]:
     hidden_states = self.model.language_model(
       input_ids=input_ids,
       cache=cache,
       inputs_embeds=inputs_embeds,
       per_layer_inputs=per_layer_inputs,
+      bidirectional_group_ids=bidirectional_group_ids,
     )
     return self.logits(hidden_states), cache
 
@@ -675,7 +694,14 @@ class GemmaForConditionalGeneration:
       )
 
     inputs_embeds = self.model.merge_multimodal_embeddings(rows, base_embeds, image_features=image_features, audio_features=audio_features)
-    return self(None, cache=cache, inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs)
+    bidirectional_group_ids = None
+    if self.config.text_config.use_bidirectional_attention == "vision":
+      bidirectional_group_ids = tensor_from_numpy(
+        multimodal_bidirectional_group_ids(rows, image_token_id=self.config.image_token_id, video_token_id=self.config.video_token_id),
+        device=self.device,
+        dtype="int32",
+      )
+    return self(None, cache=cache, inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs, bidirectional_group_ids=bidirectional_group_ids)
 
   def sample_next(self, logits: Tensor, temperature: float = 0.0) -> Tensor:
     if temperature <= 0.0:

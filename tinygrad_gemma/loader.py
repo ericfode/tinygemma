@@ -9,6 +9,7 @@ from tinygrad.helpers import Context
 from .config import GemmaConditionalConfig, GemmaConfig, load_config_dict
 from .model import GemmaForCausalLM
 from .multimodal import GemmaForConditionalGeneration
+from .quantization import dequantize_state_dict, load_quantization_manifest
 from .runtime import prepare_device
 
 
@@ -53,7 +54,8 @@ def load_state_dict(model_dir: str | Path) -> dict:
   state_dict = {}
   for path in resolve_weight_files(model_dir):
     state_dict.update(nn.state.safe_load(path))
-  return state_dict
+  manifest = load_quantization_manifest(model_dir)
+  return dequantize_state_dict(state_dict, manifest) if manifest is not None else state_dict
 
 
 def normalize_state_dict_keys(state_dict: dict, config: GemmaAnyConfig) -> dict:

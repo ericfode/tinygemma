@@ -11,8 +11,10 @@ import tinygrad.nn.optim as optim
 
 from .model import DEFAULT_IGNORE_INDEX, GemmaForCausalLM
 from .multimodal import GemmaForConditionalGeneration
+from .quantization import QUANTIZATION_MANIFEST, quantize_state_dict
 
 GemmaTrainableModel = GemmaForCausalLM | GemmaForConditionalGeneration
+SUPPORTED_OPTIMIZERS = ("sgd", "adam", "adamw", "lamb", "lars", "muon")
 
 
 @dataclass(slots=True)
@@ -73,6 +75,10 @@ def set_trainable(
   return selected
 
 
+def supported_optimizers() -> tuple[str, ...]:
+  return SUPPORTED_OPTIMIZERS
+
+
 def build_optimizer(
   model: GemmaTrainableModel,
   *,
@@ -101,7 +107,9 @@ def build_optimizer(
     "muon": optim.Muon,
   }
   if optimizer_name not in optimizer_map:
-    raise ValueError(f"unsupported optimizer {optimizer!r}")
+    raise ValueError(f"unsupported optimizer {optimizer!r}; supported optimizers: {', '.join(SUPPORTED_OPTIMIZERS)}")
+  if optimizer_name == "muon" and "fused" not in kwargs:
+    kwargs["fused"] = False
   return optimizer_map[optimizer_name](selected, **kwargs)
 
 
@@ -112,14 +120,21 @@ def _pruned_state_dict(model: GemmaTrainableModel) -> dict[str, Tensor]:
   return state_dict
 
 
-def save_pretrained(model: GemmaTrainableModel, model_dir: str | Path) -> None:
+def save_pretrained(model: GemmaTrainableModel, model_dir: str | Path, *, quantize: str | None = None) -> None:
   model_dir = Path(model_dir)
   model_dir.mkdir(parents=True, exist_ok=True)
   config_dict = model.config.to_dict()
   if isinstance(model, GemmaForCausalLM) and config_dict.get("model_type") == "gemma4":
     config_dict["model_type"] = "gemma4_text"
   (model_dir / "config.json").write_text(json.dumps(config_dict, indent=2, sort_keys=True))
-  nn.state.safe_save(_pruned_state_dict(model), str(model_dir / "model.safetensors"))
+  state_dict = _pruned_state_dict(model)
+  manifest_path = model_dir / QUANTIZATION_MANIFEST
+  if quantize is not None:
+    state_dict, manifest = quantize_state_dict(state_dict, quantize=quantize)
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
+  elif manifest_path.exists():
+    manifest_path.unlink()
+  nn.state.safe_save(state_dict, str(model_dir / "model.safetensors"))
 
 
 def save_training_checkpoint(
@@ -128,9 +143,10 @@ def save_training_checkpoint(
   *,
   optimizer=None,
   training_metadata: dict[str, Any] | None = None,
+  quantize: str | None = None,
 ) -> None:
   output_dir = Path(output_dir)
-  save_pretrained(model, output_dir)
+  save_pretrained(model, output_dir, quantize=quantize)
   if optimizer is not None:
     nn.state.safe_save(dict(nn.state.get_state_dict(optimizer)), str(output_dir / "optimizer.safetensors"))
   if training_metadata is not None:

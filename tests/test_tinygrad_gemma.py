@@ -26,12 +26,16 @@ from tinygrad_gemma import (
   causal_language_model_loss,
   load_pretrained,
   load_optimizer_state,
+  load_quantization_manifest,
   load_text_config,
   save_training_checkpoint,
   set_trainable,
+  supported_optimizers,
+  supported_quantizations,
   train_step,
 )
 from tinygrad_gemma.cli import DEFAULT_MAX_BEAM, resolve_beam
+from tinygrad_gemma.model import build_attention_mask
 from tinygrad_gemma.tokenizer import GemmaTokenizer
 
 
@@ -326,6 +330,52 @@ def make_conditional_config() -> GemmaConditionalConfig:
   )
 
 
+def official_size_config(
+  *,
+  hidden_size: int,
+  intermediate_size: int,
+  num_hidden_layers: int,
+  num_attention_heads: int,
+  num_key_value_heads: int,
+  max_position_embeddings: int,
+  sliding_window: int,
+  audio: bool,
+  moe: bool = False,
+  num_experts: int | None = None,
+  top_k_experts: int | None = None,
+  moe_intermediate_size: int | None = None,
+  attention_k_eq_v: bool = False,
+  num_global_key_value_heads: int | None = None,
+) -> dict:
+  return {
+    "model_type": "gemma4",
+    "tie_word_embeddings": True,
+    "audio_config": {"model_type": "gemma4_audio"} if audio else None,
+    "vision_config": {"model_type": "gemma4_vision", "hidden_size": 768 if hidden_size < 2816 else 1152, "head_dim": 64 if hidden_size < 2816 else 72, "num_attention_heads": 12 if hidden_size < 2816 else 16, "num_key_value_heads": 12 if hidden_size < 2816 else 16, "standardize": hidden_size >= 2816, "use_clipped_linears": hidden_size < 2816},
+    "text_config": {
+      "model_type": "gemma4_text",
+      "vocab_size": 262144,
+      "hidden_size": hidden_size,
+      "intermediate_size": intermediate_size,
+      "num_hidden_layers": num_hidden_layers,
+      "num_attention_heads": num_attention_heads,
+      "num_key_value_heads": num_key_value_heads,
+      "head_dim": 256,
+      "global_head_dim": 512,
+      "hidden_size_per_layer_input": 256 if hidden_size < 2816 else 0,
+      "max_position_embeddings": max_position_embeddings,
+      "sliding_window": sliding_window,
+      "attention_k_eq_v": attention_k_eq_v,
+      "num_global_key_value_heads": num_global_key_value_heads,
+      "use_bidirectional_attention": None if hidden_size < 2816 else "vision",
+      "enable_moe_block": moe,
+      "num_experts": num_experts,
+      "top_k_experts": top_k_experts,
+      "moe_intermediate_size": moe_intermediate_size,
+    },
+  }
+
+
 def test_forward_matches_numpy_reference_for_gemma4():
   config = make_config()
   model = GemmaForCausalLM(config)
@@ -512,6 +562,76 @@ def test_gemma4_official_config_aliases_and_defaults():
   assert config.tie_word_embeddings is True
 
 
+@pytest.mark.parametrize(
+  ("size_name", "raw_config", "expected"),
+  [
+    (
+      "E2B",
+      official_size_config(hidden_size=1536, intermediate_size=6144, num_hidden_layers=35, num_attention_heads=8, num_key_value_heads=1, max_position_embeddings=131072, sliding_window=512, audio=True),
+      {"audio": True, "moe": False, "context": 131072, "vision_attention": None},
+    ),
+    (
+      "E4B",
+      official_size_config(hidden_size=2560, intermediate_size=10240, num_hidden_layers=42, num_attention_heads=8, num_key_value_heads=2, max_position_embeddings=131072, sliding_window=512, audio=True),
+      {"audio": True, "moe": False, "context": 131072, "vision_attention": None},
+    ),
+    (
+      "26B-A4B",
+      official_size_config(hidden_size=2816, intermediate_size=2112, num_hidden_layers=30, num_attention_heads=16, num_key_value_heads=8, max_position_embeddings=262144, sliding_window=1024, audio=False, moe=True, num_experts=128, top_k_experts=8, moe_intermediate_size=704, attention_k_eq_v=True, num_global_key_value_heads=2),
+      {"audio": False, "moe": True, "context": 262144, "vision_attention": "vision"},
+    ),
+    (
+      "31B",
+      official_size_config(hidden_size=5376, intermediate_size=21504, num_hidden_layers=60, num_attention_heads=32, num_key_value_heads=16, max_position_embeddings=262144, sliding_window=1024, audio=False, attention_k_eq_v=True, num_global_key_value_heads=4),
+      {"audio": False, "moe": False, "context": 262144, "vision_attention": "vision"},
+    ),
+  ],
+)
+def test_official_gemma4_size_configs_parse(size_name: str, raw_config: dict, expected: dict):
+  config = GemmaConditionalConfig.from_dict(raw_config)
+  assert config.vision_config is not None
+  assert (config.audio_config is not None) is expected["audio"]
+  assert config.text_config.enable_moe_block is expected["moe"]
+  assert config.text_config.max_position_embeddings == expected["context"]
+  assert config.text_config.use_bidirectional_attention == expected["vision_attention"]
+  assert len(config.text_config.layer_types or []) == config.text_config.num_hidden_layers
+  assert config.text_config.layer_types[-1] == "full_attention"
+
+
+def test_vision_bidirectional_sliding_mask_allows_same_image_group():
+  with Context(DEV="PYTHON"):
+    group_ids = Tensor([[-1, 0, 0, -1]], dtype="int32", device="PYTHON")
+    mask = build_attention_mask(
+      query_len=4,
+      key_len=4,
+      past_seen_tokens=0,
+      sliding_window=3,
+      dtype="float",
+      device="PYTHON",
+      causal=True,
+      bidirectional_group_ids=group_ids,
+    )
+  mask_np = mask.numpy()[0, 0]
+  assert mask_np[1, 2] == 0.0
+  assert np.isneginf(mask_np[1, 3])
+  assert np.isneginf(mask_np[3, 0])
+
+
+def test_conditional_forward_handles_large_model_vision_attention_mode():
+  config = make_conditional_config()
+  config.text_config.layer_types = ["sliding_attention"]
+  config.text_config.sliding_window = 2
+  config.text_config.use_bidirectional_attention = "vision"
+  with Context(DEV="PYTHON"):
+    model = GemmaForConditionalGeneration(config)
+    randomize_model(model, seed=83)
+    input_ids = [2, config.image_token_id, 5]
+    pixel_values = np.random.default_rng(9).random((1, 1, 12), dtype=np.float32)
+    image_position_ids = np.array([[[0, 0]]], dtype=np.int32)
+    logits, _ = model.forward_ids(input_ids, pixel_values=pixel_values, image_position_ids=image_position_ids)
+    assert logits.shape == (1, len(input_ids), config.text_config.vocab_size)
+
+
 def test_gemma4_full_attention_uses_regular_kv_heads_without_k_eq_v():
   config = GemmaConfig(
     model_type="gemma4",
@@ -662,6 +782,83 @@ def test_training_helpers_step_checkpoint_and_optimizer_roundtrip(tmp_path: Path
     assert set(original_opt_state) == set(reloaded_opt_state)
     for key in original_opt_state:
       np.testing.assert_allclose(original_opt_state[key].numpy(), reloaded_opt_state[key].numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_quantized_text_checkpoint_reloads_and_trains(tmp_path: Path):
+  config = make_config()
+  with Context(DEV="PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=71)
+    baseline_logits, _ = model.forward_ids([2, 5, 7, 11])
+    baseline_logits_np = baseline_logits.numpy().copy()
+
+    checkpoint_dir = tmp_path / "quantized-text"
+    save_training_checkpoint(model, checkpoint_dir, quantize="int8", training_metadata={"step": 0})
+
+    manifest = load_quantization_manifest(checkpoint_dir)
+    assert manifest is not None
+    assert manifest["method"] == "int8"
+    assert manifest["tensors"]
+
+    reloaded = load_pretrained(checkpoint_dir, device="PYTHON")
+    reloaded_logits, _ = reloaded.forward_ids([2, 5, 7, 11])
+    np.testing.assert_allclose(baseline_logits_np, reloaded_logits.numpy(), rtol=0.12, atol=0.12)
+
+    optimizer = build_optimizer(reloaded, optimizer="adamw", lr=5e-2, weight_decay=0.0)
+    before_step = reloaded_logits.numpy().copy()
+    loss = train_step(reloaded, optimizer, GemmaTrainingBatch(input_ids=[2, 5, 7, 11]))
+    after_step, _ = reloaded.forward_ids([2, 5, 7, 11])
+    assert float(loss.item()) > 0.0
+    assert not np.allclose(before_step, after_step.numpy())
+
+
+def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):
+  config = make_conditional_config()
+  input_ids = [2, config.image_token_id, 5] + [config.audio_token_id] * 5 + [7]
+  pixel_values = np.random.default_rng(7).random((1, 1, 12), dtype=np.float32)
+  image_position_ids = np.array([[[0, 0]]], dtype=np.int32)
+  input_features = np.random.default_rng(8).random((1, 20, 4), dtype=np.float32)
+  input_features_mask = np.ones((1, 20), dtype=bool)
+
+  with Context(DEV="PYTHON"):
+    model = GemmaForConditionalGeneration(config)
+    randomize_model(model, seed=73)
+    baseline_logits, _ = model.forward_ids(
+      input_ids,
+      pixel_values=pixel_values,
+      image_position_ids=image_position_ids,
+      input_features=input_features,
+      input_features_mask=input_features_mask,
+    )
+    checkpoint_dir = tmp_path / "quantized-conditional"
+    save_training_checkpoint(model, checkpoint_dir, quantize="int8")
+
+    manifest = load_quantization_manifest(checkpoint_dir)
+    assert manifest is not None
+    assert manifest["method"] == "int8"
+
+    reloaded = load_pretrained(checkpoint_dir, device="PYTHON")
+    assert isinstance(reloaded, GemmaForConditionalGeneration)
+    reloaded_logits, _ = reloaded.forward_ids(
+      input_ids,
+      pixel_values=pixel_values,
+      image_position_ids=image_position_ids,
+      input_features=input_features,
+      input_features_mask=input_features_mask,
+    )
+    np.testing.assert_allclose(baseline_logits.numpy(), reloaded_logits.numpy(), rtol=0.12, atol=0.12)
+
+
+def test_supported_optimizer_and_quantization_surfaces_are_honest():
+  assert "muon" in supported_optimizers()
+  assert supported_quantizations() == ("int8",)
+
+  with Context(DEV="PYTHON"):
+    model = GemmaForCausalLM(make_config())
+    randomize_model(model, seed=79)
+    optimizer = build_optimizer(model, optimizer="muon", lr=1e-3, weight_decay=0.0)
+    loss = train_step(model, optimizer, GemmaTrainingBatch(input_ids=[2, 5, 7, 11]))
+    assert float(loss.item()) > 0.0
 
 
 def test_gemma4_only_repo_rejects_older_models():
