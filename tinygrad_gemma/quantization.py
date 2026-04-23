@@ -27,12 +27,17 @@ def _scale_key(name: str) -> str:
 
 
 def _quantize_rowwise_int8(tensor: Tensor) -> tuple[Tensor, Tensor, str]:
-  array = tensor.numpy().astype(np.float32, copy=False)
+  quantized, scales = quantize_numpy_rowwise_int8(tensor.numpy())
+  return Tensor(quantized, dtype="int8"), Tensor(scales, dtype="float32"), tensor.dtype.name
+
+
+def quantize_numpy_rowwise_int8(array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+  array = array.astype(np.float32, copy=False)
   rows = array.reshape(array.shape[0], -1)
   max_abs = np.max(np.abs(rows), axis=1, keepdims=True)
   scales = np.maximum(max_abs / 127.0, 1e-12).astype(np.float32, copy=False)
   quantized = np.clip(np.rint(rows / scales), -127.0, 127.0).astype(np.int8, copy=False).reshape(array.shape)
-  return Tensor(quantized, dtype="int8"), Tensor(scales.reshape(array.shape[0]), dtype="float32"), tensor.dtype.name
+  return quantized, scales.reshape(array.shape[0])
 
 
 def quantize_state_dict(state_dict: dict[str, Tensor], *, quantize: str) -> tuple[dict[str, Tensor], dict[str, Any]]:

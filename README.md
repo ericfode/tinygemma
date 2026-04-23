@@ -87,6 +87,64 @@ tinygrad-gemma \
 
 On CPU and Python backends, nonzero beam settings automatically set tinygrad `PARALLEL` to the local CPU count if it was unset. The default `--beam max` value is `4`; override it with `TINYGRAD_GEMMA_MAX_BEAM`.
 
+## Gemma 4 Matrix Workflow
+
+Download the official Hugging Face checkpoints for every supported Gemma 4 size:
+
+```bash
+. .venv/bin/activate
+python scripts/download_gemma4_matrix.py --sizes E2B E4B 26B-A4B 31B
+```
+
+Create repo-native row-wise int8 checkpoints beside the downloaded bf16 checkpoints:
+
+```bash
+. .venv/bin/activate
+python scripts/quantize_gemma4_matrix.py --sizes E2B E4B 26B-A4B 31B
+```
+
+Run a cheap Metal load/generate preflight across every size and native format:
+
+```bash
+. .venv/bin/activate
+python scripts/benchmark_gemma4_matrix.py \
+  --sizes E2B E4B 26B-A4B 31B \
+  --formats bf16 int8 \
+  --devices METAL \
+  --beams 1 \
+  --max-new-tokens 1 \
+  --out benchmarks/gemma4-metal-preflight.csv
+```
+
+Run a long Metal sample. This generates exactly 1000 new tokens because the benchmark disables EOS stopping, and it writes progress to `benchmarks/gemma4-metal-1000.csv.progress.jsonl` while the row is running:
+
+```bash
+. .venv/bin/activate
+python scripts/benchmark_gemma4_matrix.py \
+  --sizes E2B \
+  --formats int8 \
+  --devices METAL \
+  --beams 1 \
+  --max-new-tokens 1000 \
+  --out benchmarks/gemma4-metal-1000.csv \
+  --progress-every 100
+```
+
+The full beam/format matrix is intentionally resumable because the large checkpoints and higher beams can take a long time on local Metal:
+
+```bash
+. .venv/bin/activate
+python scripts/benchmark_gemma4_matrix.py \
+  --sizes E2B E4B 26B-A4B 31B \
+  --formats bf16 int8 \
+  --devices METAL \
+  --beams 1 2 3 4 \
+  --max-new-tokens 1000 \
+  --out benchmarks/gemma4-metal-matrix-1000.csv \
+  --resume \
+  --progress-every 100
+```
+
 ## API
 
 ```python
