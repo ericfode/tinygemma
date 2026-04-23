@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from tinygrad import Tensor, nn
+from tinygrad import Tensor, TinyJit, Variable, nn
 
 from .config import GemmaAudioConfig, GemmaConditionalConfig, GemmaVisionConfig
 from .model import (
@@ -625,6 +625,7 @@ class GemmaForConditionalGeneration:
     else:
       self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
     self.device = self.model.language_model.embed_tokens.weight.device
+    self._last_rollout_jit: TinyJit | None = None
 
   def logits(self, hidden_states: Tensor) -> Tensor:
     if isinstance(self.lm_head, dict):
@@ -708,6 +709,13 @@ class GemmaForConditionalGeneration:
       return logits.argmax(axis=-1, keepdim=True).cast("int32")
     return (logits / temperature).softmax(-1).multinomial().cast("int32")
 
+  def _rollout_next_token(self, token: Tensor, start_pos, cache: GemmaCache, temperature: float) -> Tensor:
+    concrete_start = cache.past_seen_tokens
+    cache.past_seen_tokens = start_pos
+    logits, _ = self(token.reshape(1, 1), cache=cache)
+    cache.past_seen_tokens = concrete_start
+    return self.sample_next(logits[:, -1, :], temperature=temperature)
+
   def generate(
     self,
     input_ids: list[int],
@@ -720,6 +728,8 @@ class GemmaForConditionalGeneration:
     temperature: float = 0.0,
     stop_token_ids: set[int] | None = None,
   ):
+    if max_new_tokens <= 0:
+      return
     cache = GemmaCache.empty(self.config.text_config.num_hidden_layers, max_length=len(input_ids) + max_new_tokens)
     logits, cache = self.forward_ids(
       input_ids,
@@ -729,13 +739,21 @@ class GemmaForConditionalGeneration:
       input_features=input_features,
       input_features_mask=input_features_mask,
     )
-    for _ in range(max_new_tokens):
-      next_token = self.sample_next(logits[:, -1, :], temperature=temperature)
+    next_token = self.sample_next(logits[:, -1, :], temperature=temperature)
+    max_start_pos = max(1, (cache.max_length or len(input_ids) + max_new_tokens) - 1)
+    rollout_jit = TinyJit(lambda token, start_pos: self._rollout_next_token(token, start_pos, cache, temperature))
+    self._last_rollout_jit = rollout_jit
+    for idx in range(max_new_tokens):
       token_id = int(next_token.item())
       yield token_id
       if stop_token_ids is not None and token_id in stop_token_ids:
         break
-      logits, cache = self(next_token.reshape(1, 1), cache=cache)
+      if idx == max_new_tokens - 1:
+        break
+      start_pos = cache.past_seen_tokens
+      start_var = Variable("gemma_start_pos", 0, max_start_pos).bind(start_pos)
+      next_token = rollout_jit(next_token.reshape(1, 1).contiguous(), start_var)
+      cache.set_active_length(start_pos + 1)
 
   def default_ignore_token_ids(self) -> set[int]:
     ignore_ids = set()

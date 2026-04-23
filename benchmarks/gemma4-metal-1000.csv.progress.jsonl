@@ -1,0 +1,10 @@
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 100, "seconds": 70.71917, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 1.414044}
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 200, "seconds": 72.262183, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 2.767699}
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 300, "seconds": 73.976224, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 4.055357}
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 400, "seconds": 75.858241, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 5.272993}
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 500, "seconds": 77.845195, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 6.423004}
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 600, "seconds": 79.983265, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 7.501569}
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 700, "seconds": 82.306238, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 8.504823}
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 800, "seconds": 84.774694, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 9.436778}
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 900, "seconds": 87.628059, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 10.270683}
+{"beam": 1, "device": "METAL", "format": "int8", "generated_tokens": 1000, "seconds": 90.473469, "size": "E2B", "target_new_tokens": 1000, "tokens_per_second": 11.052964}

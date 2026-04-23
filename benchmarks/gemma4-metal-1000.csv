@@ -1,0 +1,2 @@
+size,format,device,checkpoint,beam,status,prompt_tokens,target_new_tokens,generated_tokens,seconds,tokens_per_second,load_seconds,rollout_jit_count,output_prefix,output_sha256,error
+E2B,int8,METAL,checkpoints/gemma-4-E2B-int8,1,ok,2,1000,1000,90.487042,11.051306,35.612390,999,236764 108 236777 735 496 2608 607 1041 236743 236778 236771 236771 236770 236743 236800 236778 236810 236747 236761 108 236777 735 496 2608 607 506 1295 236761 108 818 1295 563,e095ed83df892c07767914954bfc43c20c0d3b61d468cb9683c2b53c0ee65ae6,

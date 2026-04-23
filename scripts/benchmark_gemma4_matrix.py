@@ -47,6 +47,7 @@ def error_rows(*, beams: list[int], status: str, error: str) -> list[dict]:
       "seconds": "",
       "tokens_per_second": "",
       "load_seconds": "",
+      "rollout_jit_count": "",
       "output_prefix": "",
       "output_sha256": "",
       "error": error,
@@ -112,6 +113,7 @@ def benchmark_checkpoint(
       status = "error"
       error = repr(exc)
     seconds = time.perf_counter() - run_start
+    rollout_jit = getattr(model, "_last_rollout_jit", None)
     rows.append({
       "beam": beam,
       "status": status,
@@ -120,6 +122,7 @@ def benchmark_checkpoint(
       "seconds": f"{seconds:.6f}",
       "tokens_per_second": f"{(len(generated) / seconds) if seconds > 0 else 0.0:.6f}",
       "load_seconds": f"{load_seconds:.6f}",
+      "rollout_jit_count": getattr(rollout_jit, "cnt", "") if rollout_jit is not None else "",
       "output_prefix": " ".join(str(token) for token in generated[:32]),
       "output_sha256": output_digest(generated) if generated else "",
       "error": error,
@@ -158,6 +161,7 @@ def main() -> None:
     "seconds",
     "tokens_per_second",
     "load_seconds",
+    "rollout_jit_count",
     "output_prefix",
     "output_sha256",
     "error",
@@ -187,7 +191,7 @@ def main() -> None:
             "target_new_tokens": args.max_new_tokens,
           }
           if not model_dir.exists():
-            writer.writerow({**base, "beam": "", "status": "missing", "generated_tokens": 0, "seconds": "", "tokens_per_second": "", "load_seconds": "", "output_prefix": "", "output_sha256": "", "error": "checkpoint directory missing"})
+            writer.writerow({**base, "beam": "", "status": "missing", "generated_tokens": 0, "seconds": "", "tokens_per_second": "", "load_seconds": "", "rollout_jit_count": "", "output_prefix": "", "output_sha256": "", "error": "checkpoint directory missing"})
             handle.flush()
             continue
           pending_beams = [beam for beam in args.beams if (size, fmt, device, str(beam)) not in completed]

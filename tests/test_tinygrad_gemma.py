@@ -425,6 +425,8 @@ def test_preallocated_generate_matches_dynamic_cache_for_gemma4():
       logits, dynamic_cache = model(next_token.reshape(1, 1), cache=dynamic_cache)
     preallocated_tokens = list(model.generate([2, 4, 6], max_new_tokens=4, stop_token_ids=None))
   assert preallocated_tokens == dynamic_tokens
+  assert model._last_rollout_jit is not None
+  assert model._last_rollout_jit.cnt >= 3
 
 
 def test_loader_roundtrip_for_nested_gemma4(tmp_path: Path):

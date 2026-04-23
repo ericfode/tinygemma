@@ -33,9 +33,9 @@ The repo has already proven load/generate coverage, not competitive decode speed
 | --- | --- |
 | Full size/format Metal preflight | All four official Gemma 4 sizes and both native formats generate one token successfully. |
 | E2B int8 Metal, 10-token beam comparison | About 0.11 tok/s for `beam=0` and `beam=1`. |
-| E2B int8 Metal, 1000-token long attempt | About 47 minutes without reaching the first 100-token progress marker. |
+| E2B int8 Metal, 1000-token beam=1 with TinyJit rollout | 90.487042 s, 11.051306 tok/s, `rollout_jit_count=999`. |
 
-The current bottleneck is therefore the repo's autoregressive tinygrad decode path, not the machine's ability to host the models.
+The current bottleneck has moved from "no reusable decode JIT" to warmup and compile/search overhead, especially for nonzero tinygrad `BEAM`.
 
 ## Local Gates
 
@@ -44,7 +44,7 @@ Use these gates to keep optimization work honest.
 | Gate | Target | Why it matters |
 | --- | ---: | --- |
 | Load/generate preflight | All sizes, `bf16` and repo-native `int8`, `METAL`, one token | Correctness and device coverage. This is already passing in `gemma4-metal-preflight.csv`. |
-| First usable E2B row | E2B int8, `METAL`, `beam=1`, 1000 tokens at >=10 tok/s | Establishes an interactive floor and proves the long-run harness can complete. |
+| First usable E2B row | E2B int8, `METAL`, `beam=1`, 1000 tokens at >=10 tok/s | Passing: `benchmarks/gemma4-metal-1000.csv` records 11.051306 tok/s. |
 | E2B competitive floor | E2B/E4B class, `METAL`, sustained >=50 tok/s | Shows the decode path is in the right order of magnitude for Apple Silicon. |
 | 26B-A4B practical target | Sustained >=25 tok/s in the repo runtime | Conservative midpoint before comparing against the 75-85 tok/s optimized-runtime envelope. |
 | 31B practical target | Sustained >=15 tok/s for a 4-bit-equivalent optimized path | Matches the lower bound of current external 31B Apple Silicon evidence. |
@@ -54,4 +54,4 @@ Do not treat the external Q4 numbers as direct pass/fail gates for the current r
 
 ## Next Performance Increment
 
-The next meaningful production increment is to make E2B int8 `METAL`, `beam=1`, `max_new_tokens=1000` complete with durable progress and at least 10 tok/s sustained generation. Anything below that is still proof-of-life, not usable local inference.
+The next meaningful production increment is to separate TinyJit warmup from measured decode, then run the full `beam=1..4` matrix across all native formats and sizes. The E2B int8 `METAL`, `beam=1`, `max_new_tokens=1000` gate is now the minimum regression floor.

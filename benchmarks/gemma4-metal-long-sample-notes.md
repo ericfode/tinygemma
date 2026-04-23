@@ -15,6 +15,7 @@ Long-sample attempts:
 
 - E2B int8, `METAL`, `beam=1`, `max_new_tokens=1000`, `progress_every=10` reached 10 tokens in 154.896696 seconds before being stopped for code instrumentation.
 - E2B int8, `METAL`, `beam=1`, `max_new_tokens=1000`, `progress_every=100` ran for about 47 minutes without reaching the first 100-token progress marker and grew to roughly 21 GB RSS. It was stopped because the run was not producing durable benchmark progress on an interactive timescale.
+- After adding a real TinyJit rollout path, E2B int8, `METAL`, `beam=1`, `max_new_tokens=1000` completed in 90.487042 seconds at 11.051306 tokens/sec. The row is in `benchmarks/gemma4-metal-1000.csv` and reports `rollout_jit_count=999`.
 
 Rejected hot-path experiments:
 
@@ -24,4 +25,4 @@ Rejected hot-path experiments:
 
 Current conclusion:
 
-The native model loads and generates on Metal across the full official Gemma 4 size/native-format matrix, but the current autoregressive decode path is not yet fast enough to complete a 1000-token Metal benchmark row reliably in this interactive loop. The next production increment should target decode hot-path performance before claiming the full 1000-token beam matrix.
+The native model loads and generates on Metal across the full official Gemma 4 size/native-format matrix, and the E2B int8 1000-token Metal gate now completes with TinyJit-backed rollout. The next production increment should separate JIT warmup from measured generation, run the full beam/format matrix, and reduce the remaining beam compile cliff.

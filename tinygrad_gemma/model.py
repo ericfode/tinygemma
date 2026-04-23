@@ -5,7 +5,7 @@ from typing import Sequence
 
 import numpy as np
 
-from tinygrad import Tensor, nn
+from tinygrad import Tensor, TinyJit, Variable, nn
 
 from .config import GemmaConfig
 
@@ -161,6 +161,12 @@ class GemmaCache:
   @classmethod
   def empty(cls, num_layers: int, *, max_length: int | None = None) -> "GemmaCache":
     return cls(entries=[None] * num_layers, past_seen_tokens=0, max_length=max_length)
+
+  def set_active_length(self, length: int) -> None:
+    self.past_seen_tokens = length
+    for entry in self.entries:
+      if entry is not None:
+        entry.length = length
 
 
 def active_cache_tensors(entry: GemmaCacheEntry) -> tuple[Tensor, Tensor]:
@@ -336,7 +342,7 @@ class GemmaAttention:
       if cache is not None:
         end_pos = past_seen_tokens + query_len
         if cache.max_length is not None:
-          if end_pos > cache.max_length:
+          if isinstance(end_pos, int) and end_pos > cache.max_length:
             raise ValueError(f"cache capacity exceeded: need {end_pos}, capacity {cache.max_length}")
           entry = cache.entries[self.layer_idx]
           if entry is None:
@@ -344,17 +350,24 @@ class GemmaAttention:
             value_cache = Tensor.zeros(batch, self.num_key_value_heads, cache.max_length, self.head_dim, device=v.device, dtype=v.dtype).contiguous().realize()
             entry = GemmaCacheEntry(key=key_cache, value=value_cache, length=0)
             cache.entries[self.layer_idx] = entry
-          entry.key[:, :, past_seen_tokens:end_pos, :].assign(k).realize()
-          entry.value[:, :, past_seen_tokens:end_pos, :].assign(v).realize()
-          entry.length = end_pos
-          k, v = active_cache_tensors(entry)
+          if isinstance(past_seen_tokens, int):
+            entry.key[:, :, past_seen_tokens:end_pos, :].assign(k).realize()
+            entry.value[:, :, past_seen_tokens:end_pos, :].assign(v).realize()
+            entry.length = end_pos
+            current_entry = entry
+          else:
+            stored_key = Tensor(entry.key.uop.after(entry.key[:, :, past_seen_tokens:end_pos, :].uop.store(k.uop)))
+            stored_value = Tensor(entry.value.uop.after(entry.value[:, :, past_seen_tokens:end_pos, :].uop.store(v.uop)))
+            entry.length = end_pos
+            current_entry = GemmaCacheEntry(key=stored_key, value=stored_value, length=end_pos)
+          k, v = active_cache_tensors(current_entry)
         else:
           if (entry := cache.entries[self.layer_idx]) is not None:
             k = entry.key.cat(k, dim=2)
             v = entry.value.cat(v, dim=2)
           cache.entries[self.layer_idx] = GemmaCacheEntry(key=k, value=v)
       if shared_kv_states is not None and self.store_full_length_kv:
-        shared_kv_states[self.layer_idx] = cache.entries[self.layer_idx] if cache is not None else GemmaCacheEntry(key=k, value=v)
+        shared_kv_states[self.layer_idx] = current_entry if cache is not None and cache.max_length is not None else GemmaCacheEntry(key=k, value=v)
 
     key_states = repeat_kv(k, self.num_key_value_groups)
     value_states = repeat_kv(v, self.num_key_value_groups)
@@ -537,7 +550,7 @@ class GemmaModel:
         shared_kv_states=shared_kv_states,
       )
     hidden_states = self.norm(hidden_states)
-    if cache is not None:
+    if cache is not None and isinstance(cache.past_seen_tokens, int):
       cache.past_seen_tokens += seq_len
     return hidden_states
 
@@ -553,6 +566,7 @@ class GemmaForCausalLM:
     else:
       self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
     self.device = self.model.embed_tokens.weight.device
+    self._last_rollout_jit: TinyJit | None = None
 
   def logits(self, hidden_states: Tensor) -> Tensor:
     logits = hidden_states.linear(self.lm_head["weight"].transpose()) if self.config.tie_word_embeddings else self.lm_head(hidden_states)
@@ -613,6 +627,13 @@ class GemmaForCausalLM:
     probs = (logits / temperature).softmax(-1)
     return probs.multinomial().cast("int32")
 
+  def _rollout_next_token(self, token: Tensor, start_pos, cache: GemmaCache, temperature: float) -> Tensor:
+    concrete_start = cache.past_seen_tokens
+    cache.past_seen_tokens = start_pos
+    logits, _ = self(token.reshape(1, 1), cache=cache)
+    cache.past_seen_tokens = concrete_start
+    return self.sample_next(logits[:, -1, :], temperature=temperature)
+
   def generate(
     self,
     input_ids: list[int],
@@ -620,12 +641,22 @@ class GemmaForCausalLM:
     temperature: float = 0.0,
     stop_token_ids: set[int] | None = None,
   ):
+    if max_new_tokens <= 0:
+      return
     cache = GemmaCache.empty(self.config.num_hidden_layers, max_length=len(input_ids) + max_new_tokens)
     logits, cache = self.forward_ids(input_ids, cache=cache)
-    for _ in range(max_new_tokens):
-      next_token = self.sample_next(logits[:, -1, :], temperature=temperature)
+    next_token = self.sample_next(logits[:, -1, :], temperature=temperature)
+    max_start_pos = max(1, (cache.max_length or len(input_ids) + max_new_tokens) - 1)
+    rollout_jit = TinyJit(lambda token, start_pos: self._rollout_next_token(token, start_pos, cache, temperature))
+    self._last_rollout_jit = rollout_jit
+    for idx in range(max_new_tokens):
       token_id = int(next_token.item())
       yield token_id
       if stop_token_ids is not None and token_id in stop_token_ids:
         break
-      logits, cache = self(next_token.reshape(1, 1), cache=cache)
+      if idx == max_new_tokens - 1:
+        break
+      start_pos = cache.past_seen_tokens
+      start_var = Variable("gemma_start_pos", 0, max_start_pos).bind(start_pos)
+      next_token = rollout_jit(next_token.reshape(1, 1).contiguous(), start_var)
+      cache.set_active_length(start_pos + 1)
