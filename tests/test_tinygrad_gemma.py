@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 from tinygrad import Tensor, nn
-from tinygrad.helpers import Context
 
 from tinygrad_gemma import (
   DEFAULT_IGNORE_INDEX,
@@ -36,6 +35,7 @@ from tinygrad_gemma import (
 )
 from tinygrad_gemma.cli import DEFAULT_MAX_BEAM, resolve_beam
 from tinygrad_gemma.model import build_attention_mask
+from tinygrad_gemma.runtime import temporary_default_device
 from tinygrad_gemma.tokenizer import GemmaTokenizer
 
 
@@ -400,7 +400,7 @@ def test_cache_matches_full_forward_for_gemma4():
 
 def test_preallocated_cache_matches_full_forward_for_gemma4():
   config = make_config()
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForCausalLM(config)
     randomize_model(model, seed=31)
     prompt = [2, 4, 6]
@@ -413,7 +413,7 @@ def test_preallocated_cache_matches_full_forward_for_gemma4():
 
 def test_preallocated_generate_matches_dynamic_cache_for_gemma4():
   config = make_config()
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForCausalLM(config)
     randomize_model(model, seed=33)
     dynamic_cache = GemmaCache.empty(config.num_hidden_layers)
@@ -459,7 +459,7 @@ def test_loader_roundtrip_for_nested_gemma4(tmp_path: Path):
 
 def test_loader_roundtrip_for_conditional_gemma4(tmp_path: Path):
   config = make_conditional_config()
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForConditionalGeneration(config)
     randomize_model(model, seed=47)
     model_dir = tmp_path / "gemma4-conditional"
@@ -499,7 +499,7 @@ def test_loader_roundtrip_for_conditional_gemma4(tmp_path: Path):
 
 def test_conditional_forward_handles_multimodal_placeholders():
   config = make_conditional_config()
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForConditionalGeneration(config)
     randomize_model(model, seed=53)
     input_ids = [2, config.image_token_id, 5] + [config.audio_token_id] * 5 + [7]
@@ -520,7 +520,7 @@ def test_conditional_forward_handles_multimodal_placeholders():
 
 def test_forward_loss_ids_matches_manual_shifted_loss():
   config = make_config()
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForCausalLM(config)
     randomize_model(model, seed=59)
     input_ids = [2, 5, 0, 11]
@@ -533,7 +533,7 @@ def test_forward_loss_ids_matches_manual_shifted_loss():
 
 def test_conditional_forward_loss_ignores_multimodal_targets():
   config = make_conditional_config()
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForConditionalGeneration(config)
     randomize_model(model, seed=61)
     input_ids = [2, config.image_token_id, 5] + [config.audio_token_id] * 5 + [7]
@@ -630,7 +630,7 @@ def test_official_gemma4_size_configs_parse(size_name: str, raw_config: dict, ex
 
 
 def test_vision_bidirectional_sliding_mask_allows_same_image_group():
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     group_ids = Tensor([[-1, 0, 0, -1]], dtype="int32", device="PYTHON")
     mask = build_attention_mask(
       query_len=4,
@@ -653,7 +653,7 @@ def test_conditional_forward_handles_large_model_vision_attention_mode():
   config.text_config.layer_types = ["sliding_attention"]
   config.text_config.sliding_window = 2
   config.text_config.use_bidirectional_attention = "vision"
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForConditionalGeneration(config)
     randomize_model(model, seed=83)
     input_ids = [2, config.image_token_id, 5]
@@ -696,7 +696,7 @@ def test_gemma4_full_attention_uses_regular_kv_heads_without_k_eq_v():
 
 
 def test_model_forward_ids_respects_model_device():
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForCausalLM(make_config())
     randomize_model(model, seed=43)
     assert model.device == "PYTHON"
@@ -773,7 +773,7 @@ def test_multimodal_processor_expands_placeholders(tmp_path: Path):
 
 def test_training_helpers_step_checkpoint_and_optimizer_roundtrip(tmp_path: Path):
   config = make_config()
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForCausalLM(config)
     randomize_model(model, seed=67)
     set_trainable(model, False)
@@ -817,7 +817,7 @@ def test_training_helpers_step_checkpoint_and_optimizer_roundtrip(tmp_path: Path
 
 def test_quantized_text_checkpoint_reloads_and_trains(tmp_path: Path):
   config = make_config()
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForCausalLM(config)
     randomize_model(model, seed=71)
     baseline_logits, _ = model.forward_ids([2, 5, 7, 11])
@@ -851,7 +851,7 @@ def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):
   input_features = np.random.default_rng(8).random((1, 20, 4), dtype=np.float32)
   input_features_mask = np.ones((1, 20), dtype=bool)
 
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForConditionalGeneration(config)
     randomize_model(model, seed=73)
     baseline_logits, _ = model.forward_ids(
@@ -884,7 +884,7 @@ def test_supported_optimizer_and_quantization_surfaces_are_honest():
   assert "muon" in supported_optimizers()
   assert supported_quantizations() == ("int8",)
 
-  with Context(DEV="PYTHON"):
+  with temporary_default_device("PYTHON"):
     model = GemmaForCausalLM(make_config())
     randomize_model(model, seed=79)
     optimizer = build_optimizer(model, optimizer="muon", lr=1e-3, weight_decay=0.0)

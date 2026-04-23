@@ -1,0 +1,17 @@
+{
+  "candidates": [
+    {
+      "id": "tinygrad-gemma-local-env-bootstrap",
+      "status": "candidate",
+      "trigger": "New worktree, deleted .venv, or dependency drift blocks local gates.",
+      "steps": [
+        "python3.11 -m venv .venv",
+        ".venv/bin/python -m pip install --upgrade pip",
+        ".venv/bin/python -m pip install -e '.[dev,tokenizer,multimodal]'",
+        ".venv/bin/python -m pytest -q",
+        ".venv/bin/tinygrad-gemma --help"
+      ],
+      "promotion_condition": "Promote to a checked script if this exact bootstrap repeats in another tinygrad-gemma worktree."
+    }
+  ]
+}

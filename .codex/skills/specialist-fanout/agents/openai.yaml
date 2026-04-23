@@ -1,0 +1,4 @@
+interface:
+  display_name: "Specialist Fanout"
+  short_description: "Fan out specialist subagents"
+  default_prompt: "Split a repo task into parallel expert subtasks with clear file ownership."
