@@ -130,6 +130,8 @@ python scripts/benchmark_gemma4_matrix.py \
   --progress-every 100
 ```
 
+The machine-specific speed envelope and local optimization gates are recorded in `benchmarks/gemma4-metal-speed-targets.md`. The short version: optimized Apple Silicon runtimes should reach tens to 100+ tokens/sec on this M5 Max depending on model size, while this repo's current tinygrad decode path is still below the first usable long-run target.
+
 The full beam/format matrix is intentionally resumable because the large checkpoints and higher beams can take a long time on local Metal:
 
 ```bash

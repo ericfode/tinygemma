@@ -398,6 +398,35 @@ def test_cache_matches_full_forward_for_gemma4():
   np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
 
 
+def test_preallocated_cache_matches_full_forward_for_gemma4():
+  config = make_config()
+  with Context(DEV="PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=31)
+    prompt = [2, 4, 6]
+    cache = GemmaCache.empty(config.num_hidden_layers, max_length=8)
+    _, cache = model.forward_ids(prompt, cache=cache)
+    step_logits, _ = model.forward_ids([9], cache=cache)
+    full_logits, _ = model.forward_ids(prompt + [9])
+  np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
+
+
+def test_preallocated_generate_matches_dynamic_cache_for_gemma4():
+  config = make_config()
+  with Context(DEV="PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=33)
+    dynamic_cache = GemmaCache.empty(config.num_hidden_layers)
+    logits, dynamic_cache = model.forward_ids([2, 4, 6], cache=dynamic_cache)
+    dynamic_tokens = []
+    for _ in range(4):
+      next_token = model.sample_next(logits[:, -1, :])
+      dynamic_tokens.append(int(next_token.item()))
+      logits, dynamic_cache = model(next_token.reshape(1, 1), cache=dynamic_cache)
+    preallocated_tokens = list(model.generate([2, 4, 6], max_new_tokens=4, stop_token_ids=None))
+  assert preallocated_tokens == dynamic_tokens
+
+
 def test_loader_roundtrip_for_nested_gemma4(tmp_path: Path):
   config = make_config()
   model = GemmaForCausalLM(config)
