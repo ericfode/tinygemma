@@ -120,6 +120,22 @@ def kv_suffix(key: Tensor, value: Tensor, max_tokens: int) -> tuple[Tensor, Tens
   return key[:, :, -max_tokens:, :], value[:, :, -max_tokens:, :]
 
 
+def sliding_decode_kv(
+  key: Tensor,
+  value: Tensor,
+  past_seen_tokens,
+  sliding_window: int,
+) -> tuple[Tensor, Tensor]:
+  if isinstance(past_seen_tokens, int):
+    return kv_suffix(key, value, sliding_window)
+  # Symbolic slicing is only valid once the bound is known to be inside the
+  # sliding window. Generation enables this after the first full window.
+  return (
+    key[:, :, past_seen_tokens - sliding_window + 1 : past_seen_tokens + 1, :],
+    value[:, :, past_seen_tokens - sliding_window + 1 : past_seen_tokens + 1, :],
+  )
+
+
 def build_attention_mask(
   query_len: int,
   key_len: int,
@@ -130,8 +146,9 @@ def build_attention_mask(
   causal: bool = True,
   bidirectional_group_ids: Tensor | None = None,
 ) -> Tensor | None:
-  if query_len == 1 and sliding_window is None and causal and bidirectional_group_ids is None:
-    return None
+  if query_len == 1 and causal and bidirectional_group_ids is None:
+    if sliding_window is None or (isinstance(key_len, int) and key_len <= sliding_window):
+      return None
   query_positions = Tensor.arange(past_seen_tokens, past_seen_tokens + query_len, device=device, dtype="int32").reshape(query_len, 1)
   key_start = past_seen_tokens + query_len - key_len
   key_positions = Tensor.arange(key_start, past_seen_tokens + query_len, device=device, dtype="int32").reshape(1, key_len)
@@ -165,6 +182,7 @@ class GemmaCache:
   entries: list[GemmaCacheEntry | None]
   past_seen_tokens: int = 0
   max_length: int | None = None
+  decode_sliding_window: bool = False
 
   @classmethod
   def empty(cls, num_layers: int, *, max_length: int | None = None) -> "GemmaCache":
@@ -380,6 +398,10 @@ class GemmaAttention:
       if shared_kv_states is not None and self.store_full_length_kv:
         shared_kv_states[self.layer_idx] = current_entry if cache is not None and cache.max_length is not None else GemmaCacheEntry(key=k, value=v)
 
+    if self.sliding_window is not None and query_len == 1 and bidirectional_group_ids is None:
+      if isinstance(past_seen_tokens, int) or (cache is not None and cache.decode_sliding_window):
+        k, v = sliding_decode_kv(k, v, past_seen_tokens, self.sliding_window)
+
     key_states = repeat_kv(k, self.num_key_value_groups)
     value_states = repeat_kv(v, self.num_key_value_groups)
     scores = q.matmul(key_states.transpose(-2, -1)).float() * self.scaling
@@ -578,6 +600,7 @@ class GemmaForCausalLM:
       self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
     self.device = self.model.embed_tokens.weight.device
     self._last_rollout_jit: TinyJit | None = None
+    self._last_rollout_jits: list[TinyJit] = []
 
   def logits(self, hidden_states: Tensor) -> Tensor:
     logits = hidden_states.linear(self.lm_head["weight"].transpose()) if self.config.tie_word_embeddings else self.lm_head(hidden_states)
@@ -645,12 +668,23 @@ class GemmaForCausalLM:
     probs = (logits / temperature).softmax(-1)
     return probs.multinomial().cast("int32")
 
-  def _rollout_next_token(self, token: Tensor, start_pos, cache: GemmaCache, temperature: float) -> Tensor:
+  def _rollout_next_token(self, token: Tensor, start_pos, cache: GemmaCache, temperature: float, *, decode_sliding_window: bool = False) -> Tensor:
     concrete_start = cache.past_seen_tokens
+    previous_decode_sliding_window = cache.decode_sliding_window
     cache.past_seen_tokens = start_pos
-    logits, _ = self(token.reshape(1, 1), cache=cache)
-    cache.past_seen_tokens = concrete_start
+    cache.decode_sliding_window = decode_sliding_window
+    try:
+      logits, _ = self(token.reshape(1, 1), cache=cache)
+    finally:
+      cache.past_seen_tokens = concrete_start
+      cache.decode_sliding_window = previous_decode_sliding_window
     return self.sample_next(logits[:, -1, :], temperature=temperature)
+
+  def _sliding_decode_start(self) -> int | None:
+    windows = [layer.self_attn.sliding_window for layer in self.model.layers if layer.self_attn.sliding_window is not None]
+    if not windows:
+      return None
+    return max(windows) - 1
 
   def generate(
     self,
@@ -666,7 +700,12 @@ class GemmaForCausalLM:
     next_token = self.sample_next(logits[:, -1, :], temperature=temperature)
     max_start_pos = max(1, (cache.max_length or len(input_ids) + max_new_tokens) - 1)
     rollout_jit = TinyJit(lambda token, start_pos: self._rollout_next_token(token, start_pos, cache, temperature))
-    self._last_rollout_jit = rollout_jit
+    sliding_start = self._sliding_decode_start()
+    sliding_rollout_jit = None
+    if sliding_start is not None and sliding_start <= max_start_pos:
+      sliding_rollout_jit = TinyJit(lambda token, start_pos: self._rollout_next_token(token, start_pos, cache, temperature, decode_sliding_window=True))
+    self._last_rollout_jit = sliding_rollout_jit or rollout_jit
+    self._last_rollout_jits = [rollout_jit] + ([sliding_rollout_jit] if sliding_rollout_jit is not None else [])
     for idx in range(max_new_tokens):
       token_id = int(next_token.item())
       yield token_id
@@ -675,6 +714,10 @@ class GemmaForCausalLM:
       if idx == max_new_tokens - 1:
         break
       start_pos = cache.past_seen_tokens
-      start_var = Variable("gemma_start_pos", 0, max_start_pos).bind(start_pos)
-      next_token = rollout_jit(next_token.reshape(1, 1).contiguous(), start_var)
+      use_sliding_window = sliding_rollout_jit is not None and sliding_start is not None and start_pos >= sliding_start
+      start_lower = sliding_start if use_sliding_window else 0
+      var_name = "gemma_start_pos_window" if use_sliding_window else "gemma_start_pos"
+      start_var = Variable(var_name, start_lower, max_start_pos).bind(start_pos)
+      active_rollout_jit = sliding_rollout_jit if use_sliding_window else rollout_jit
+      next_token = active_rollout_jit(next_token.reshape(1, 1).contiguous(), start_var)
       cache.set_active_length(start_pos + 1)
