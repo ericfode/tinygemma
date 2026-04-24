@@ -89,6 +89,7 @@ def error_rows(*, beams: list[int], status: str, error: str, decode_warmup_token
       "measured_decode_tokens_per_second": "",
       "load_seconds": "",
       "rollout_jit_count": "",
+      "decode_fallback": "",
       "output_prefix": "",
       "output_sha256": "",
       "error": error,
@@ -164,6 +165,9 @@ def benchmark_checkpoint(
     seconds = run_end - run_start
     decode_metrics = decode_timer.finish(len(generated), ended=run_end)
     rollout_jit = getattr(model, "_last_rollout_jit", None)
+    rollout_jits = getattr(model, "_last_rollout_jits", None)
+    rollout_jit_count = sum(getattr(jit, "cnt", 0) for jit in rollout_jits) if rollout_jits else (getattr(rollout_jit, "cnt", "") if rollout_jit is not None else "")
+    decode_fallback = bool(getattr(model, "_last_decode_fallback", False))
     rows.append({
       "beam": beam,
       "status": status,
@@ -176,7 +180,8 @@ def benchmark_checkpoint(
       "measured_decode_seconds": f"{decode_metrics['measured_decode_seconds']:.6f}",
       "measured_decode_tokens_per_second": f"{decode_metrics['measured_decode_tokens_per_second']:.6f}",
       "load_seconds": f"{load_seconds:.6f}",
-      "rollout_jit_count": getattr(rollout_jit, "cnt", "") if rollout_jit is not None else "",
+      "rollout_jit_count": rollout_jit_count,
+      "decode_fallback": str(decode_fallback).lower(),
       "output_prefix": " ".join(str(token) for token in generated[:32]),
       "output_sha256": output_digest(generated) if generated else "",
       "error": error,
@@ -225,6 +230,7 @@ def main() -> None:
     "measured_decode_tokens_per_second",
     "load_seconds",
     "rollout_jit_count",
+    "decode_fallback",
     "output_prefix",
     "output_sha256",
     "error",
@@ -255,7 +261,7 @@ def main() -> None:
             "decode_warmup_tokens": args.decode_warmup_tokens,
           }
           if not model_dir.exists():
-            writer.writerow({**base, "beam": "", "status": "missing", "generated_tokens": 0, "seconds": "", "tokens_per_second": "", "measured_decode_tokens": 0, "measured_decode_seconds": "", "measured_decode_tokens_per_second": "", "load_seconds": "", "rollout_jit_count": "", "output_prefix": "", "output_sha256": "", "error": "checkpoint directory missing"})
+            writer.writerow({**base, "beam": "", "status": "missing", "generated_tokens": 0, "seconds": "", "tokens_per_second": "", "measured_decode_tokens": 0, "measured_decode_seconds": "", "measured_decode_tokens_per_second": "", "load_seconds": "", "rollout_jit_count": "", "decode_fallback": "", "output_prefix": "", "output_sha256": "", "error": "checkpoint directory missing"})
             handle.flush()
             continue
           pending_beams = [beam for beam in args.beams if (size, fmt, device, str(beam), str(args.decode_warmup_tokens)) not in completed]

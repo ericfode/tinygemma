@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "codex-local-environment-bootstrap",
+  "current_checkpoint": "metal-decode-legality-fallback",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -18,6 +18,20 @@
         "tinygrad_gemma/loader.py",
         "tests/test_tinygrad_gemma.py"
       ]
+    },
+    {
+      "id": "metal-decode-legality-002",
+      "summary": "Made decode fallback explicit when tinygrad rejects symbolic Metal cache-store JIT graphs, extended the Metal smoke gate through generation, and recorded fallback status in benchmark rows.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "tinygrad_gemma/multimodal.py",
+        "scripts/smoke_metal.py",
+        "scripts/benchmark_gemma4_matrix.py",
+        "tests/test_tinygrad_gemma.py",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -25,7 +39,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "e2b-int8-metal-decode-floor",
-  "next_target_plan": "Make E2B int8 METAL beam=1 1000-token generation complete with durable progress and at least 10 tok/s sustained generation, per benchmarks/gemma4-metal-speed-targets.md, once local checkpoints are available.",
-  "updated_at": "2026-04-23T16:51:43-0700"
+  "next_target": "restore-metal-decode-jit-replay",
+  "next_target_plan": "Repair the tinygrad symbolic cache-store graph so E2B int8 METAL generation uses TinyJit replay again. Current verified short row completes only via decode_fallback=true: E2B int8 METAL beam=0 max_new_tokens=4 took 59.696246 s, 0.067006 tok/s, rollout_jit_count=0.",
+  "updated_at": "2026-04-23T17:58:11-0700"
 }

@@ -422,6 +422,19 @@ def test_preallocated_cache_matches_full_forward_for_gemma4():
   np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
 
 
+def test_preallocated_sliding_cache_matches_full_forward_after_window_for_gemma4():
+  config = make_config()
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=34)
+    prompt = [2, 4, 6, 8, 10, 12]
+    cache = GemmaCache.empty(config.num_hidden_layers, max_length=10)
+    _, cache = model.forward_ids(prompt, cache=cache)
+    step_logits, _ = model.forward_ids([14], cache=cache)
+    full_logits, _ = model.forward_ids(prompt + [14])
+  np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
+
+
 def test_dynamic_sliding_cache_keeps_suffix_and_matches_full_forward_for_gemma4():
   config = make_config()
   assert config.layer_types == ["sliding_attention", "full_attention"]
@@ -455,10 +468,9 @@ def test_preallocated_generate_matches_dynamic_cache_for_gemma4():
       next_token = model.sample_next(logits[:, -1, :])
       dynamic_tokens.append(int(next_token.item()))
       logits, dynamic_cache = model(next_token.reshape(1, 1), cache=dynamic_cache)
-    preallocated_tokens = list(model.generate([2, 4, 6], max_new_tokens=4, stop_token_ids=None))
+  preallocated_tokens = list(model.generate([2, 4, 6], max_new_tokens=4, stop_token_ids=None))
   assert preallocated_tokens == dynamic_tokens
-  assert model._last_rollout_jit is not None
-  assert model._last_rollout_jit.cnt >= 3
+  assert model._last_rollout_jit is None
 
 
 def test_loader_roundtrip_for_nested_gemma4(tmp_path: Path):
@@ -678,6 +690,33 @@ def test_vision_bidirectional_sliding_mask_allows_same_image_group():
   assert mask_np[1, 2] == 0.0
   assert np.isneginf(mask_np[1, 3])
   assert np.isneginf(mask_np[3, 0])
+
+
+def test_single_token_cropped_sliding_mask_is_elided():
+  with temporary_default_device("PYTHON"):
+    cropped = build_attention_mask(
+      query_len=1,
+      key_len=3,
+      past_seen_tokens=6,
+      sliding_window=3,
+      dtype="float",
+      device="PYTHON",
+      causal=True,
+    )
+    uncropped = build_attention_mask(
+      query_len=1,
+      key_len=4,
+      past_seen_tokens=6,
+      sliding_window=3,
+      dtype="float",
+      device="PYTHON",
+      causal=True,
+    )
+  assert cropped is None
+  assert uncropped is not None
+  uncropped_np = uncropped.numpy()[0, 0, 0]
+  assert np.isneginf(uncropped_np[0])
+  np.testing.assert_allclose(uncropped_np[1:], np.zeros(3, dtype=np.float32))
 
 
 def test_conditional_forward_handles_large_model_vision_attention_mode():

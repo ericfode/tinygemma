@@ -48,6 +48,8 @@ def main() -> None:
     cache = GemmaCache.empty(model.config.num_hidden_layers, max_length=8)
     logits, cache = model.forward_ids([2, 4, 6], cache=cache)
     realized = logits.numpy()
+    generated = list(model.generate([2, 4, 6], max_new_tokens=4, stop_token_ids=None))
+    rollout_jit = getattr(model, "_last_rollout_jit", None)
 
   if model.device != "METAL":
     raise SystemExit(f"expected loaded model on METAL, got {model.device}")
@@ -57,12 +59,18 @@ def main() -> None:
     raise SystemExit("expected populated METAL cache")
   if cache.entries[0].key.device != "METAL" or cache.entries[0].value.device != "METAL":
     raise SystemExit("expected cache tensors on METAL")
+  if len(generated) != 4:
+    raise SystemExit(f"expected 4 generated tokens on METAL, got {len(generated)}")
+  rollout_jit_count = getattr(rollout_jit, "cnt", 0) if rollout_jit is not None else 0
 
   print(f"default_device={default_device()}")
   print(f"loaded_model_device={model.device}")
   print(f"logits_device={logits.device}")
   print(f"logits_shape={realized.shape}")
   print(f"cache0_key_device={cache.entries[0].key.device}")
+  print(f"generated_tokens={len(generated)}")
+  print(f"rollout_jit_count={rollout_jit_count}")
+  print(f"decode_fallback={model._last_decode_fallback}")
 
 
 if __name__ == "__main__":

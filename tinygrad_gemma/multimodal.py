@@ -626,6 +626,7 @@ class GemmaForConditionalGeneration:
       self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
     self.device = self.model.language_model.embed_tokens.weight.device
     self._last_rollout_jit: TinyJit | None = None
+    self._last_decode_fallback = False
 
   def logits(self, hidden_states: Tensor) -> Tensor:
     if isinstance(self.lm_head, dict):
@@ -765,6 +766,11 @@ class GemmaForConditionalGeneration:
     cache.past_seen_tokens = concrete_start
     return self.sample_next(logits[:, -1, :], temperature=temperature)
 
+  def _eager_next_from_token_id(self, token_id: int, cache: GemmaCache, temperature: float) -> tuple[Tensor, GemmaCache | None]:
+    token = Tensor([[token_id]], dtype="int32", device=self.device)
+    logits, cache = self(token, cache=cache)
+    return self.sample_next(logits[:, -1, :], temperature=temperature), cache
+
   def generate(
     self,
     input_ids: list[int],
@@ -779,6 +785,7 @@ class GemmaForConditionalGeneration:
   ):
     if max_new_tokens <= 0:
       return
+    self._last_decode_fallback = False
     cache = GemmaCache.empty(self.config.text_config.num_hidden_layers, max_length=len(input_ids) + max_new_tokens)
     logits, cache = self.forward_ids(
       input_ids,
@@ -800,9 +807,18 @@ class GemmaForConditionalGeneration:
       if idx == max_new_tokens - 1:
         break
       start_pos = cache.past_seen_tokens
+      if self._last_decode_fallback:
+        next_token, cache = self._eager_next_from_token_id(token_id, cache, temperature)
+        continue
       start_var = Variable("gemma_start_pos", 0, max_start_pos).bind(start_pos)
-      next_token = rollout_jit(next_token.reshape(1, 1).contiguous(), start_var)
-      cache.set_active_length(start_pos + 1)
+      try:
+        next_token = rollout_jit(next_token.reshape(1, 1).contiguous(), start_var)
+        cache.set_active_length(start_pos + 1)
+      except RuntimeError as exc:
+        if "input to kernel must be AFTER or BUFFER" not in str(exc):
+          raise
+        self._last_decode_fallback = True
+        next_token, cache = self._eager_next_from_token_id(token_id, cache, temperature)
 
   def default_ignore_token_ids(self) -> set[int]:
     ignore_ids = set()

@@ -13,6 +13,16 @@ path failing to enter a reusable tinygrad JIT replay soon enough. `DEBUG=1`
 showed repeated cache misses and growing kernel schedules around the per-layer KV
 cache writes in `tinygrad_gemma/model.py`.
 
+Update later on 2026-04-23: the current local tinygrad scheduler can reject the
+symbolic Metal cache-store graph outright with `RuntimeError('input to kernel
+must be AFTER or BUFFER, not Ops.INDEX')`. The repo now records
+`decode_fallback` in benchmark rows and falls back to eager token-id decode
+instead of failing after the first generated token. A real E2B int8 `METAL`,
+`beam=0`, `max_new_tokens=4` row completed only through fallback:
+`59.696246` seconds, `0.067006` tok/s, `rollout_jit_count=0`,
+`decode_fallback=true`. Treat this as a regression/legality finding, not a speed
+result.
+
 Current `HEAD` has a TinyJit decode experiment in `generate()` and rollout-JIT
 metrics in the benchmark script. It is a real improvement: E2B int8 now
 completes the 1000-token Metal gate.
@@ -61,7 +71,15 @@ slows with context length but still completes, unlike the earlier long attempts.
 
 ## What To Do Next
 
-1. Keep the TinyJit decode direction, but make it first-class.
+1. Restore legal Metal TinyJit replay before optimizing throughput claims.
+   - Reproduce the `Ops.INDEX` scheduler rejection on the smallest Metal config
+     and on E2B int8.
+   - Keep `decode_fallback=true` rows out of speed comparisons except as failure
+     evidence.
+   - The next acceptable E2B row needs `decode_fallback=false` and nonzero
+     `rollout_jit_count`.
+
+2. Keep the TinyJit decode direction, but make it first-class.
    - Move the closure-based rollout into an explicit decode runner/state object.
    - Own the preallocated cache buffers there.
    - Use a stable symbolic `cache_position`/`Variable`.
@@ -69,12 +87,12 @@ slows with context length but still completes, unlike the earlier long attempts.
    - Gate it with `DEBUG=1`: capture should happen by the third generated token,
      and no growing `CACHE MISS` chain should recur at the KV write lines.
 
-2. Use `beam=0` for interactive inference and benchmark gates for now.
+3. Use `beam=0` for interactive inference and benchmark gates for now.
    - `beam=1` finished 1000 tokens, but only after a roughly 70-85 s first
      100-token cliff in local runs. It is an offline tuning setting until warmup
      is separated.
 
-3. Implement real sliding-window KV behavior.
+4. Implement real sliding-window KV behavior.
    - E2B has 35 layers: 28 sliding layers with `sliding_window=512` and 7 full
      attention layers.
    - Current attention still scores over the active cache length, then masks
@@ -82,23 +100,23 @@ slows with context length but still completes, unlike the earlier long attempts.
    - Cropping or ring-buffering sliding layers should reduce both attention work
      and graph size as generation gets longer.
 
-4. Avoid physical grouped-query KV repetition.
+5. Avoid physical grouped-query KV repetition.
    - E2B has 8 attention heads and 1 KV head. `repeat_kv()` materializes an 8x
      expansion before attention.
    - Reshape/group the attention math so grouped-query attention does not copy K/V.
 
-5. Treat repo `int8` as storage-only until runtime int8 exists.
+6. Treat repo `int8` as storage-only until runtime int8 exists.
    - `tinygrad_gemma/quantization.py` dequantizes checkpoint tensors back into
      ordinary tinygrad tensors at load.
    - Real speed from quantization needs compressed weights through matmul or a
      fused dequantize-matmul path.
 
-6. Prefill only the logits needed for generation.
+7. Prefill only the logits needed for generation.
    - Generation needs the last prompt logits, but the current prefill path still
      computes logits for every prompt position.
    - This matters more for long text prompts and multimodal inputs.
 
-7. Cache or simplify decode masks and RoPE work.
+8. Cache or simplify decode masks and RoPE work.
    - For query length 1, full causal layers often need no explicit mask.
    - Sliding layers should not rebuild a full-position mask when the window is
      already cropped.
