@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "metal-decode-legality-fallback",
+  "current_checkpoint": "fused-mlp-gate-up",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -32,6 +32,72 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "metal-decode-jit-replay-003",
+      "summary": "Restored legal Metal TinyJit replay by replacing raw symbolic UOp cache stores with tinygrad's public slice assign/realize cache-write idiom, then pinned no-fallback decode in the Metal smoke gate.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/smoke_metal.py",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-grouped-query-decode-004",
+      "summary": "Avoided physical K/V head repetition in the measured text decode path by reshaping grouped-query attention, improving the E2B int8 METAL 200-token warmup-excluded row from 8.918411 tok/s to 10.659780 tok/s.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-long-floor-refresh-005",
+      "summary": "Refreshed the real E2B int8 METAL 1000-token beam=0 floor on the grouped-query path, producing a no-fallback row with rollout_jit_count=999 and 6.245549 warmup-excluded tok/s.",
+      "artifacts": [
+        "benchmarks/gemma4-metal-1000-current.csv",
+        "benchmarks/gemma4-metal-1000-current.csv.progress.jsonl",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-conditional-sliding-jit-006",
+      "summary": "Ported the Metal-only sliding-window decode JIT switch into the conditional generation path used by E2B int8, improving the 1000-token warmup-excluded row from 6.245549 tok/s to 8.300076 tok/s with decode_fallback=false.",
+      "artifacts": [
+        "tinygrad_gemma/multimodal.py",
+        "tests/test_tinygrad_gemma.py",
+        "benchmarks/gemma4-metal-postwindow-sliding-current.csv",
+        "benchmarks/gemma4-metal-postwindow-sliding-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-1000-sliding-current.csv",
+        "benchmarks/gemma4-metal-1000-sliding-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-postwindow-window-all-layers-diagnostic.csv",
+        "benchmarks/gemma4-metal-postwindow-window-all-layers-diagnostic.csv.progress.jsonl",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-fused-mlp-gate-up-007",
+      "summary": "Profiled the post-window decode TinyJit, then fused inference-only MLP gate/up projections, improving the E2B int8 METAL 1000-token warmup-excluded row from 8.300076 tok/s to 9.303522 tok/s with decode_fallback=false.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/profile_decode_jit.py",
+        "benchmarks/gemma4-metal-postwindow-jit-profile-fused-mlp-current.json",
+        "benchmarks/gemma4-metal-postwindow-jit-profile-fused-mlp-current.csv",
+        "benchmarks/gemma4-metal-postwindow-fused-mlp-current.csv",
+        "benchmarks/gemma4-metal-postwindow-fused-mlp-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-1000-fused-mlp-current.csv",
+        "benchmarks/gemma4-metal-1000-fused-mlp-current.csv.progress.jsonl",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -39,7 +105,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "restore-metal-decode-jit-replay",
-  "next_target_plan": "Repair the tinygrad symbolic cache-store graph so E2B int8 METAL generation uses TinyJit replay again. Current verified short row completes only via decode_fallback=true: E2B int8 METAL beam=0 max_new_tokens=4 took 59.696246 s, 0.067006 tok/s, rollout_jit_count=0.",
-  "updated_at": "2026-04-23T17:58:11-0700"
+  "next_target": "reduce-mlp-norm-attention-floor",
+  "next_target_plan": "Current proof: E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 took 136.105067 s total and measured 9.303522 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The post-window 700/520 row measured 11.891932 tok/s. The fused post-window JIT profile at context length 700 measured 110.302 ms synthetic decode: MLP 38.938 ms, attention 26.236 ms, norm 13.447 ms, logits/argmax 1.793 ms. The local int8 checkpoint manifest has 0 quantized tensors and raw bfloat16 weights, so real speedup likely requires reducing MLP/norm/attention kernel volume or implementing runtime int8 matmul rather than optimizing logits.",
+  "updated_at": "2026-04-23T19:54:22-0700"
 }

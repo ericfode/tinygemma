@@ -734,6 +734,17 @@ def test_conditional_forward_handles_large_model_vision_attention_mode():
     assert logits.shape == (1, len(input_ids), config.text_config.vocab_size)
 
 
+def test_conditional_sliding_decode_start_is_metal_only():
+  config = make_conditional_config()
+  config.text_config.layer_types = ["sliding_attention"]
+  config.text_config.sliding_window = 5
+  with temporary_default_device("PYTHON"):
+    model = GemmaForConditionalGeneration(config)
+  assert model._sliding_decode_start() is None
+  model.device = "METAL"
+  assert model._sliding_decode_start() == 4
+
+
 def test_gemma4_full_attention_uses_regular_kv_heads_without_k_eq_v():
   config = GemmaConfig(
     model_type="gemma4",

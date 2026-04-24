@@ -49,7 +49,7 @@ def main() -> None:
     logits, cache = model.forward_ids([2, 4, 6], cache=cache)
     realized = logits.numpy()
     generated = list(model.generate([2, 4, 6], max_new_tokens=4, stop_token_ids=None))
-    rollout_jit = getattr(model, "_last_rollout_jit", None)
+    rollout_jits = getattr(model, "_last_rollout_jits", [])
 
   if model.device != "METAL":
     raise SystemExit(f"expected loaded model on METAL, got {model.device}")
@@ -61,7 +61,11 @@ def main() -> None:
     raise SystemExit("expected cache tensors on METAL")
   if len(generated) != 4:
     raise SystemExit(f"expected 4 generated tokens on METAL, got {len(generated)}")
-  rollout_jit_count = getattr(rollout_jit, "cnt", 0) if rollout_jit is not None else 0
+  if model._last_decode_fallback:
+    raise SystemExit("expected METAL decode TinyJit replay without eager fallback")
+  rollout_jit_count = sum(getattr(jit, "cnt", 0) for jit in rollout_jits if jit is not None)
+  if rollout_jit_count == 0:
+    raise SystemExit("expected METAL decode TinyJit to run during generation")
 
   print(f"default_device={default_device()}")
   print(f"loaded_model_device={model.device}")

@@ -226,6 +226,9 @@ class RMSNorm:
     return (output * scale).cast(x.dtype)
 
 
+_FUSED_GATE_UP_WEIGHTS: dict[tuple[int, int], Tensor] = {}
+
+
 class GemmaMLP:
   def __init__(self, config: GemmaConfig, layer_idx: int):
     self.config = config
@@ -237,7 +240,25 @@ class GemmaMLP:
     self.up_proj = nn.Linear(config.hidden_size, self.intermediate_size, bias=False)
     self.down_proj = nn.Linear(self.intermediate_size, config.hidden_size, bias=False)
 
+  def _can_use_fused_gate_up(self) -> bool:
+    return (
+      not Tensor.training
+      and self.gate_proj.weight.requires_grad is None
+      and self.up_proj.weight.requires_grad is None
+    )
+
+  def _fused_gate_up_weight(self) -> Tensor:
+    key = (id(self.gate_proj.weight), id(self.up_proj.weight))
+    fused = _FUSED_GATE_UP_WEIGHTS.get(key)
+    if fused is None:
+      fused = self.gate_proj.weight.cat(self.up_proj.weight, dim=0).contiguous().realize()
+      _FUSED_GATE_UP_WEIGHTS[key] = fused
+    return fused
+
   def __call__(self, x: Tensor) -> Tensor:
+    if self._can_use_fused_gate_up():
+      gate, up = x.linear(self._fused_gate_up_weight().transpose()).chunk(2, dim=-1)
+      return self.down_proj(apply_activation(self.config.activation_name, gate) * up)
     return self.down_proj(apply_activation(self.config.activation_name, self.gate_proj(x)) * self.up_proj(x))
 
 
@@ -382,10 +403,10 @@ class GemmaAttention:
             entry.length = end_pos
             current_entry = entry
           else:
-            stored_key = Tensor(entry.key.uop.after(entry.key[:, :, past_seen_tokens:end_pos, :].uop.store(k.uop)))
-            stored_value = Tensor(entry.value.uop.after(entry.value[:, :, past_seen_tokens:end_pos, :].uop.store(v.uop)))
-            entry.length = end_pos
-            current_entry = GemmaCacheEntry(key=stored_key, value=stored_value, length=end_pos)
+            entry.key[:, :, past_seen_tokens:end_pos, :].assign(k).realize()
+            entry.value[:, :, past_seen_tokens:end_pos, :].assign(v).realize()
+            # Keep the committed cache length concrete until generation accepts this decode step.
+            current_entry = GemmaCacheEntry(key=entry.key, value=entry.value, length=end_pos)
           k, v = active_cache_tensors(current_entry)
         else:
           if (entry := cache.entries[self.layer_idx]) is not None:
@@ -402,27 +423,33 @@ class GemmaAttention:
       if isinstance(past_seen_tokens, int) or (cache is not None and cache.decode_sliding_window):
         k, v = sliding_decode_kv(k, v, past_seen_tokens, self.sliding_window)
 
-    key_states = repeat_kv(k, self.num_key_value_groups)
-    value_states = repeat_kv(v, self.num_key_value_groups)
-    scores = q.matmul(key_states.transpose(-2, -1)).float() * self.scaling
-
     mask = build_attention_mask(
       query_len,
-      key_states.shape[2],
+      k.shape[2],
       past_seen_tokens,
       self.sliding_window,
-      scores.dtype,
+      "float",
       hidden_states.device,
       causal=self.causal,
       bidirectional_group_ids=bidirectional_group_ids if self.is_sliding else None,
     )
     if attention_mask is not None:
       mask = attention_mask if mask is None else mask + attention_mask
-    if mask is not None:
-      scores = scores + mask.float()
-
-    probs = scores.softmax(-1).cast(q.dtype)
-    attn_output = (probs @ value_states).transpose(1, 2).reshape(batch, query_len, -1)
+    if self.num_key_value_groups == 1:
+      scores = q.matmul(k.transpose(-2, -1)).float() * self.scaling
+      if mask is not None:
+        scores = scores + mask.float()
+      probs = scores.softmax(-1).cast(q.dtype)
+      attn_output = (probs @ v).transpose(1, 2).reshape(batch, query_len, -1)
+    else:
+      grouped_q = q.reshape(batch, self.num_key_value_heads, self.num_key_value_groups, query_len, self.head_dim)
+      grouped_k = k.unsqueeze(2)
+      grouped_v = v.unsqueeze(2)
+      scores = grouped_q.matmul(grouped_k.transpose(-2, -1)).float() * self.scaling
+      if mask is not None:
+        scores = scores + mask.unsqueeze(2).float()
+      probs = scores.softmax(-1).cast(q.dtype)
+      attn_output = (probs @ grouped_v).permute(0, 3, 1, 2, 4).reshape(batch, query_len, -1)
     return self.o_proj(attn_output)
 
 

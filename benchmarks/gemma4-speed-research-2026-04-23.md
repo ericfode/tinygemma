@@ -23,9 +23,22 @@ instead of failing after the first generated token. A real E2B int8 `METAL`,
 `decode_fallback=true`. Treat this as a regression/legality finding, not a speed
 result.
 
+Second update on 2026-04-23: this was not proven to be a tinygrad scheduler bug.
+tinygrad's own LLM cache examples use public slice assignment,
+`cache[..., start_pos:start_pos+T, ...].assign(...).realize()`, inside the JIT
+path and then read from the realized cache. The failing repo graph hand-built
+`AFTER(STORE(...))` with raw UOps for symbolic cache writes; after rangeification
+that left an `Ops.INDEX` where `tinygrad.engine.schedule.create_schedule`
+requires a `BUFFER`, `BIND`, `MSELECT`/`MSTACK`, or ordered `AFTER` input. Moving
+the symbolic cache update to the public assign idiom restored Metal TinyJit
+replay in this repo.
+
 Current `HEAD` has a TinyJit decode experiment in `generate()` and rollout-JIT
 metrics in the benchmark script. It is a real improvement: E2B int8 now
-completes the 1000-token Metal gate.
+completes the 1000-token Metal gate without decode fallback. The previous
+22 tok/s 1000-token note is stale for the current code path; the latest fused
+MLP row measures 9.303522 warmup-excluded tok/s and still shows a large gap to
+the 50 tok/s target.
 
 | Run | Result |
 | --- | ---: |
@@ -33,8 +46,21 @@ completes the 1000-token Metal gate.
 | Older E2B int8, beam=1, 10 tokens | 89.059974 s, 0.112284 tok/s |
 | Current E2B int8, beam=0, 10 tokens | 21.295810 s, 0.469576 tok/s, `rollout_jit_count=9` |
 | Current E2B int8, beam=0, 100 tokens | 23.905944 s, 4.183060 tok/s, `rollout_jit_count=99` |
-| Current E2B int8, beam=0, 1000 tokens | 45.169393 s, 22.138885 tok/s, `rollout_jit_count=999` |
+| Stale E2B int8, beam=0, 1000 tokens | 45.169393 s, 22.138885 tok/s, `rollout_jit_count=999` |
 | Current E2B int8, beam=1, 1000 tokens | 90.487042-104.922802 s, 9.530817-11.051306 tok/s, `rollout_jit_count=999` |
+| Fallback legality row, beam=0, 4 tokens | 59.696246 s, 0.067006 tok/s, `rollout_jit_count=0`, `decode_fallback=true` |
+| Public-assign cache row, beam=0, 4 tokens | 31.753536 s, 0.125970 tok/s, `rollout_jit_count=3`, `decode_fallback=false` |
+| Public-assign cache row, beam=0, 50 tokens, 4-token warmup | 34.948690 s total, 14.284291 measured tok/s, `rollout_jit_count=49`, `decode_fallback=false` |
+| Repeat-KV baseline, beam=0, 200 tokens, 20-token warmup | 56.388236 s total, 8.918411 measured tok/s, `rollout_jit_count=199`, `decode_fallback=false` |
+| Grouped-query no-repeat, beam=0, 200 tokens, 20-token warmup | 55.035400 s total, 10.659780 measured tok/s, `rollout_jit_count=199`, `decode_fallback=false` |
+| Grouped-query no-repeat, beam=0, 1000 tokens, 20-token warmup | 190.223269 s total, 6.245549 measured tok/s, `rollout_jit_count=999`, `decode_fallback=false` |
+| Conditional sliding-JIT switch, beam=0, 700 tokens, 520-token warmup | 118.606687 s total, 10.295446 measured post-window tok/s, `rollout_jit_count=699`, `decode_fallback=false` |
+| Conditional sliding-JIT switch, beam=0, 1000 tokens, 20-token warmup | 149.649359 s total, 8.300076 measured tok/s, `rollout_jit_count=999`, `decode_fallback=false` |
+| Fused MLP gate/up, beam=0, 700 tokens, 520-token warmup | 109.750742 s total, 11.891932 measured post-window tok/s, `rollout_jit_count=699`, `decode_fallback=false` |
+| Fused MLP gate/up, beam=0, 1000 tokens, 20-token warmup | 136.105067 s total, 9.303522 measured tok/s, `rollout_jit_count=999`, `decode_fallback=false` |
+| Diagnostic: window all 7 full-attention layers, 700 tokens, 520-token warmup | 114.692150 s total, 12.496987 measured post-window tok/s, `rollout_jit_count=699`, `decode_fallback=false` |
+| Diagnostic: sync-free tensor loop, 700 tokens, 520-token warmup | 114.792884 s total, 11.052106 measured post-window tok/s, `rollout_jit_count=699`, `decode_fallback=false` |
+| Interrupted beam=4 row, 1000-token target | 986 tokens, 438.910876 s, `status=interrupted`, `decode_fallback=false` |
 
 `beam=1` is currently worse end-to-end because the BEAM compile/search cliff is
 large. It does improve post-warmup token cadence in parts of the run, but the
@@ -46,13 +72,14 @@ out of the measured path. The repo-local beam=1 artifact is
 ## DEBUG Evidence
 
 `DEBUG=1` is the right instrument for the "jitter" question. In local tinygrad,
-`TinyJit` prints `JIT captured ...` when the replay graph is captured; this is in
-`/Users/ericfode/src/.tinygrad_research/tinygrad/engine/jit.py`.
+`TinyJit` prints `JIT captured ...` when the replay graph is captured. The
+current benchmark process imports tinygrad from the repo venv at
+`.venv/lib/python3.11/site-packages/tinygrad`.
 
 Before the current JIT path is useful, the trace shows repeated cache misses at:
 
-- `tinygrad_gemma/model.py:354`: `entry.key[:, :, past_seen_tokens:end_pos, :].assign(k).realize()`
-- `tinygrad_gemma/model.py:355`: `entry.value[:, :, past_seen_tokens:end_pos, :].assign(v).realize()`
+- `tinygrad_gemma/model.py:406`: `entry.key[:, :, past_seen_tokens:end_pos, :].assign(k).realize()`
+- `tinygrad_gemma/model.py:407`: `entry.value[:, :, past_seen_tokens:end_pos, :].assign(v).realize()`
 
 The scheduled kernel counts grow through the layer stack: 7, 28, 48, 67, 86,
 105, and higher. That is scheduler/compile overhead, not a saturated GPU kernel.
@@ -71,13 +98,13 @@ slows with context length but still completes, unlike the earlier long attempts.
 
 ## What To Do Next
 
-1. Restore legal Metal TinyJit replay before optimizing throughput claims.
-   - Reproduce the `Ops.INDEX` scheduler rejection on the smallest Metal config
-     and on E2B int8.
+1. Keep legal Metal TinyJit replay pinned before optimizing throughput claims.
+   - `scripts/smoke_metal.py` now fails if generation falls back to eager decode
+     or never runs the rollout JIT.
    - Keep `decode_fallback=true` rows out of speed comparisons except as failure
      evidence.
-   - The next acceptable E2B row needs `decode_fallback=false` and nonzero
-     `rollout_jit_count`.
+   - The next acceptable E2B speed row needs `decode_fallback=false`, nonzero
+     `rollout_jit_count`, and a warmup-excluded measured decode suffix.
 
 2. Keep the TinyJit decode direction, but make it first-class.
    - Move the closure-based rollout into an explicit decode runner/state object.
@@ -92,18 +119,32 @@ slows with context length but still completes, unlike the earlier long attempts.
      100-token cliff in local runs. It is an offline tuning setting until warmup
      is separated.
 
-4. Implement real sliding-window KV behavior.
+4. Implement real sliding-window KV behavior next.
    - E2B has 35 layers: 28 sliding layers with `sliding_window=512` and 7 full
      attention layers.
-   - Current attention still scores over the active cache length, then masks
-     sliding layers.
-   - Cropping or ring-buffering sliding layers should reduce both attention work
-     and graph size as generation gets longer.
+   - The refreshed 1000-token row decays from 12.181298 measured tok/s at
+     100 generated tokens to 6.245961 measured tok/s at 1000 generated tokens.
+   - Diagnosis: the text `GemmaForCausalLM` path already switched to a
+     sliding-window decode JIT after the window, but the conditional/multimodal
+     path used by E2B int8 did not. Porting that switch improved the refreshed
+     1000-token row from 6.245549 measured tok/s to 8.300076 measured tok/s.
+   - The post-window-only row, `--max-new-tokens 700
+     --decode-warmup-tokens 520`, measured 10.295446 tok/s. The remaining
+     full-row gap is partly the second JIT capture at the window boundary and
+     partly the 7 full-attention layers that still grow with context.
+   - A semantic-breaking diagnostic that forced the 7 full-attention layers to
+     use the same local window measured 12.496987 post-window tok/s. That is a
+     useful ceiling but not enough to explain the gap to 50 tok/s by itself.
+   - A sync-free tensor-loop diagnostic measured 11.052106 post-window tok/s,
+     so per-token `item()` synchronization is not the main limiter.
 
-5. Avoid physical grouped-query KV repetition.
-   - E2B has 8 attention heads and 1 KV head. `repeat_kv()` materializes an 8x
-     expansion before attention.
-   - Reshape/group the attention math so grouped-query attention does not copy K/V.
+5. Keep grouped-query attention on the no-repeat decode path.
+   - E2B has 8 attention heads and 1 KV head.
+   - Replacing physical `repeat_kv()` in the text attention path with grouped
+     attention was neutral at 50 generated tokens but improved the 200-token
+     warmup-excluded row from 8.918411 tok/s to 10.659780 tok/s.
+   - The multimodal vision/audio attention helpers still use `repeat_kv()`;
+     leave those alone until they are on a measured hot path.
 
 6. Treat repo `int8` as storage-only until runtime int8 exists.
    - `tinygrad_gemma/quantization.py` dequantizes checkpoint tensors back into
@@ -111,12 +152,23 @@ slows with context length but still completes, unlike the earlier long attempts.
    - Real speed from quantization needs compressed weights through matmul or a
      fused dequantize-matmul path.
 
-7. Prefill only the logits needed for generation.
+7. Use the post-window JIT profile before guessing.
+   - `scripts/profile_decode_jit.py` profiles a synthetic post-window decode
+     token with zeroed KV cache and `JIT=2` so the captured TinyJit can be
+     timed per kernel category.
+   - The latest fused-MLP profile at context length 700 measured 110.302 ms
+     total: MLP 38.938 ms, attention 26.236 ms, norm 13.447 ms,
+     logits/argmax 1.793 ms. Logits are not the current primary limiter.
+   - The same profile records that the local `gemma-4-E2B-int8` checkpoint has
+     an `int8` manifest with 0 quantized tensors and 2011 raw bfloat16 tensors.
+     Treat the directory name as storage labeling, not runtime int8 proof.
+
+8. Prefill only the logits needed for generation.
    - Generation needs the last prompt logits, but the current prefill path still
      computes logits for every prompt position.
    - This matters more for long text prompts and multimodal inputs.
 
-8. Cache or simplify decode masks and RoPE work.
+9. Cache or simplify decode masks and RoPE work.
    - For query length 1, full causal layers often need no explicit mask.
    - Sliding layers should not rebuild a full-position mask when the window is
      already cropped.
@@ -128,11 +180,25 @@ slows with context length but still completes, unlike the earlier long attempts.
   - Must not show an unbounded recurring KV-cache `CACHE MISS` chain.
 
 - `env DEBUG=0 .venv/bin/python scripts/benchmark_gemma4_matrix.py --sizes E2B --formats int8 --devices METAL --beams 0 --max-new-tokens 1000 ...`
-  - Current result: 45.169393 s, 22.138885 tok/s.
-  - This is now the minimum regression gate.
+  - Older local result: 45.169393 s, 22.138885 tok/s.
+  - Current shorter proof after the public-assign fix:
+    `--max-new-tokens 50 --decode-warmup-tokens 4` measured 14.284291 tok/s
+    with `decode_fallback=false`.
+  - Current grouped-query proof:
+    `--max-new-tokens 200 --decode-warmup-tokens 20` measured 10.659780 tok/s
+    with `decode_fallback=false`.
+  - Current 1000-token proof:
+    `--max-new-tokens 1000 --decode-warmup-tokens 20` measured 6.245549 tok/s
+    with `decode_fallback=false` and `rollout_jit_count=999`.
+  - Current conditional sliding-JIT proof:
+    `--max-new-tokens 1000 --decode-warmup-tokens 20` measured 8.300076 tok/s
+    with `decode_fallback=false` and `rollout_jit_count=999`.
+  - Current fused-MLP proof:
+    `--max-new-tokens 1000 --decode-warmup-tokens 20` measured 9.303522 tok/s
+    with `decode_fallback=false` and `rollout_jit_count=999`.
 
 - Full unit tests:
-  - Current result: `26 passed, 2 warnings in 51.17s`.
+  - Current result: `34 passed, 1 skipped, 2 warnings in 37.79s`.
 
 ## Sources
 
