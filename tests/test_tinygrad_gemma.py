@@ -35,6 +35,7 @@ from tinygrad_gemma import (
 )
 from tinygrad_gemma.cli import DEFAULT_MAX_BEAM, resolve_beam
 from tinygrad_gemma.model import build_attention_mask
+from tinygrad_gemma.quantization import RowwiseInt8Linear, quantize_state_dict
 from tinygrad_gemma.runtime import temporary_default_device
 from tinygrad_gemma.tokenizer import GemmaTokenizer
 
@@ -913,7 +914,7 @@ def test_quantized_text_checkpoint_reloads_and_trains(tmp_path: Path):
     assert manifest["method"] == "int8"
     assert manifest["tensors"]
 
-    reloaded = load_pretrained(checkpoint_dir, device="PYTHON")
+    reloaded = load_pretrained(checkpoint_dir, device="PYTHON", runtime_quantization=False)
     reloaded_logits, _ = reloaded.forward_ids([2, 5, 7, 11])
     np.testing.assert_allclose(baseline_logits_np, reloaded_logits.numpy(), rtol=0.12, atol=0.12)
 
@@ -925,7 +926,7 @@ def test_quantized_text_checkpoint_reloads_and_trains(tmp_path: Path):
     assert not np.allclose(before_step, after_step.numpy())
 
 
-def test_quantized_checkpoint_is_int8_on_disk_and_dequantized_in_memory(tmp_path: Path):
+def test_quantized_checkpoint_supports_dequantized_and_runtime_int8_loads(tmp_path: Path):
   config = make_config()
   with temporary_default_device("PYTHON"):
     model = GemmaForCausalLM(config)
@@ -940,10 +941,36 @@ def test_quantized_checkpoint_is_int8_on_disk_and_dequantized_in_memory(tmp_path
     assert raw_state[tensor_name].dtype == dtypes.int8
     assert tensor_info["scale_key"] in raw_state
 
-    reloaded = load_pretrained(checkpoint_dir, device="PYTHON")
-    live_state = nn.state.get_state_dict(reloaded)
-  assert live_state[tensor_name].dtype != dtypes.int8
-  assert not any(name.startswith("_quant_scale.") for name in live_state)
+    dequantized = load_pretrained(checkpoint_dir, device="PYTHON", runtime_quantization=False)
+    dequantized_state = nn.state.get_state_dict(dequantized)
+    runtime = load_pretrained(checkpoint_dir, device="PYTHON")
+    runtime_state = nn.state.get_state_dict(runtime)
+    linear_name = "model.layers.0.mlp.gate_proj.weight"
+    dequantized_logits, _ = dequantized.forward_ids([2, 5, 7, 11])
+    runtime_logits, _ = runtime.forward_ids([2, 5, 7, 11])
+
+  assert dequantized_state[tensor_name].dtype != dtypes.int8
+  assert not any(name.startswith("_quant_scale.") for name in dequantized_state)
+  assert linear_name in manifest["tensors"]
+  assert isinstance(runtime.model.layers[0].mlp.gate_proj, RowwiseInt8Linear)
+  assert runtime_state[linear_name].dtype == dtypes.int8
+  assert runtime_state["model.layers.0.mlp.gate_proj.scale"].shape == (config.intermediate_size,)
+  assert not any(name.startswith("_quant_scale.") for name in runtime_state)
+  np.testing.assert_allclose(dequantized_logits.numpy(), runtime_logits.numpy(), rtol=1e-4, atol=1e-4)
+
+
+def test_quantization_includes_bfloat16_matrices():
+  state_dict = {
+    "matrix": Tensor.ones(2, 3, dtype=dtypes.bfloat16),
+    "vector": Tensor.ones(3, dtype=dtypes.bfloat16),
+  }
+  quantized, manifest = quantize_state_dict(state_dict, quantize="int8")
+
+  assert quantized["matrix"].dtype == dtypes.int8
+  assert manifest["tensors"]["matrix"]["dtype"] == "bfloat16"
+  assert manifest["tensors"]["matrix"]["scale_key"] in quantized
+  assert quantized["vector"].dtype == dtypes.bfloat16
+  assert "vector" not in manifest["tensors"]
 
 
 def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):
@@ -973,6 +1000,7 @@ def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):
 
     reloaded = load_pretrained(checkpoint_dir, device="PYTHON")
     assert isinstance(reloaded, GemmaForConditionalGeneration)
+    assert isinstance(reloaded.model.language_model.layers[0].mlp.gate_proj, RowwiseInt8Linear)
     reloaded_logits, _ = reloaded.forward_ids(
       input_ids,
       pixel_values=pixel_values,

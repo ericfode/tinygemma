@@ -243,6 +243,8 @@ class GemmaMLP:
   def _can_use_fused_gate_up(self) -> bool:
     return (
       not Tensor.training
+      and not getattr(self.gate_proj, "is_rowwise_int8", False)
+      and not getattr(self.up_proj, "is_rowwise_int8", False)
       and self.gate_proj.weight.requires_grad is None
       and self.up_proj.weight.requires_grad is None
     )

@@ -152,7 +152,26 @@ slows with context length but still completes, unlike the earlier long attempts.
    - Real speed from quantization needs compressed weights through matmul or a
      fused dequantize-matmul path.
 
-7. Use the post-window JIT profile before guessing.
+7. Runtime int8 matmul is real now, but not enough.
+   - The local `gemma-4-E2B-int8` checkpoint was regenerated after fixing bf16
+     quantization. It now has 582 rowwise-int8 tensors and 582 scale tensors;
+     `load_pretrained(..., device="METAL")` installs 525 runtime int8 linears.
+   - The new rows are valid no-fallback TinyJit replay rows:
+     20.063766 tok/s for 50/4, 15.751897 tok/s for 200/20, and 10.721864
+     tok/s for 1000/20 with `rollout_jit_count=999`.
+   - This proves compressed weights are flowing through matmul, but the
+     long-context floor still decays far below 50 tok/s. The next target should
+     profile post-int8 full-attention/norm cost rather than returning to
+     logits-only changes.
+   - Post-int8 profile at context length 700 measured 96.651 ms over 4807
+     kernels: other 31.712 ms, MLP 22.190 ms, norm 16.797 ms, attention
+     15.262 ms, logits/argmax 3.727 ms, and per-layer embedding 3.016 ms.
+   - A conditional pre-embed experiment reduced the synthetic profile to
+     89.465 ms but regressed the real 200/20 row to 11.272605 tok/s, so do not
+     move token embedding/per-layer input prep out of the conditional JIT.
+     Prefer a replay-local MLP/RowwiseInt8Linear kernel-volume reduction next.
+
+8. Use the post-window JIT profile before guessing.
    - `scripts/profile_decode_jit.py` profiles a synthetic post-window decode
      token with zeroed KV cache and `JIT=2` so the captured TinyJit can be
      timed per kernel category.
@@ -163,12 +182,12 @@ slows with context length but still completes, unlike the earlier long attempts.
      an `int8` manifest with 0 quantized tensors and 2011 raw bfloat16 tensors.
      Treat the directory name as storage labeling, not runtime int8 proof.
 
-8. Prefill only the logits needed for generation.
+9. Prefill only the logits needed for generation.
    - Generation needs the last prompt logits, but the current prefill path still
      computes logits for every prompt position.
    - This matters more for long text prompts and multimodal inputs.
 
-9. Cache or simplify decode masks and RoPE work.
+10. Cache or simplify decode masks and RoPE work.
    - For query length 1, full causal layers often need no explicit mask.
    - Sliding layers should not rebuild a full-position mask when the window is
      already cropped.
@@ -196,9 +215,20 @@ slows with context length but still completes, unlike the earlier long attempts.
   - Current fused-MLP proof:
     `--max-new-tokens 1000 --decode-warmup-tokens 20` measured 9.303522 tok/s
     with `decode_fallback=false` and `rollout_jit_count=999`.
+  - Current runtime-int8-matmul proofs:
+    `--max-new-tokens 50 --decode-warmup-tokens 4` measured 20.063766 tok/s
+    with `decode_fallback=false` and `rollout_jit_count=49`;
+    `--max-new-tokens 200 --decode-warmup-tokens 20` measured 15.751897 tok/s
+    with `decode_fallback=false` and `rollout_jit_count=199`;
+    `--max-new-tokens 1000 --decode-warmup-tokens 20` measured 10.721864
+    tok/s with `decode_fallback=false` and `rollout_jit_count=999`.
+  - Current post-int8 profile proof:
+    `scripts/profile_decode_jit.py --context-length 700` measured 96.651 ms
+    and is recorded in
+    `benchmarks/gemma4-metal-postwindow-jit-profile-int8matmul-current.json`.
 
 - Full unit tests:
-  - Current result: `34 passed, 1 skipped, 2 warnings in 37.79s`.
+  - Current result: `35 passed, 1 skipped, 2 warnings in 39.60s`.
 
 ## Sources
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "fused-mlp-gate-up",
+  "current_checkpoint": "runtime-int8-matmul",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -98,6 +98,37 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "metal-runtime-int8-matmul-008",
+      "summary": "Made the E2B int8 checkpoint genuinely rowwise-int8, installed runtime int8 Linear modules on METAL, and improved the 1000-token warmup-excluded row from 9.303522 tok/s to 10.721864 tok/s with decode_fallback=false.",
+      "artifacts": [
+        "tinygrad_gemma/quantization.py",
+        "tinygrad_gemma/loader.py",
+        "tinygrad_gemma/model.py",
+        "scripts/quantize_gemma4_matrix.py",
+        "tests/test_tinygrad_gemma.py",
+        "benchmarks/gemma4-metal-int8matmul-smoke-current.csv",
+        "benchmarks/gemma4-metal-int8matmul-smoke-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-int8matmul-200-current.csv",
+        "benchmarks/gemma4-metal-int8matmul-200-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-int8matmul-1000-current.csv",
+        "benchmarks/gemma4-metal-int8matmul-1000-current.csv.progress.jsonl",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-post-int8-profile-009",
+      "summary": "Refreshed the post-int8 decode TinyJit profile and rejected moving conditional token embedding out of the JIT after the real 200-token row regressed from 15.751897 tok/s to 11.272605 tok/s.",
+      "artifacts": [
+        "benchmarks/gemma4-metal-postwindow-jit-profile-int8matmul-current.json",
+        "benchmarks/gemma4-metal-postwindow-jit-profile-int8matmul-current.csv",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -105,7 +136,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "reduce-mlp-norm-attention-floor",
-  "next_target_plan": "Current proof: E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 took 136.105067 s total and measured 9.303522 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The post-window 700/520 row measured 11.891932 tok/s. The fused post-window JIT profile at context length 700 measured 110.302 ms synthetic decode: MLP 38.938 ms, attention 26.236 ms, norm 13.447 ms, logits/argmax 1.793 ms. The local int8 checkpoint manifest has 0 quantized tensors and raw bfloat16 weights, so real speedup likely requires reducing MLP/norm/attention kernel volume or implementing runtime int8 matmul rather than optimizing logits.",
-  "updated_at": "2026-04-23T19:54:22-0700"
+  "next_target": "fuse-rowwise-int8-gate-up-or-scale-path",
+  "next_target_plan": "Current proof remains the runtime-int8 1000-token row: 10.721864 measured tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The post-int8 synthetic post-window profile measured 96.651 ms over 4807 kernels: other 31.712 ms, MLP 22.190 ms, norm 16.797 ms, attention 15.262 ms, logits_argmax 3.727 ms, embedding_per_layer 3.016 ms. A conditional pre-embed experiment improved synthetic profile timing to 89.465 ms but regressed the real 200-token row to 11.272605 tok/s, so do not move token embedding/per-layer input prep out of the conditional JIT. Next narrow target should keep work inside replay and reduce RowwiseInt8Linear MLP kernel volume, likely by fusing rowwise-int8 gate/up or folding the row-scale path.",
+  "updated_at": "2026-04-23T20:57:31-0700"
 }

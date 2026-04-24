@@ -1,5 +1,70 @@
 # Evolution Log
 
+## 2026-04-23 - Post-Int8 Decode Profile And Rejected Pre-Embed
+
+- Refreshed the real E2B int8 `METAL` post-window decode TinyJit profile after
+  runtime int8 matmul. The synthetic context-700 profile measured `96.651` ms
+  across `4807` kernels: `other` `31.712` ms, MLP `22.190` ms, norm
+  `16.797` ms, attention `15.262` ms, logits/argmax `3.727` ms, and
+  per-layer embedding `3.016` ms.
+- The profile artifact is
+  `benchmarks/gemma4-metal-postwindow-jit-profile-int8matmul-current.json`
+  with CSV detail in
+  `benchmarks/gemma4-metal-postwindow-jit-profile-int8matmul-current.csv`.
+- Tried the obvious conditional-path parity change from the causal generator:
+  move token embedding, per-layer inputs, and position id construction outside
+  the conditional decode JIT. The synthetic profile improved to `89.465` ms,
+  but the real E2B int8 `METAL`, `beam=0`,
+  `--max-new-tokens 200 --decode-warmup-tokens 20` row regressed to
+  `11.272605` tok/s with `rollout_jit_count=199` and
+  `decode_fallback=false`.
+- Rejected and reverted that source change. The current accepted real measured
+  floor remains the runtime-int8 `1000/20` row: `10.721864` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Next target: keep work inside replay and reduce RowwiseInt8Linear MLP kernel
+  volume, likely by fusing rowwise-int8 gate/up or folding the row-scale path.
+
+## 2026-04-23 - Runtime Int8 Matmul
+
+- Fixed rowwise int8 quantization for real Gemma 4 bfloat16 checkpoints. The
+  old dtype predicate checked the tinygrad dtype name and missed bf16 because
+  tinygrad reports it as `__bf16`; it produced an `int8` manifest with zero
+  quantized tensors.
+- Reworked `scripts/quantize_gemma4_matrix.py` to stream safetensors directly
+  for checkpoint quantization. This avoids the tinygrad disk-bf16
+  `tensor.numpy()` rangeify assertion and does not hold both the 9.5 GB source
+  and 4.8 GB output in memory.
+- Added `RowwiseInt8Linear` and a runtime quantized load path. Quantized
+  `nn.Linear` weights stay int8 on the target device with one row scale vector;
+  non-linear quantized tensors still dequantize to their manifest dtype. Use
+  `load_pretrained(..., runtime_quantization=False)` for trainable dequantized
+  loads.
+- Regenerated the local E2B int8 checkpoint under ignored
+  `/Users/ericfode/Downloads/tinygrad-gemma/checkpoints/gemma-4-E2B-int8`.
+  It now has `582` int8 tensors, `582` scale tensors, a `134K`
+  `quantization.json`, and a `4.8G` `model.safetensors`.
+- Real load verification on 2026-04-23:
+  `load_pretrained(..., device="METAL", verbose=True)` installed `525`
+  runtime int8 linear weights; the first language-model MLP gate projection is
+  `RowwiseInt8Linear` on `METAL`.
+- Real E2B int8 `METAL`, `beam=0` benchmark rows after the patch:
+  `--max-new-tokens 50 --decode-warmup-tokens 4` measured `20.063766`
+  warmup-excluded tok/s with `rollout_jit_count=49` and
+  `decode_fallback=false`; `--max-new-tokens 200 --decode-warmup-tokens 20`
+  measured `15.751897` tok/s with `rollout_jit_count=199` and
+  `decode_fallback=false`; `--max-new-tokens 1000 --decode-warmup-tokens 20`
+  measured `10.721864` tok/s with `rollout_jit_count=999` and
+  `decode_fallback=false`.
+- Full repo gates passed after the patch: `35 passed, 1 skipped, 2 warnings in
+  39.60s`; CLI help exit 0; `scripts/smoke_metal.py` reported
+  `generated_tokens=4`, `rollout_jit_count=3`, and `decode_fallback=False`;
+  `git diff --check` passed.
+- Runtime int8 matmul is real and legal on Metal, but it is not the final
+  throughput fix. The 1000-token row improved from `9.303522` to `10.721864`
+  measured tok/s, still far below the `50` tok/s target. Next target: isolate
+  the post-int8 long-context floor, likely full-attention context growth plus
+  norm/attention kernel volume.
+
 ## 2026-04-23 - Fused MLP Gate-Up Decode Profile
 
 - Added `scripts/profile_decode_jit.py`, a repo-owned synthetic post-window
