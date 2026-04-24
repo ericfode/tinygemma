@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CACHE_VERSION: "1"
+  CHECK_OOB: "1"
+  CACHELEVEL: "0"
+  PYTHONPATH: ${{ github.workspace }}
+  OMP_NUM_THREADS: "1"
+  MAX_BUFFER_SIZE: "300000000"
+
+jobs:
+  package:
+    name: Package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up environment
+        uses: ./.github/actions/setup-tinygrad-gemma
+        with:
+          python-version: "3.12"
+          extras: dev
+          pydeps: build
+          cache-key: package-${{ hashFiles('pyproject.toml') }}
+
+      - name: Build wheel
+        run: |
+          python -m build --wheel --outdir dist
+          ls -lh dist/*.whl
+
+      - name: Install built wheel and import package
+        run: |
+          wheel="$(ls dist/*.whl)"
+          python -m pip install --force-reinstall "$wheel"
+          cd "$(mktemp -d)"
+          PYTHONPATH= python - <<'PY'
+          from tinygrad_gemma import GemmaConfig, supported_optimizers, supported_quantizations
+
+          assert GemmaConfig(model_type="gemma4").model_type == "gemma4"
+          assert "adamw" in supported_optimizers()
+          assert "int8" in supported_quantizations()
+          PY
+
+  tests:
+    name: Unit Tests / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up environment
+        uses: ./.github/actions/setup-tinygrad-gemma
+        with:
+          python-version: ${{ matrix.python-version }}
+          extras: dev
+          cache-key: tests-${{ hashFiles('pyproject.toml') }}
+
+      - name: Run CPU unit tests
+        run: DEV=CPU python -m pytest -q --durations=20
+
+  python-backend:
+    name: Python Backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up environment
+        uses: ./.github/actions/setup-tinygrad-gemma
+        with:
+          python-version: "3.12"
+          extras: dev
+          cache-key: python-backend-${{ hashFiles('pyproject.toml') }}
+
+      - name: Run tinygrad Python backend tests
+        run: DEV=PYTHON python -m pytest -q tests/test_tinygrad_gemma.py --durations=20
