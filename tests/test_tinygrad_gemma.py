@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from tinygrad import Tensor, nn
+from tinygrad import Tensor, dtypes, nn
 
 from tinygrad_gemma import (
   DEFAULT_IGNORE_INDEX,
@@ -398,6 +398,17 @@ def test_cache_matches_full_forward_for_gemma4():
   np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
 
 
+def test_next_logits_ids_matches_forward_last_logits_for_gemma4():
+  config = make_config()
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=30)
+    full_logits, _ = model.forward_ids([2, 4, 6, 9])
+    next_logits, _ = model.next_logits_ids([2, 4, 6, 9])
+  assert next_logits.shape == (1, config.vocab_size)
+  np.testing.assert_allclose(next_logits.numpy(), full_logits.numpy()[:, -1, :], rtol=1e-4, atol=1e-4)
+
+
 def test_preallocated_cache_matches_full_forward_for_gemma4():
   config = make_config()
   with temporary_default_device("PYTHON"):
@@ -409,6 +420,27 @@ def test_preallocated_cache_matches_full_forward_for_gemma4():
     step_logits, _ = model.forward_ids([9], cache=cache)
     full_logits, _ = model.forward_ids(prompt + [9])
   np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
+
+
+def test_dynamic_sliding_cache_keeps_suffix_and_matches_full_forward_for_gemma4():
+  config = make_config()
+  assert config.layer_types == ["sliding_attention", "full_attention"]
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=32)
+    prompt = [2, 4, 6, 8, 10, 12]
+    cache = GemmaCache.empty(config.num_hidden_layers)
+    _, cache = model.forward_ids(prompt, cache=cache)
+    sliding_entry = cache.entries[0]
+    full_entry = cache.entries[1]
+    assert sliding_entry is not None
+    assert full_entry is not None
+    assert sliding_entry.key.shape[2] == config.sliding_window - 1
+    assert full_entry.key.shape[2] == len(prompt)
+
+    step_logits, _ = model.forward_ids([14, 16], cache=cache)
+    full_logits, _ = model.forward_ids(prompt + [14, 16])
+  np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -2:, :], rtol=1e-4, atol=1e-4)
 
 
 def test_preallocated_generate_matches_dynamic_cache_for_gemma4():
@@ -841,6 +873,27 @@ def test_quantized_text_checkpoint_reloads_and_trains(tmp_path: Path):
     after_step, _ = reloaded.forward_ids([2, 5, 7, 11])
     assert float(loss.item()) > 0.0
     assert not np.allclose(before_step, after_step.numpy())
+
+
+def test_quantized_checkpoint_is_int8_on_disk_and_dequantized_in_memory(tmp_path: Path):
+  config = make_config()
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=72)
+    checkpoint_dir = tmp_path / "quantized-contract"
+    save_training_checkpoint(model, checkpoint_dir, quantize="int8")
+
+    manifest = load_quantization_manifest(checkpoint_dir)
+    assert manifest is not None
+    tensor_name, tensor_info = next(iter(manifest["tensors"].items()))
+    raw_state = nn.state.safe_load(checkpoint_dir / "model.safetensors")
+    assert raw_state[tensor_name].dtype == dtypes.int8
+    assert tensor_info["scale_key"] in raw_state
+
+    reloaded = load_pretrained(checkpoint_dir, device="PYTHON")
+    live_state = nn.state.get_state_dict(reloaded)
+  assert live_state[tensor_name].dtype != dtypes.int8
+  assert not any(name.startswith("_quant_scale.") for name in live_state)
 
 
 def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):

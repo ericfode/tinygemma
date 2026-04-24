@@ -112,6 +112,14 @@ def repeat_kv(hidden_states: Tensor, n_rep: int) -> Tensor:
   return hidden_states.repeat_interleave(n_rep, dim=1)
 
 
+def kv_suffix(key: Tensor, value: Tensor, max_tokens: int) -> tuple[Tensor, Tensor]:
+  if max_tokens <= 0:
+    return key[:, :, :0, :], value[:, :, :0, :]
+  if isinstance(key.shape[2], int) and key.shape[2] <= max_tokens:
+    return key, value
+  return key[:, :, -max_tokens:, :], value[:, :, -max_tokens:, :]
+
+
 def build_attention_mask(
   query_len: int,
   key_len: int,
@@ -365,7 +373,10 @@ class GemmaAttention:
           if (entry := cache.entries[self.layer_idx]) is not None:
             k = entry.key.cat(k, dim=2)
             v = entry.value.cat(v, dim=2)
-          cache.entries[self.layer_idx] = GemmaCacheEntry(key=k, value=v)
+          store_k, store_v = k, v
+          if self.sliding_window is not None:
+            store_k, store_v = kv_suffix(k, v, self.sliding_window - 1)
+          cache.entries[self.layer_idx] = GemmaCacheEntry(key=store_k, value=store_v)
       if shared_kv_states is not None and self.store_full_length_kv:
         shared_kv_states[self.layer_idx] = current_entry if cache is not None and cache.max_length is not None else GemmaCacheEntry(key=k, value=v)
 
@@ -574,6 +585,9 @@ class GemmaForCausalLM:
       logits = (logits / self.config.final_logit_softcapping).tanh() * self.config.final_logit_softcapping
     return logits
 
+  def next_logits(self, hidden_states: Tensor) -> Tensor:
+    return self.logits(hidden_states[:, -1:, :])[:, -1, :]
+
   def __call__(
     self,
     input_ids: Tensor | None = None,
@@ -605,6 +619,10 @@ class GemmaForCausalLM:
 
   def forward_ids(self, input_ids: Sequence[int] | Sequence[Sequence[int]], cache: GemmaCache | None = None) -> tuple[Tensor, GemmaCache | None]:
     return self(input_ids_tensor(input_ids, device=self.device), cache=cache)
+
+  def next_logits_ids(self, input_ids: Sequence[int] | Sequence[Sequence[int]], cache: GemmaCache | None = None) -> tuple[Tensor, GemmaCache | None]:
+    hidden_states = self.model(input_ids_tensor(input_ids, device=self.device), cache=cache)
+    return self.next_logits(hidden_states), cache
 
   def loss(self, logits: Tensor, labels: Tensor | Sequence[int] | Sequence[Sequence[int]], *, ignore_index: int = DEFAULT_IGNORE_INDEX) -> Tensor:
     return causal_language_model_loss(logits, labels, ignore_index=ignore_index)

@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import platform
 
 from tinygrad import Device
+from tinygrad.helpers import Context, ContextVar
 
 
 def metal_is_usable() -> bool:
@@ -79,6 +80,10 @@ def prepare_device(device: str | None) -> str:
 @contextmanager
 def temporary_default_device(device: str | None) -> Iterator[str]:
   target_device = prepare_device(device)
+  if "DEV" in ContextVar._cache:
+    with Context(DEV=target_device):
+      yield target_device
+    return
   missing = object()
   previous = Device.__dict__.get("DEFAULT", missing)
   Device.DEFAULT = target_device

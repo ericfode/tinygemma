@@ -636,6 +636,9 @@ class GemmaForConditionalGeneration:
       logits = (logits / self.config.text_config.final_logit_softcapping).tanh() * self.config.text_config.final_logit_softcapping
     return logits
 
+  def next_logits(self, hidden_states: Tensor) -> Tensor:
+    return self.logits(hidden_states[:, -1:, :])[:, -1, :]
+
   def __call__(
     self,
     input_ids: Tensor | None = None,
@@ -654,21 +657,15 @@ class GemmaForConditionalGeneration:
     )
     return self.logits(hidden_states), cache
 
-  def forward_ids(
+  def _prepare_language_inputs(
     self,
     input_ids: list[int] | list[list[int]],
-    cache: GemmaCache | None = None,
     *,
     pixel_values: np.ndarray | None = None,
     image_position_ids: np.ndarray | None = None,
     input_features: np.ndarray | None = None,
     input_features_mask: np.ndarray | None = None,
-  ) -> tuple[Tensor, GemmaCache | None]:
-    if cache is not None and cache.past_seen_tokens > 0 and any(v is not None for v in (pixel_values, image_position_ids, input_features, input_features_mask)):
-      raise ValueError("multimodal features are only valid on the first decoding step")
-    if cache is not None and cache.past_seen_tokens > 0:
-      return self(input_ids_tensor(input_ids, device=self.device), cache=cache)
-
+  ) -> tuple[Tensor, Tensor | None, Tensor | None]:
     rows = token_rows(input_ids)
     llm_input_ids = [
       [self.config.text_config.pad_token_id if tok in (self.config.image_token_id, self.config.audio_token_id) else tok for tok in row]
@@ -702,7 +699,59 @@ class GemmaForConditionalGeneration:
         device=self.device,
         dtype="int32",
       )
+    return inputs_embeds, per_layer_inputs, bidirectional_group_ids
+
+  def forward_ids(
+    self,
+    input_ids: list[int] | list[list[int]],
+    cache: GemmaCache | None = None,
+    *,
+    pixel_values: np.ndarray | None = None,
+    image_position_ids: np.ndarray | None = None,
+    input_features: np.ndarray | None = None,
+    input_features_mask: np.ndarray | None = None,
+  ) -> tuple[Tensor, GemmaCache | None]:
+    if cache is not None and cache.past_seen_tokens > 0 and any(v is not None for v in (pixel_values, image_position_ids, input_features, input_features_mask)):
+      raise ValueError("multimodal features are only valid on the first decoding step")
+    if cache is not None and cache.past_seen_tokens > 0:
+      return self(input_ids_tensor(input_ids, device=self.device), cache=cache)
+
+    inputs_embeds, per_layer_inputs, bidirectional_group_ids = self._prepare_language_inputs(
+      input_ids,
+      pixel_values=pixel_values,
+      image_position_ids=image_position_ids,
+      input_features=input_features,
+      input_features_mask=input_features_mask,
+    )
     return self(None, cache=cache, inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs, bidirectional_group_ids=bidirectional_group_ids)
+
+  def next_logits_ids(
+    self,
+    input_ids: list[int] | list[list[int]],
+    cache: GemmaCache | None = None,
+    *,
+    pixel_values: np.ndarray | None = None,
+    image_position_ids: np.ndarray | None = None,
+    input_features: np.ndarray | None = None,
+    input_features_mask: np.ndarray | None = None,
+  ) -> tuple[Tensor, GemmaCache | None]:
+    if cache is not None and cache.past_seen_tokens > 0:
+      hidden_states = self.model.language_model(input_ids_tensor(input_ids, device=self.device), cache=cache)
+      return self.next_logits(hidden_states), cache
+    inputs_embeds, per_layer_inputs, bidirectional_group_ids = self._prepare_language_inputs(
+      input_ids,
+      pixel_values=pixel_values,
+      image_position_ids=image_position_ids,
+      input_features=input_features,
+      input_features_mask=input_features_mask,
+    )
+    hidden_states = self.model.language_model(
+      inputs_embeds=inputs_embeds,
+      cache=cache,
+      per_layer_inputs=per_layer_inputs,
+      bidirectional_group_ids=bidirectional_group_ids,
+    )
+    return self.next_logits(hidden_states), cache
 
   def sample_next(self, logits: Tensor, temperature: float = 0.0) -> Tensor:
     if temperature <= 0.0:
