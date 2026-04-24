@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from tinygrad.helpers import Context
@@ -30,6 +31,42 @@ def output_digest(tokens: list[int]) -> str:
   return hashlib.sha256(" ".join(str(token) for token in tokens).encode()).hexdigest()
 
 
+def validate_decode_warmup_tokens(max_new_tokens: int, decode_warmup_tokens: int) -> None:
+  if decode_warmup_tokens < 0 or decode_warmup_tokens >= max_new_tokens:
+    raise ValueError("--decode-warmup-tokens must satisfy 0 <= value < --max-new-tokens")
+
+
+class DecodeSuffixTimer:
+  def __init__(self, *, decode_warmup_tokens: int, started: float, clock: Callable[[], float] = time.perf_counter):
+    self.decode_warmup_tokens = decode_warmup_tokens
+    self._clock = clock
+    self._measured_start = started if decode_warmup_tokens == 0 else None
+
+  def note_token_count(self, generated_count: int) -> None:
+    if generated_count == self.decode_warmup_tokens:
+      self._measured_start = self._clock()
+
+  def finish(self, generated_count: int, ended: float | None = None) -> dict[str, float | int]:
+    measured_tokens = max(0, generated_count - self.decode_warmup_tokens)
+    if measured_tokens == 0:
+      measured_seconds = 0.0
+    else:
+      ended = self._clock() if ended is None else ended
+      measured_start = self._measured_start if self._measured_start is not None else ended
+      measured_seconds = ended - measured_start
+    return {
+      "decode_warmup_tokens": self.decode_warmup_tokens,
+      "measured_decode_tokens": measured_tokens,
+      "measured_decode_seconds": measured_seconds,
+      "measured_decode_tokens_per_second": measured_tokens / measured_seconds if measured_seconds > 0 else 0.0,
+    }
+
+
+def append_generated_token(generated: list[int], token_id: int, timer: DecodeSuffixTimer) -> None:
+  generated.append(token_id)
+  timer.note_token_count(len(generated))
+
+
 def append_progress(progress_path: Path | None, payload: dict) -> None:
   if progress_path is None:
     return
@@ -38,7 +75,7 @@ def append_progress(progress_path: Path | None, payload: dict) -> None:
     handle.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
-def error_rows(*, beams: list[int], status: str, error: str) -> list[dict]:
+def error_rows(*, beams: list[int], status: str, error: str, decode_warmup_tokens: int) -> list[dict]:
   return [
     {
       "beam": beam,
@@ -46,6 +83,10 @@ def error_rows(*, beams: list[int], status: str, error: str) -> list[dict]:
       "generated_tokens": 0,
       "seconds": "",
       "tokens_per_second": "",
+      "decode_warmup_tokens": decode_warmup_tokens,
+      "measured_decode_tokens": 0,
+      "measured_decode_seconds": "",
+      "measured_decode_tokens_per_second": "",
       "load_seconds": "",
       "rollout_jit_count": "",
       "output_prefix": "",
@@ -62,6 +103,7 @@ def benchmark_checkpoint(
   prompt: str,
   beams: list[int],
   max_new_tokens: int,
+  decode_warmup_tokens: int,
   device: str,
   size: str,
   fmt: str,
@@ -72,12 +114,12 @@ def benchmark_checkpoint(
   try:
     resolved_device = prepare_device(device)
   except Exception as exc:
-    return error_rows(beams=beams, status="device_error", error=repr(exc))
+    return error_rows(beams=beams, status="device_error", error=repr(exc), decode_warmup_tokens=decode_warmup_tokens)
   try:
     model = load_pretrained(model_dir, device=resolved_device)
     tokenizer = GemmaTokenizer.from_pretrained(model_dir)
   except Exception as exc:
-    return error_rows(beams=beams, status="load_error", error=repr(exc))
+    return error_rows(beams=beams, status="load_error", error=repr(exc), decode_warmup_tokens=decode_warmup_tokens)
   prompt_ids = tokenizer.encode(prompt, add_bos=True)
   load_seconds = time.perf_counter() - started
   rows = []
@@ -85,15 +127,17 @@ def benchmark_checkpoint(
     os.environ["PARALLEL"] = str(os.cpu_count() or 1)
   for beam in beams:
     run_start = time.perf_counter()
+    decode_timer = DecodeSuffixTimer(decode_warmup_tokens=decode_warmup_tokens, started=run_start)
     status = "ok"
     generated: list[int] = []
     error = ""
     try:
       with Context(BEAM=beam):
         for token_id in model.generate(prompt_ids, max_new_tokens=max_new_tokens, temperature=0.0, stop_token_ids=None):
-          generated.append(token_id)
+          append_generated_token(generated, token_id, decode_timer)
           if progress_every > 0 and len(generated) % progress_every == 0:
             elapsed = time.perf_counter() - run_start
+            decode_metrics = decode_timer.finish(len(generated), ended=run_start + elapsed)
             progress = {
               "size": size,
               "format": fmt,
@@ -103,6 +147,10 @@ def benchmark_checkpoint(
               "target_new_tokens": max_new_tokens,
               "seconds": round(elapsed, 6),
               "tokens_per_second": round(len(generated) / elapsed, 6) if elapsed > 0 else 0.0,
+              "decode_warmup_tokens": decode_metrics["decode_warmup_tokens"],
+              "measured_decode_tokens": decode_metrics["measured_decode_tokens"],
+              "measured_decode_seconds": round(decode_metrics["measured_decode_seconds"], 6),
+              "measured_decode_tokens_per_second": round(decode_metrics["measured_decode_tokens_per_second"], 6),
             }
             print({"progress": progress}, file=sys.stderr, flush=True)
             append_progress(progress_path, progress)
@@ -112,7 +160,9 @@ def benchmark_checkpoint(
     except Exception as exc:  # keep the matrix moving
       status = "error"
       error = repr(exc)
-    seconds = time.perf_counter() - run_start
+    run_end = time.perf_counter()
+    seconds = run_end - run_start
+    decode_metrics = decode_timer.finish(len(generated), ended=run_end)
     rollout_jit = getattr(model, "_last_rollout_jit", None)
     rows.append({
       "beam": beam,
@@ -121,6 +171,10 @@ def benchmark_checkpoint(
       "generated_tokens": len(generated),
       "seconds": f"{seconds:.6f}",
       "tokens_per_second": f"{(len(generated) / seconds) if seconds > 0 else 0.0:.6f}",
+      "decode_warmup_tokens": decode_metrics["decode_warmup_tokens"],
+      "measured_decode_tokens": decode_metrics["measured_decode_tokens"],
+      "measured_decode_seconds": f"{decode_metrics['measured_decode_seconds']:.6f}",
+      "measured_decode_tokens_per_second": f"{decode_metrics['measured_decode_tokens_per_second']:.6f}",
       "load_seconds": f"{load_seconds:.6f}",
       "rollout_jit_count": getattr(rollout_jit, "cnt", "") if rollout_jit is not None else "",
       "output_prefix": " ".join(str(token) for token in generated[:32]),
@@ -141,11 +195,16 @@ def main() -> None:
   parser.add_argument("--devices", nargs="*", default=["METAL"])
   parser.add_argument("--prompt", default="hello")
   parser.add_argument("--max-new-tokens", type=int, default=1000)
+  parser.add_argument("--decode-warmup-tokens", type=int, default=0, help="Initial generated tokens excluded from measured_decode_* suffix metrics.")
   parser.add_argument("--out", type=Path, default=Path("benchmarks/gemma4-matrix.csv"))
   parser.add_argument("--resume", action="store_true", help="Append to an existing CSV and skip completed size/format/device/beam rows.")
   parser.add_argument("--progress-every", type=int, default=50, help="Emit progress after this many generated tokens. Use 0 to disable.")
   parser.add_argument("--progress-out", type=Path, help="Optional JSONL sidecar for progress events.")
   args = parser.parse_args()
+  try:
+    validate_decode_warmup_tokens(args.max_new_tokens, args.decode_warmup_tokens)
+  except ValueError as exc:
+    parser.error(str(exc))
 
   args.out.parent.mkdir(parents=True, exist_ok=True)
   fieldnames = [
@@ -160,6 +219,10 @@ def main() -> None:
     "generated_tokens",
     "seconds",
     "tokens_per_second",
+    "decode_warmup_tokens",
+    "measured_decode_tokens",
+    "measured_decode_seconds",
+    "measured_decode_tokens_per_second",
     "load_seconds",
     "rollout_jit_count",
     "output_prefix",
@@ -170,7 +233,7 @@ def main() -> None:
   if args.resume and args.out.exists():
     with args.out.open(newline="") as handle:
       for row in csv.DictReader(handle):
-        completed.add((row["size"], row["format"], row["device"], row["beam"]))
+        completed.add((row["size"], row["format"], row["device"], row["beam"], row.get("decode_warmup_tokens", "0")))
 
   write_header = not args.resume or not args.out.exists()
   with args.out.open("a" if args.resume else "w", newline="") as handle:
@@ -189,12 +252,13 @@ def main() -> None:
             "checkpoint": str(model_dir),
             "prompt_tokens": "",
             "target_new_tokens": args.max_new_tokens,
+            "decode_warmup_tokens": args.decode_warmup_tokens,
           }
           if not model_dir.exists():
-            writer.writerow({**base, "beam": "", "status": "missing", "generated_tokens": 0, "seconds": "", "tokens_per_second": "", "load_seconds": "", "rollout_jit_count": "", "output_prefix": "", "output_sha256": "", "error": "checkpoint directory missing"})
+            writer.writerow({**base, "beam": "", "status": "missing", "generated_tokens": 0, "seconds": "", "tokens_per_second": "", "measured_decode_tokens": 0, "measured_decode_seconds": "", "measured_decode_tokens_per_second": "", "load_seconds": "", "rollout_jit_count": "", "output_prefix": "", "output_sha256": "", "error": "checkpoint directory missing"})
             handle.flush()
             continue
-          pending_beams = [beam for beam in args.beams if (size, fmt, device, str(beam)) not in completed]
+          pending_beams = [beam for beam in args.beams if (size, fmt, device, str(beam), str(args.decode_warmup_tokens)) not in completed]
           if not pending_beams:
             print(f"skip completed {size} {fmt} {device}", file=sys.stderr, flush=True)
             continue
@@ -204,6 +268,7 @@ def main() -> None:
             prompt=args.prompt,
             beams=pending_beams,
             max_new_tokens=args.max_new_tokens,
+            decode_warmup_tokens=args.decode_warmup_tokens,
             device=device,
             size=size,
             fmt=fmt,
