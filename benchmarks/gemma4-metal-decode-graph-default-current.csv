@@ -1,9 +1,9 @@
 ordinal,category,program_type,display_name,device,elapsed_ms,est_ops,est_mem,source_start,source_end,source_count,source_category_counts,source_category_basis,metadata
-0,graph_batch,MetalGraph,<batched 32>,METAL,0.8920417167246342,0,0,0,31,32,"{""other"": 32}",unclassified_source_item_metadata,[]
-1,graph_batch,MetalGraph,<batched 64>,METAL,1.9731667125597596,0,0,32,95,64,"{""other"": 64}",unclassified_source_item_metadata,[]
-2,graph_batch,MetalGraph,<batched 128>,METAL,3.2394167501479387,0,0,96,223,128,"{""other"": 128}",unclassified_source_item_metadata,[]
-3,graph_batch,MetalGraph,<batched 256>,METAL,4.117375006899238,0,0,224,479,256,"{""other"": 256}",unclassified_source_item_metadata,[]
-4,graph_batch,MetalGraph,<batched 512>,METAL,8.789166691713035,0,0,480,991,512,"{""other"": 512}",unclassified_source_item_metadata,[]
-5,graph_batch,MetalGraph,<batched 1024>,METAL,12.203749967738986,0,0,992,2015,1024,"{""other"": 1024}",unclassified_source_item_metadata,[]
-6,graph_batch,MetalGraph,<batched 2048>,METAL,26.167416595853865,0,0,2016,4063,2048,"{""other"": 2048}",unclassified_source_item_metadata,[]
-7,graph_batch,MetalGraph,<batched 1175>,METAL,20.695791696198285,0,0,4064,5238,1175,"{""other"": 1175}",unclassified_source_item_metadata,[]
+0,graph_batch,MetalGraph,<batched 32>,METAL,1.457124948501587,0,0,0,31,32,"{""attention"": 32}",repo_sidecar_realize_scope_metadata,"[{""caller"": ""repo_sidecar:1::attention"", ""count"": ""32"", ""name"": ""attention""}]"
+1,graph_batch,MetalGraph,<batched 64>,METAL,3.6392499459907413,0,0,32,95,64,"{""attention"": 64}",repo_sidecar_realize_scope_metadata,"[{""caller"": ""repo_sidecar:1::attention"", ""count"": ""64"", ""name"": ""attention""}]"
+2,graph_batch,MetalGraph,<batched 128>,METAL,3.872124943882227,0,0,96,223,128,"{""attention"": 128}",repo_sidecar_realize_scope_metadata,"[{""caller"": ""repo_sidecar:1::attention"", ""count"": ""128"", ""name"": ""attention""}]"
+3,graph_batch,MetalGraph,<batched 256>,METAL,3.7547500105574727,0,0,224,479,256,"{""attention"": 256}",repo_sidecar_realize_scope_metadata,"[{""caller"": ""repo_sidecar:1::attention"", ""count"": ""256"", ""name"": ""attention""}]"
+4,graph_batch,MetalGraph,<batched 512>,METAL,7.110000005923212,0,0,480,991,512,"{""attention"": 512}",repo_sidecar_realize_scope_metadata,"[{""caller"": ""repo_sidecar:1::attention"", ""count"": ""512"", ""name"": ""attention""}]"
+5,graph_batch,MetalGraph,<batched 1024>,METAL,11.204999987967312,0,0,992,2015,1024,"{""attention"": 1024}",repo_sidecar_realize_scope_metadata,"[{""caller"": ""repo_sidecar:1::attention"", ""count"": ""1024"", ""name"": ""attention""}]"
+6,graph_batch,MetalGraph,<batched 2048>,METAL,24.921083357185125,0,0,2016,4063,2048,"{""attention"": 2048}",repo_sidecar_realize_scope_metadata,"[{""caller"": ""repo_sidecar:1::attention"", ""count"": ""2048"", ""name"": ""attention""}]"
+7,graph_batch,MetalGraph,<batched 1175>,METAL,19.539666594937444,0,0,4064,5238,1175,"{""attention"": 456, ""other"": 719}",repo_sidecar_realize_scope_metadata,"[{""caller"": ""repo_sidecar:1::attention"", ""count"": ""456"", ""name"": ""attention""}]"

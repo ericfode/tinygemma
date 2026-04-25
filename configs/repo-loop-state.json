@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "repo-sidecar-metadata-bypass-probe-023",
+  "current_checkpoint": "gemma-profiler-sidecar-category-attribution-024",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -304,6 +304,18 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "gemma-profiler-sidecar-category-attribution-024",
+      "summary": "Integrated the repo-local TinyJit.add_linear sidecar into the Gemma decode graph profiler. The refreshed default JIT=1 E2B int8 METAL artifact keeps complete 8-row MetalGraph attribution over all 5239 source items and now records non-other repo-sidecar realization-scope attribution: 4520 attention-scoped source items and 719 unclassified source items. This is profiler instrumentation only; no throughput row was superseded.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-default-current.json",
+        "benchmarks/gemma4-metal-decode-graph-default-current.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -311,7 +323,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "gemma-profiler-sidecar-category-attribution",
-  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. Native tinygrad metadata is lost before CapturedJit.linear, but the repo-local TinyJit.add_linear sidecar preserves scoped metadata through captured calls and lowered ExecItems in the minimal METAL probe. The next narrow target is to integrate this sidecar into scripts/profile_decode_jit.py around Gemma attention, MLP, norm, embedding, decoder residual, and logits scopes, then rerun the default JIT=1 graph profile to verify non-other category attribution without claiming a throughput win.",
-  "updated_at": "2026-04-25T14:16:03-0700"
+  "next_target": "attention-cache-realization-scope-split-diagnostic",
+  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The default JIT=1 graph profiler now has complete graph-range attribution and truthful repo_sidecar_realize_scope_metadata labels: 4520 of 5239 source items are captured while inside GemmaAttention realization scopes, and 719 remain unclassified in the final graph range. The next larger target is to split attention-side realization scopes inside GemmaAttention cache write, q/k/v projection, score/softmax/value, and output projection regions, then rerun the default graph profile to decide whether the next throughput increment should attack cache writes, attention score math, or the unclassified final tail. Do not claim throughput movement without a benchmark row that passes decode_fallback=false and rollout_jit_count>0.",
+  "updated_at": "2026-04-25T14:34:33-0700"
 }

@@ -1,5 +1,54 @@
 # Evolution Log
 
+## 2026-04-25 - Gemma Profiler Sidecar Category Attribution
+
+- Hypothesis: integrating the repo-local `TinyJit.add_linear` sidecar into
+  `scripts/profile_decode_jit.py` around Gemma decode methods will recover
+  non-`other` category attribution for the default JIT=1 MetalGraph profile
+  without changing model runtime behavior. Invalidation criterion: focused
+  tests fail, the sidecar patch leaks after profiling, graph source attribution
+  becomes incomplete, graph batching changes unexpectedly, or the refreshed
+  real METAL profile remains entirely `other`.
+- Implemented profiler-only sidecar scopes for embedding/per-layer projection,
+  norm, attention, MLP, decoder residual, and logits/argmax methods. The patch
+  temporarily wraps `TinyJit.add_linear` and restores all monkeypatched methods
+  after capture.
+- Tightened artifact truthfulness by separating native source-line metadata
+  from `repo_sidecar_realize_scope_metadata`. The sidecar labels the Python
+  realization scope that caused tinygrad to capture a `LINEAR` call; it is not
+  a native per-operation source category.
+- Artifact: `benchmarks/gemma4-metal-decode-graph-default-current.json` and
+  `benchmarks/gemma4-metal-decode-graph-default-current.csv`.
+- Result: accepted as profiler instrumentation. The default E2B int8 `METAL`
+  JIT=1 graph profile still has 8 `MetalGraph` rows and complete attribution
+  over all 5239 source items: `source_attribution.status=complete`,
+  `original_exec_count=5239`, `attributed_source_count=5239`,
+  `unparsed_graph_batches=0`, and `unattributed_tail_count=0`.
+- The refreshed source attribution is no longer all `other`. The captured
+  source items report `category_counts={"attention": 4520, "other": 719}` and
+  `category_basis_counts={"repo_sidecar_realize_scope_metadata": 4520,
+  "unclassified_source_item_metadata": 719}`. At the graph-row level,
+  `source_attribution.category_basis_counts` is
+  `{"repo_sidecar_realize_scope_metadata": 8}`.
+- The five slowest graph ranges in the accepted artifact are headed by
+  `<batched 2048>` at `24.921083` ms for source range `2016-4063`,
+  `<batched 1175>` at `19.539667` ms for range `4064-5238`, and
+  `<batched 1024>` at `11.205000` ms for range `992-2015`.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Verification on 2026-04-25:
+  `.venv/bin/python -m pytest -q tests/test_profile_decode_jit.py` passed with
+  `8 passed, 2 warnings`; `.venv/bin/python -m py_compile
+  scripts/profile_decode_jit.py` passed; the real E2B int8 `METAL` profiler
+  command refreshed the JSON/CSV artifacts; `.venv/bin/python -m json.tool`
+  passed for the loop-state and graph-profile JSON artifacts; `git diff
+  --check` passed; and `.venv/bin/tinygrad-gemma --help` exited 0.
+- Next target: split the attention realization sidecar into cache-write,
+  q/k/v projection, score/softmax/value, and output-projection regions, then
+  rerun the default graph profile to choose the next real throughput patch from
+  measured attention-scope evidence instead of guesswork.
+
 ## 2026-04-25 - Repo Sidecar Metadata Bypass Probe
 
 - Hypothesis: tinygrad's native Tensor metadata remains lost before

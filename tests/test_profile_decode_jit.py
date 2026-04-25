@@ -33,6 +33,12 @@ class FakeItem:
     self.metadata = []
 
 
+class FakeMetadata:
+  def __init__(self, name: str, caller: str):
+    self.name = name
+    self.caller = caller
+
+
 def test_profile_raw_gate_up_mode_is_abandoned():
   try:
     profile.validate_metal_int8_gate_up_mode("raw")
@@ -44,6 +50,29 @@ def test_profile_raw_gate_up_mode_is_abandoned():
 
 def test_profile_default_gate_up_mode_is_allowed():
   profile.validate_metal_int8_gate_up_mode("default")
+
+
+def test_profile_classifies_repo_sidecar_metadata():
+  metadata = [
+    FakeMetadata("norm", "repo_sidecar:1::norm"),
+    FakeMetadata("attention", "repo_sidecar:1::attention"),
+  ]
+
+  assert profile.classify_kernel(metadata) == "attention"
+
+
+def test_profile_method_sidecar_patch_restores_original_method():
+  class Target:
+    def call(self):
+      assert profile._SIDECAR_STACK[-1] == "mlp"
+      return "ok"
+
+  original = Target.call
+  with profile.method_sidecar_patch(Target, "call", "mlp"):
+    assert Target().call() == "ok"
+
+  assert Target.call is original
+  assert profile._SIDECAR_STACK == []
 
 
 def test_graph_batch_attribution_maps_batched_display_to_source_ranges():

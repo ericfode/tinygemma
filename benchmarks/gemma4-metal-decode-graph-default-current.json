@@ -8,8 +8,13 @@
   "metal_int8_gate_up": "default",
   "model_dir": "/Users/ericfode/Downloads/tinygrad-gemma/checkpoints/gemma-4-E2B-int8",
   "original_capture": {
+    "category_basis_counts": {
+      "repo_sidecar_realize_scope_metadata": 4520,
+      "unclassified_source_item_metadata": 719
+    },
     "category_counts": {
-      "other": 5239
+      "attention": 4520,
+      "other": 719
     },
     "compiled_runner_count": 5239,
     "exec_count": 5239,
@@ -51,18 +56,21 @@
   "source_attribution": {
     "attributed_source_count": 5239,
     "category_basis_counts": {
-      "unclassified_source_item_metadata": 8
+      "repo_sidecar_realize_scope_metadata": 8
     },
     "execution_item_count": 8,
     "execution_row_count": 8,
     "items": [
       {
-        "category_basis": "unclassified_source_item_metadata",
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 32
+        },
         "category_counts": {
-          "other": 32
+          "attention": 32
         },
         "display_name": "<batched 32>",
-        "elapsed_ms": 0.8920417167246342,
+        "elapsed_ms": 1.457124948501587,
         "expected_source_count": 32,
         "ordinal": 0,
         "program_type": "MetalGraph",
@@ -74,12 +82,15 @@
         "source_start": 0
       },
       {
-        "category_basis": "unclassified_source_item_metadata",
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 64
+        },
         "category_counts": {
-          "other": 64
+          "attention": 64
         },
         "display_name": "<batched 64>",
-        "elapsed_ms": 1.9731667125597596,
+        "elapsed_ms": 3.6392499459907413,
         "expected_source_count": 64,
         "ordinal": 1,
         "program_type": "MetalGraph",
@@ -91,12 +102,15 @@
         "source_start": 32
       },
       {
-        "category_basis": "unclassified_source_item_metadata",
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 128
+        },
         "category_counts": {
-          "other": 128
+          "attention": 128
         },
         "display_name": "<batched 128>",
-        "elapsed_ms": 3.2394167501479387,
+        "elapsed_ms": 3.872124943882227,
         "expected_source_count": 128,
         "ordinal": 2,
         "program_type": "MetalGraph",
@@ -108,12 +122,15 @@
         "source_start": 96
       },
       {
-        "category_basis": "unclassified_source_item_metadata",
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 256
+        },
         "category_counts": {
-          "other": 256
+          "attention": 256
         },
         "display_name": "<batched 256>",
-        "elapsed_ms": 4.117375006899238,
+        "elapsed_ms": 3.7547500105574727,
         "expected_source_count": 256,
         "ordinal": 3,
         "program_type": "MetalGraph",
@@ -125,12 +142,15 @@
         "source_start": 224
       },
       {
-        "category_basis": "unclassified_source_item_metadata",
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 512
+        },
         "category_counts": {
-          "other": 512
+          "attention": 512
         },
         "display_name": "<batched 512>",
-        "elapsed_ms": 8.789166691713035,
+        "elapsed_ms": 7.110000005923212,
         "expected_source_count": 512,
         "ordinal": 4,
         "program_type": "MetalGraph",
@@ -142,12 +162,15 @@
         "source_start": 480
       },
       {
-        "category_basis": "unclassified_source_item_metadata",
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 1024
+        },
         "category_counts": {
-          "other": 1024
+          "attention": 1024
         },
         "display_name": "<batched 1024>",
-        "elapsed_ms": 12.203749967738986,
+        "elapsed_ms": 11.204999987967312,
         "expected_source_count": 1024,
         "ordinal": 5,
         "program_type": "MetalGraph",
@@ -159,12 +182,15 @@
         "source_start": 992
       },
       {
-        "category_basis": "unclassified_source_item_metadata",
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 2048
+        },
         "category_counts": {
-          "other": 2048
+          "attention": 2048
         },
         "display_name": "<batched 2048>",
-        "elapsed_ms": 26.167416595853865,
+        "elapsed_ms": 24.921083357185125,
         "expected_source_count": 2048,
         "ordinal": 6,
         "program_type": "MetalGraph",
@@ -176,12 +202,17 @@
         "source_start": 2016
       },
       {
-        "category_basis": "unclassified_source_item_metadata",
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 456,
+          "unclassified_source_item_metadata": 719
+        },
         "category_counts": {
-          "other": 1175
+          "attention": 456,
+          "other": 719
         },
         "display_name": "<batched 1175>",
-        "elapsed_ms": 20.695791696198285,
+        "elapsed_ms": 19.539666594937444,
         "expected_source_count": 1175,
         "ordinal": 7,
         "program_type": "MetalGraph",
@@ -202,7 +233,7 @@
   "summary": {
     "by_category": {
       "graph_batch": {
-        "elapsed_ms": 78.07812513783574,
+        "elapsed_ms": 75.49899979494512,
         "elapsed_share": 1.0,
         "est_mem": 0,
         "est_ops": 0,
@@ -212,12 +243,12 @@
     },
     "by_program_type": {
       "MetalGraph": {
-        "elapsed_ms": 78.07812513783574,
+        "elapsed_ms": 75.49899979494512,
         "elapsed_share": 1.0,
         "kernel_count": 8
       }
     },
-    "elapsed_ms": 78.07812513783574,
+    "elapsed_ms": 75.49899979494512,
     "est_mem": 0,
     "est_ops": 0,
     "kernel_count": 8,
@@ -226,15 +257,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 2048>",
-        "elapsed_ms": 26.167416595853865,
+        "elapsed_ms": 24.921083357185125,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "2048",
+            "name": "attention"
+          }
+        ],
         "ordinal": 6,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 2048
+          "attention": 2048
         },
         "source_count": 2048,
         "source_end": 4063,
@@ -244,15 +281,22 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1175>",
-        "elapsed_ms": 20.695791696198285,
+        "elapsed_ms": 19.539666594937444,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "456",
+            "name": "attention"
+          }
+        ],
         "ordinal": 7,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 1175
+          "attention": 456,
+          "other": 719
         },
         "source_count": 1175,
         "source_end": 5238,
@@ -262,15 +306,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1024>",
-        "elapsed_ms": 12.203749967738986,
+        "elapsed_ms": 11.204999987967312,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "1024",
+            "name": "attention"
+          }
+        ],
         "ordinal": 5,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 1024
+          "attention": 1024
         },
         "source_count": 1024,
         "source_end": 2015,
@@ -280,15 +330,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 512>",
-        "elapsed_ms": 8.789166691713035,
+        "elapsed_ms": 7.110000005923212,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "512",
+            "name": "attention"
+          }
+        ],
         "ordinal": 4,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 512
+          "attention": 512
         },
         "source_count": 512,
         "source_end": 991,
@@ -297,34 +353,22 @@
       {
         "category": "graph_batch",
         "device": "METAL",
-        "display_name": "<batched 256>",
-        "elapsed_ms": 4.117375006899238,
-        "est_mem": 0,
-        "est_ops": 0,
-        "metadata": [],
-        "ordinal": 3,
-        "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
-        "source_category_counts": {
-          "other": 256
-        },
-        "source_count": 256,
-        "source_end": 479,
-        "source_start": 224
-      },
-      {
-        "category": "graph_batch",
-        "device": "METAL",
         "display_name": "<batched 128>",
-        "elapsed_ms": 3.2394167501479387,
+        "elapsed_ms": 3.872124943882227,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "128",
+            "name": "attention"
+          }
+        ],
         "ordinal": 2,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 128
+          "attention": 128
         },
         "source_count": 128,
         "source_end": 223,
@@ -333,16 +377,46 @@
       {
         "category": "graph_batch",
         "device": "METAL",
-        "display_name": "<batched 64>",
-        "elapsed_ms": 1.9731667125597596,
+        "display_name": "<batched 256>",
+        "elapsed_ms": 3.7547500105574727,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "256",
+            "name": "attention"
+          }
+        ],
+        "ordinal": 3,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention": 256
+        },
+        "source_count": 256,
+        "source_end": 479,
+        "source_start": 224
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 64>",
+        "elapsed_ms": 3.6392499459907413,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "64",
+            "name": "attention"
+          }
+        ],
         "ordinal": 1,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 64
+          "attention": 64
         },
         "source_count": 64,
         "source_end": 95,
@@ -352,15 +426,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 32>",
-        "elapsed_ms": 0.8920417167246342,
+        "elapsed_ms": 1.457124948501587,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "32",
+            "name": "attention"
+          }
+        ],
         "ordinal": 0,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 32
+          "attention": 32
         },
         "source_count": 32,
         "source_end": 31,
@@ -372,15 +452,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 32>",
-        "elapsed_ms": 0.8920417167246342,
+        "elapsed_ms": 1.457124948501587,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "32",
+            "name": "attention"
+          }
+        ],
         "ordinal": 0,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 32
+          "attention": 32
         },
         "source_count": 32,
         "source_end": 31,
@@ -390,15 +476,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 64>",
-        "elapsed_ms": 1.9731667125597596,
+        "elapsed_ms": 3.6392499459907413,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "64",
+            "name": "attention"
+          }
+        ],
         "ordinal": 1,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 64
+          "attention": 64
         },
         "source_count": 64,
         "source_end": 95,
@@ -408,15 +500,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 128>",
-        "elapsed_ms": 3.2394167501479387,
+        "elapsed_ms": 3.872124943882227,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "128",
+            "name": "attention"
+          }
+        ],
         "ordinal": 2,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 128
+          "attention": 128
         },
         "source_count": 128,
         "source_end": 223,
@@ -426,15 +524,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 256>",
-        "elapsed_ms": 4.117375006899238,
+        "elapsed_ms": 3.7547500105574727,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "256",
+            "name": "attention"
+          }
+        ],
         "ordinal": 3,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 256
+          "attention": 256
         },
         "source_count": 256,
         "source_end": 479,
@@ -444,15 +548,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 512>",
-        "elapsed_ms": 8.789166691713035,
+        "elapsed_ms": 7.110000005923212,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "512",
+            "name": "attention"
+          }
+        ],
         "ordinal": 4,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 512
+          "attention": 512
         },
         "source_count": 512,
         "source_end": 991,
@@ -462,15 +572,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1024>",
-        "elapsed_ms": 12.203749967738986,
+        "elapsed_ms": 11.204999987967312,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "1024",
+            "name": "attention"
+          }
+        ],
         "ordinal": 5,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 1024
+          "attention": 1024
         },
         "source_count": 1024,
         "source_end": 2015,
@@ -480,15 +596,21 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 2048>",
-        "elapsed_ms": 26.167416595853865,
+        "elapsed_ms": 24.921083357185125,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "2048",
+            "name": "attention"
+          }
+        ],
         "ordinal": 6,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 2048
+          "attention": 2048
         },
         "source_count": 2048,
         "source_end": 4063,
@@ -498,15 +620,22 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1175>",
-        "elapsed_ms": 20.695791696198285,
+        "elapsed_ms": 19.539666594937444,
         "est_mem": 0,
         "est_ops": 0,
-        "metadata": [],
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention",
+            "count": "456",
+            "name": "attention"
+          }
+        ],
         "ordinal": 7,
         "program_type": "MetalGraph",
-        "source_category_basis": "unclassified_source_item_metadata",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "other": 1175
+          "attention": 456,
+          "other": 719
         },
         "source_count": 1175,
         "source_end": 5238,

@@ -7,14 +7,18 @@ import json
 import re
 import time
 from collections import defaultdict
+from contextlib import ExitStack, contextmanager
+from dataclasses import replace
+from functools import wraps
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from tinygrad import Device, Tensor, TinyJit, Variable
 from tinygrad.device import MultiBuffer
+from tinygrad.engine.jit import TinyJit as TinyJitClass
 from tinygrad.engine.jit import _prepare_jit_inputs
 from tinygrad.engine.realize import CompiledRunner, ExecContext, ExecItem, resolve_params
-from tinygrad.helpers import Context, GlobalCounters, flatten
+from tinygrad.helpers import Context, GlobalCounters, Metadata, flatten
 from tinygrad.nn import state as nn_state
 from tinygrad.schedule import linear_to_schedule, pm_post_sched_cache
 from tinygrad.uop.ops import Ops, UOp, graph_rewrite, sym_infer
@@ -64,6 +68,16 @@ CATEGORY_RANGES = {
   ],
 }
 
+PROFILE_CATEGORIES = (
+  "logits_argmax",
+  "mlp",
+  "attention",
+  "embedding_per_layer",
+  "decoder_residual",
+  "norm",
+)
+_SIDECAR_STACK: list[str] = []
+
 
 def _line_from_caller(caller: str) -> int | None:
   parts = caller.split(":")
@@ -76,14 +90,41 @@ def _line_from_caller(caller: str) -> int | None:
 
 
 def _metadata_payload(metadata) -> list[dict[str, str]]:
-  return [{"name": str(getattr(m, "name", "")), "caller": str(getattr(m, "caller", ""))} for m in metadata]
+  counts: dict[tuple[str, str], int] = defaultdict(int)
+  for item in metadata:
+    counts[(str(getattr(item, "name", "")), str(getattr(item, "caller", "")))] += 1
+  return [
+    {"name": name, "caller": caller, "count": str(count)}
+    for (name, caller), count in sorted(counts.items())
+  ]
 
 
 def strip_ansi(value: str) -> str:
   return ANSI_RE.sub("", value)
 
 
-def classify_kernel(metadata) -> str:
+def priority_category(categories: set[str]) -> str:
+  for category in PROFILE_CATEGORIES:
+    if category in categories:
+      return category
+  return "other"
+
+
+def sidecar_metadata_category(metadata) -> str:
+  categories: set[str] = set()
+  for item in metadata:
+    name = str(getattr(item, "name", ""))
+    caller = str(getattr(item, "caller", ""))
+    if name in PROFILE_CATEGORIES:
+      categories.add(name)
+    if caller.startswith("repo_sidecar:") and "::" in caller:
+      category = caller.rsplit("::", 1)[-1]
+      if category in PROFILE_CATEGORIES:
+        categories.add(category)
+  return priority_category(categories)
+
+
+def source_range_metadata_category(metadata) -> str:
   callers = [str(getattr(m, "caller", "")) for m in metadata]
   categories = set()
   for caller in callers:
@@ -94,19 +135,84 @@ def classify_kernel(metadata) -> str:
     for category, (start, end) in CATEGORY_RANGES.get(caller_module, []):
       if start <= line <= end:
         categories.add(category)
-  if "logits_argmax" in categories:
-    return "logits_argmax"
-  if "mlp" in categories:
-    return "mlp"
-  if "attention" in categories:
-    return "attention"
-  if "embedding_per_layer" in categories:
-    return "embedding_per_layer"
-  if "decoder_residual" in categories:
-    return "decoder_residual"
-  if "norm" in categories:
-    return "norm"
-  return "other"
+  return priority_category(categories)
+
+
+def classify_kernel(metadata) -> str:
+  sidecar_category = sidecar_metadata_category(metadata)
+  if sidecar_category != "other":
+    return sidecar_category
+  return source_range_metadata_category(metadata)
+
+
+@contextmanager
+def sidecar_scope(category: str):
+  if category not in PROFILE_CATEGORIES:
+    raise ValueError(f"unknown profile sidecar category {category!r}")
+  _SIDECAR_STACK.append(category)
+  try:
+    yield
+  finally:
+    _SIDECAR_STACK.pop()
+
+
+def add_sidecar_metadata(linear: UOp, category: str) -> UOp:
+  metadata = (Metadata(name=category, caller=f"repo_sidecar:1::{category}"),)
+  return linear.replace(src=tuple(
+    call.replace(arg=replace(call.arg, metadata=call.arg.metadata or metadata))
+    for call in linear.src
+  ))
+
+
+@contextmanager
+def add_linear_sidecar_patch():
+  original_add_linear = TinyJitClass.add_linear
+
+  def add_linear_with_sidecar(self, linear: UOp, var_vals: dict[str, int]):
+    if _SIDECAR_STACK:
+      linear = add_sidecar_metadata(linear, _SIDECAR_STACK[-1])
+    return original_add_linear(self, linear, var_vals)
+
+  TinyJitClass.add_linear = add_linear_with_sidecar
+  try:
+    yield
+  finally:
+    TinyJitClass.add_linear = original_add_linear
+
+
+@contextmanager
+def method_sidecar_patch(owner: type, name: str, category: str):
+  original = getattr(owner, name)
+
+  @wraps(original)
+  def wrapped(self, *args, **kwargs):
+    with sidecar_scope(category):
+      return original(self, *args, **kwargs)
+
+  setattr(owner, name, wrapped)
+  try:
+    yield
+  finally:
+    setattr(owner, name, original)
+
+
+@contextmanager
+def gemma_profile_sidecars():
+  patches: list[tuple[type, str, str]] = [
+    (TextScaledEmbedding, "__call__", "embedding_per_layer"),
+    (GemmaModel, "project_per_layer_inputs", "embedding_per_layer"),
+    (RMSNorm, "__call__", "norm"),
+    (GemmaAttention, "__call__", "attention"),
+    (GemmaMLP, "__call__", "mlp"),
+    (GemmaDecoderLayer, "__call__", "decoder_residual"),
+    (GemmaForConditionalGeneration, "logits", "logits_argmax"),
+    (GemmaForConditionalGeneration, "sample_next", "logits_argmax"),
+  ]
+  with ExitStack() as stack:
+    stack.enter_context(add_linear_sidecar_patch())
+    for owner, name, category in patches:
+      stack.enter_context(method_sidecar_patch(owner, name, category))
+    yield
 
 
 def classify_exec_item(prg, metadata) -> str:
@@ -122,6 +228,17 @@ def source_category(item) -> str:
   return getattr(item, "category", None) or classify_exec_item(item.prg, item.metadata)
 
 
+def source_item_category_basis(item) -> str:
+  explicit_category = getattr(item, "category", None)
+  if explicit_category is not None:
+    return "source_item_metadata" if explicit_category != "other" else "unclassified_source_item_metadata"
+  if sidecar_metadata_category(item.metadata) != "other":
+    return "repo_sidecar_realize_scope_metadata"
+  if source_range_metadata_category(item.metadata) != "other":
+    return "source_item_metadata"
+  return "unclassified_source_item_metadata"
+
+
 def graph_source_count(row: dict[str, Any]) -> int | None:
   if "Graph" not in row["program_type"]:
     return 1
@@ -132,19 +249,24 @@ def graph_source_count(row: dict[str, Any]) -> int | None:
 def source_slice_summary(items) -> dict[str, Any]:
   category_counts: dict[str, int] = defaultdict(int)
   program_type_counts: dict[str, int] = defaultdict(int)
+  category_basis_counts: dict[str, int] = defaultdict(int)
   for item in items:
     program_type_counts[type(item.prg).__name__ if item.prg is not None else ""] += 1
     category_counts[source_category(item)] += 1
+    category_basis_counts[source_item_category_basis(item)] += 1
   return {
     "category_counts": dict(sorted(category_counts.items())),
     "program_type_counts": dict(sorted(program_type_counts.items())),
+    "category_basis_counts": dict(sorted(category_basis_counts.items())),
   }
 
 
-def category_basis(category_counts: dict[str, int], source_count: int) -> str:
+def category_basis(category_basis_counts: dict[str, int], source_count: int) -> str:
   if source_count == 0:
     return "empty"
-  if sum(count for category, count in category_counts.items() if category != "other") > 0:
+  if category_basis_counts.get("repo_sidecar_realize_scope_metadata", 0) > 0:
+    return "repo_sidecar_realize_scope_metadata"
+  if category_basis_counts.get("source_item_metadata", 0) > 0:
     return "source_item_metadata"
   return "unclassified_source_item_metadata"
 
@@ -173,7 +295,7 @@ def attribute_execution_source_ranges(execution_items, rows: list[dict[str, Any]
     source_start = cursor
     source_end = cursor + source_count - 1
     summary = source_slice_summary(source_items)
-    basis = category_basis(summary["category_counts"], source_count)
+    basis = category_basis(summary["category_basis_counts"], source_count)
     items.append({
       "ordinal": row["ordinal"],
       "program_type": row["program_type"],
@@ -455,24 +577,31 @@ def main() -> None:
   cache = build_zero_cache(model, args.context_length, max_length)
   token = Tensor([[2]], dtype="int32", device=model.device).realize()
 
-  with Context(JIT=args.jit_mode, BEAM=0, TRACEMETA=2):
-    rollout_jit = TinyJit(lambda token, start_pos: model._rollout_next_token(token, start_pos, cache, 0.0, decode_sliding_window=True))
-    for offset in range(3):
-      out = rollout_jit(token, Variable("gemma_start_pos_window", sliding_start, max_length - 1).bind(args.context_length + offset))
-      out.realize()
-      cache.set_active_length(args.context_length + offset + 1)
-    captured = rollout_jit.captured
-    if captured is None:
-      raise RuntimeError("decode TinyJit did not capture")
-    GlobalCounters.reset()
-    rows, var_vals, execution_items = run_captured_items(captured, token, Variable("gemma_start_pos_window", sliding_start, max_length - 1).bind(profile_start))
+  with gemma_profile_sidecars():
+    with Context(JIT=args.jit_mode, BEAM=0, TRACEMETA=2):
+      rollout_jit = TinyJit(lambda token, start_pos: model._rollout_next_token(token, start_pos, cache, 0.0, decode_sliding_window=True))
+      for offset in range(3):
+        out = rollout_jit(token, Variable("gemma_start_pos_window", sliding_start, max_length - 1).bind(args.context_length + offset))
+        out.realize()
+        cache.set_active_length(args.context_length + offset + 1)
+      captured = rollout_jit.captured
+      if captured is None:
+        raise RuntimeError("decode TinyJit did not capture")
+      GlobalCounters.reset()
+      rows, var_vals, execution_items = run_captured_items(captured, token, Variable("gemma_start_pos_window", sliding_start, max_length - 1).bind(profile_start))
 
   source_attribution = attribute_execution_source_ranges(execution_items, rows)
   attach_source_attribution(rows, source_attribution)
+  original_source_summary = source_slice_summary([
+    source_item
+    for execution_item in execution_items
+    for source_item in execution_source_items(execution_item)
+  ])
   original_capture_summary = {
     "exec_count": source_attribution["original_exec_count"],
-    "program_type_counts": source_slice_summary([source_item for execution_item in execution_items for source_item in execution_source_items(execution_item)])["program_type_counts"],
-    "category_counts": source_slice_summary([source_item for execution_item in execution_items for source_item in execution_source_items(execution_item)])["category_counts"],
+    "program_type_counts": original_source_summary["program_type_counts"],
+    "category_counts": original_source_summary["category_counts"],
+    "category_basis_counts": original_source_summary["category_basis_counts"],
     "graph_batch_count": 0,
     "compiled_runner_count": sum(
       1
@@ -547,6 +676,7 @@ def main() -> None:
           "source_end": item["source_end"],
           "category_basis": item["category_basis"],
           "category_counts": item["category_counts"],
+          "category_basis_counts": item["category_basis_counts"],
         }
         for item in sorted(source_attribution["items"], key=lambda item: item["elapsed_ms"], reverse=True)[:5]
       ],
