@@ -1,5 +1,49 @@
 # Evolution Log
 
+## 2026-04-25 - JIT2 Sidecar Category Recapture Rejected
+
+- Hypothesis: a current JIT=2 ungraphed sidecar profile has the same source-row
+  sequence as the JIT=1 `MetalGraph` source ranges and preserves enough
+  metadata to recover category counts for each graph batch. Invalidation
+  criterion: sidecar row-count mismatch, all categories remain `other`, or
+  sidecar rows fail to cover the graph source range.
+- Recovery baseline: current accepted E2B int8 `METAL`, `beam=0`, `1000/20`
+  throughput remains `10.863932` warmed tok/s in
+  `benchmarks/gemma4-metal-int8-fused-gate-up-1000-current.csv` with
+  `decode_fallback=false` and `rollout_jit_count=999`.
+- Research: the previous default graph artifact already proved complete
+  structural coverage: 8 `MetalGraph` rows map to all 5239 lowered source
+  items with no unparsed batch and no unattributed tail. The open question was
+  whether JIT=2 could provide source categories for that same row sequence.
+- Invalidation run 1:
+  `env DEBUG=0 .venv/bin/python scripts/profile_decode_jit.py --jit-mode 2
+  --metal-int8-gate-up default --out
+  /tmp/tinygrad-gemma-decode-jit2-source-current.json --csv-out
+  /tmp/tinygrad-gemma-decode-jit2-source-current.csv` produced 5239 rows and
+  `source_attribution.status=complete`, but
+  `summary.by_category={"other": ...}` and
+  `category_basis_counts={"unclassified_source_item_metadata": 5239}`.
+- Invalidation run 2 set `TRACEMETA=2` at process start:
+  `env DEBUG=0 TRACEMETA=2 .venv/bin/python scripts/profile_decode_jit.py
+  --jit-mode 2 --metal-int8-gate-up default --out
+  /tmp/tinygrad-gemma-decode-jit2-source-tracemeta-current.json --csv-out
+  /tmp/tinygrad-gemma-decode-jit2-source-tracemeta-current.csv`. It again
+  produced 5239 rows, all category `other`, with
+  `category_basis_counts={"unclassified_source_item_metadata": 5239}`.
+- Preserved the second real METAL sidecar as
+  `benchmarks/gemma4-metal-decode-source-jit2-tracemeta-current.json` and
+  `benchmarks/gemma4-metal-decode-source-jit2-tracemeta-current.csv` so the
+  rejected sidecar path is tied to repo artifacts.
+- Result: reject the simple JIT=2 sidecar join. Count alignment is good, but
+  current `CapturedJit.linear`/lowering metadata is already unclassified before
+  graph batching, so joining it to graph ranges would only propagate false
+  `other` categories.
+- No Gemma throughput row was superseded.
+- Next target: build a minimal current-tinygrad metadata-preservation probe
+  around Tensor metadata, `CapturedJit.linear` calls, and
+  `linear_to_schedule`/`ExecItem` metadata before making another model-path
+  optimization.
+
 ## 2026-04-25 - Default Graph Batch Attribution
 
 - Hypothesis: the default JIT=1 post-window `MetalGraph` profile can be made
