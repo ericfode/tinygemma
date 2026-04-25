@@ -1,5 +1,45 @@
 # Evolution Log
 
+## 2026-04-25 - Attention Cache-Write Realize Scope Diagnostic
+
+- Hypothesis: the 4520 attention-scoped source items in the default JIT=1
+  graph profile are mostly cache-store realization, not attention score math.
+  Invalidation criterion: adding a profiler-only `Tensor.realize` refinement
+  for attention-scoped `Ops.STORE` graphs leaves the source items labeled as
+  generic `attention`, makes graph attribution incomplete, changes graph
+  batching unexpectedly, or fails focused profiler tests.
+- Implemented a profiler-only `Tensor.realize` wrapper in
+  `scripts/profile_decode_jit.py`. While the sidecar stack is inside
+  `GemmaAttention`, realized tensors whose UOp graph contains `Ops.STORE` are
+  tagged as `attention_cache_write`; all patches are restored after profiling.
+- Artifact: `benchmarks/gemma4-metal-decode-graph-default-current.json` and
+  `benchmarks/gemma4-metal-decode-graph-default-current.csv`.
+- Result: accepted as profiler instrumentation. The refreshed default E2B
+  int8 `METAL` JIT=1 graph profile still has 8 `MetalGraph` rows and complete
+  attribution over all 5239 source items: `source_attribution.status=complete`,
+  `original_exec_count=5239`, `attributed_source_count=5239`,
+  `unparsed_graph_batches=0`, and `unattributed_tail_count=0`.
+- The prior generic attention attribution is now fully split:
+  `original_capture.category_counts={"attention_cache_write": 4520,
+  "other": 719}` and
+  `original_capture.category_basis_counts={"repo_sidecar_realize_scope_metadata":
+  4520, "unclassified_source_item_metadata": 719}`.
+- The slowest graph ranges in the accepted artifact are headed by
+  `<batched 2048>` at `24.880917` ms for source range `2016-4063`,
+  `<batched 1175>` at `19.847833` ms for range `4064-5238`, and
+  `<batched 1024>` at `11.365792` ms for range `992-2015`.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Verification on 2026-04-25:
+  `.venv/bin/python -m pytest -q tests/test_profile_decode_jit.py` passed with
+  `9 passed, 2 warnings`; `.venv/bin/python -m py_compile
+  scripts/profile_decode_jit.py` passed; and the real E2B int8 `METAL`
+  profiler command refreshed the JSON/CSV artifacts.
+- Next target: test a paired key/value cache-store realization in
+  `GemmaAttention`, then accept only if it preserves semantics and improves a
+  real no-fallback benchmark row with nonzero `rollout_jit_count`.
+
 ## 2026-04-25 - Gemma Profiler Sidecar Category Attribution
 
 - Hypothesis: integrating the repo-local `TinyJit.add_linear` sidecar into

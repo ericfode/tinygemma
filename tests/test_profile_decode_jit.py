@@ -39,6 +39,20 @@ class FakeMetadata:
     self.caller = caller
 
 
+class FakeUOp:
+  def __init__(self, op):
+    self.op = op
+
+
+class FakeTensor:
+  def __init__(self, *ops):
+    self._ops = ops
+    self.uop = self
+
+  def toposort(self):
+    return [FakeUOp(op) for op in self._ops]
+
+
 def test_profile_raw_gate_up_mode_is_abandoned():
   try:
     profile.validate_metal_int8_gate_up_mode("raw")
@@ -56,9 +70,10 @@ def test_profile_classifies_repo_sidecar_metadata():
   metadata = [
     FakeMetadata("norm", "repo_sidecar:1::norm"),
     FakeMetadata("attention", "repo_sidecar:1::attention"),
+    FakeMetadata("attention_cache_write", "repo_sidecar:1::attention_cache_write"),
   ]
 
-  assert profile.classify_kernel(metadata) == "attention"
+  assert profile.classify_kernel(metadata) == "attention_cache_write"
 
 
 def test_profile_method_sidecar_patch_restores_original_method():
@@ -73,6 +88,16 @@ def test_profile_method_sidecar_patch_restores_original_method():
 
   assert Target.call is original
   assert profile._SIDECAR_STACK == []
+
+
+def test_profile_refines_attention_store_realize_scope():
+  store_tensor = FakeTensor(profile.Ops.STORE)
+  compute_tensor = FakeTensor(profile.Ops.ADD)
+
+  assert profile.attention_realize_sidecar_category([store_tensor]) is None
+  with profile.sidecar_scope("attention"):
+    assert profile.attention_realize_sidecar_category([compute_tensor]) is None
+    assert profile.attention_realize_sidecar_category([store_tensor]) == "attention_cache_write"
 
 
 def test_graph_batch_attribution_maps_batched_display_to_source_ranges():

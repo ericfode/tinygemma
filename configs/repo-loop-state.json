@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "gemma-profiler-sidecar-category-attribution-024",
+  "current_checkpoint": "attention-cache-write-realize-scope-diagnostic-025",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -316,6 +316,18 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "attention-cache-write-realize-scope-diagnostic-025",
+      "summary": "Refined the Gemma decode graph profiler's attention sidecar with a profiler-only Tensor.realize wrapper that tags attention-scoped STORE graphs as attention_cache_write. The refreshed default JIT=1 E2B int8 METAL artifact keeps complete 8-row MetalGraph attribution over all 5239 source items and shows all 4520 previously attention-scoped source items are cache-write realization scope, with 719 source items still unclassified in the final graph range. This is profiler instrumentation only; no throughput row was superseded.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-default-current.json",
+        "benchmarks/gemma4-metal-decode-graph-default-current.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -323,7 +335,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "attention-cache-realization-scope-split-diagnostic",
-  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The default JIT=1 graph profiler now has complete graph-range attribution and truthful repo_sidecar_realize_scope_metadata labels: 4520 of 5239 source items are captured while inside GemmaAttention realization scopes, and 719 remain unclassified in the final graph range. The next larger target is to split attention-side realization scopes inside GemmaAttention cache write, q/k/v projection, score/softmax/value, and output projection regions, then rerun the default graph profile to decide whether the next throughput increment should attack cache writes, attention score math, or the unclassified final tail. Do not claim throughput movement without a benchmark row that passes decode_fallback=false and rollout_jit_count>0.",
-  "updated_at": "2026-04-25T14:34:33-0700"
+  "next_target": "paired-kv-cache-store-realize-prototype",
+  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The default JIT=1 graph profiler now shows all 4520 classified attention-side source items are attention_cache_write realization scope, with 719 source items still unclassified in the final graph range. The next throughput-oriented target is to test whether pairing key/value cache-store realizes in GemmaAttention, for example realizing the key and value assign tensors together instead of as two sequential realize calls, reduces captured source count or MetalGraph batch time without changing decode semantics. Accept only with a real benchmark row that improves the recovered baseline and passes decode_fallback=false plus rollout_jit_count>0.",
+  "updated_at": "2026-04-25T14:55:03-0700"
 }

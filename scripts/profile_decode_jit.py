@@ -71,6 +71,7 @@ CATEGORY_RANGES = {
 PROFILE_CATEGORIES = (
   "logits_argmax",
   "mlp",
+  "attention_cache_write",
   "attention",
   "embedding_per_layer",
   "decoder_residual",
@@ -164,6 +165,39 @@ def add_sidecar_metadata(linear: UOp, category: str) -> UOp:
   ))
 
 
+def tensor_has_op(tensor: Tensor, op: Ops) -> bool:
+  try:
+    return any(uop.op is op for uop in tensor.uop.toposort())
+  except Exception:
+    return False
+
+
+def attention_realize_sidecar_category(tensors) -> str | None:
+  if not _SIDECAR_STACK or _SIDECAR_STACK[-1] != "attention":
+    return None
+  if any(tensor_has_op(tensor, Ops.STORE) for tensor in tensors):
+    return "attention_cache_write"
+  return None
+
+
+@contextmanager
+def tensor_realize_sidecar_patch():
+  original_realize = Tensor.realize
+
+  def realize_with_attention_sidecar(self, *lst, **kwargs):
+    category = attention_realize_sidecar_category((self, *lst))
+    if category is None:
+      return original_realize(self, *lst, **kwargs)
+    with sidecar_scope(category):
+      return original_realize(self, *lst, **kwargs)
+
+  Tensor.realize = realize_with_attention_sidecar
+  try:
+    yield
+  finally:
+    Tensor.realize = original_realize
+
+
 @contextmanager
 def add_linear_sidecar_patch():
   original_add_linear = TinyJitClass.add_linear
@@ -210,6 +244,7 @@ def gemma_profile_sidecars():
   ]
   with ExitStack() as stack:
     stack.enter_context(add_linear_sidecar_patch())
+    stack.enter_context(tensor_realize_sidecar_patch())
     for owner, name, category in patches:
       stack.enter_context(method_sidecar_patch(owner, name, category))
     yield
