@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "captured-linear-metadata-preservation-probe-022",
+  "current_checkpoint": "repo-sidecar-metadata-bypass-probe-023",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -294,6 +294,16 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "repo-sidecar-metadata-bypass-probe-023",
+      "summary": "Extended the tinygrad metadata diagnostic with a repo-local TinyJit.add_linear sidecar patch that tags captured LINEAR calls from Python scope. Native tinygrad metadata is still lost before CapturedJit.linear, but the sidecar preserves metadata through captured calls and lowered ExecItems under both JIT=1 and JIT=2. No throughput row was superseded.",
+      "artifacts": [
+        "scripts/diagnose_tinygrad_metadata_preservation.py",
+        "benchmarks/tinygrad-metadata-preservation-current.json",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -301,7 +311,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "captured-linear-metadata-retention-fix-or-bypass",
-  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. Direct lazy Tensor ops preserve TRACEMETA caller metadata, but current TinyJit capture loses it before CapturedJit.linear in both JIT=1 and JIT=2. The next narrow target is to test a minimal metadata-retention fix in the local tinygrad capture path or a repo-local pre-capture metadata sidecar; do not make another model-path optimization until profiler category attribution is trustworthy.",
-  "updated_at": "2026-04-25T14:07:48-0700"
+  "next_target": "gemma-profiler-sidecar-category-attribution",
+  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. Native tinygrad metadata is lost before CapturedJit.linear, but the repo-local TinyJit.add_linear sidecar preserves scoped metadata through captured calls and lowered ExecItems in the minimal METAL probe. The next narrow target is to integrate this sidecar into scripts/profile_decode_jit.py around Gemma attention, MLP, norm, embedding, decoder residual, and logits scopes, then rerun the default JIT=1 graph profile to verify non-other category attribution without claiming a throughput win.",
+  "updated_at": "2026-04-25T14:16:03-0700"
 }

@@ -52,7 +52,7 @@
     "added_uop_metadata": [
       {
         "backward": "False",
-        "caller": "__main__:46::lazy_metadata_probe",
+        "caller": "__main__:49::lazy_metadata_probe",
         "name": "__add__"
       }
     ],
@@ -60,48 +60,100 @@
     "multiplied_toposort_metadata_examples": [
       {
         "backward": "False",
-        "caller": "__main__:46::lazy_metadata_probe",
+        "caller": "__main__:49::lazy_metadata_probe",
         "name": "__add__"
       },
       {
         "backward": "False",
-        "caller": "__main__:46::lazy_metadata_probe",
+        "caller": "__main__:49::lazy_metadata_probe",
         "name": "__add__"
       },
       {
         "backward": "False",
-        "caller": "__main__:46::lazy_metadata_probe",
+        "caller": "__main__:49::lazy_metadata_probe",
         "name": "__add__"
       },
       {
         "backward": "False",
-        "caller": "__main__:47::lazy_metadata_probe",
+        "caller": "__main__:50::lazy_metadata_probe",
         "name": "__mul__"
       },
       {
         "backward": "False",
-        "caller": "__main__:47::lazy_metadata_probe",
+        "caller": "__main__:50::lazy_metadata_probe",
         "name": "__mul__"
       },
       {
         "backward": "False",
-        "caller": "__main__:47::lazy_metadata_probe",
+        "caller": "__main__:50::lazy_metadata_probe",
         "name": "__mul__"
       }
     ],
     "multiplied_uop_metadata": [
       {
         "backward": "False",
-        "caller": "__main__:47::lazy_metadata_probe",
+        "caller": "__main__:50::lazy_metadata_probe",
         "name": "__mul__"
       }
     ]
   },
+  "sidecar_probes": [
+    {
+      "calls": [
+        {
+          "call_metadata": [
+            {
+              "backward": "False",
+              "caller": "repo_sidecar:1::toy_sidecar",
+              "name": "toy_sidecar"
+            }
+          ],
+          "call_metadata_count": 1,
+          "lowered_exec_item_count": 1,
+          "lowered_exec_item_metadata_counts": [
+            1
+          ],
+          "ordinal": 0
+        }
+      ],
+      "captured": true,
+      "captured_call_metadata_count": 1,
+      "captured_linear_call_count": 1,
+      "jit_mode": 1,
+      "lowered_exec_item_metadata_count": 1
+    },
+    {
+      "calls": [
+        {
+          "call_metadata": [
+            {
+              "backward": "False",
+              "caller": "repo_sidecar:1::toy_sidecar",
+              "name": "toy_sidecar"
+            }
+          ],
+          "call_metadata_count": 1,
+          "lowered_exec_item_count": 1,
+          "lowered_exec_item_metadata_counts": [
+            1
+          ],
+          "ordinal": 0
+        }
+      ],
+      "captured": true,
+      "captured_call_metadata_count": 1,
+      "captured_linear_call_count": 1,
+      "jit_mode": 2,
+      "lowered_exec_item_metadata_count": 1
+    }
+  ],
   "summary": {
     "captured_ast_toposort_metadata_count": 0,
     "captured_call_metadata_count": 0,
     "lazy_metadata_count": 6,
     "lowered_exec_item_metadata_count": 0,
+    "sidecar_captured_call_metadata_count": 2,
+    "sidecar_lowered_exec_item_metadata_count": 2,
     "status": "metadata_lost_before_captured_linear"
   }
 }

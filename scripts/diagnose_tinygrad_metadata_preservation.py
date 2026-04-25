@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+from dataclasses import replace
 import json
 from pathlib import Path
 from typing import Any
 
 from tinygrad import Tensor, TinyJit
+from tinygrad.engine.jit import TinyJit as TinyJitClass
 from tinygrad.engine.jit import _prepare_jit_inputs
 from tinygrad.engine.realize import ExecContext
-from tinygrad.helpers import Context
+from tinygrad.helpers import Context, Metadata
 from tinygrad.schedule import linear_to_schedule, pm_post_sched_cache
 from tinygrad.uop.ops import Ops, UOp, graph_rewrite
 
@@ -57,6 +60,25 @@ def jitted_metadata_function(source: Tensor) -> Tensor:
   added = source + 1
   multiplied = added * 2
   return multiplied.contiguous().realize()
+
+
+_SIDECAR_STACK: list[str] = []
+
+
+@contextmanager
+def sidecar_scope(name: str):
+  _SIDECAR_STACK.append(name)
+  try:
+    yield
+  finally:
+    _SIDECAR_STACK.pop()
+
+
+def jitted_sidecar_metadata_function(source: Tensor) -> Tensor:
+  with sidecar_scope("toy_sidecar"):
+    added = source + 1
+    multiplied = added * 2
+    return multiplied.contiguous().realize()
 
 
 def resolve_call_to_exec_items(call: UOp, input_uops: tuple[UOp, ...]) -> list[Any]:
@@ -121,6 +143,69 @@ def captured_metadata_probe(device: str, jit_mode: int) -> dict[str, Any]:
   }
 
 
+def install_add_linear_sidecar_patch():
+  original_add_linear = TinyJitClass.add_linear
+
+  def patch_linear_metadata(linear: UOp, category: str) -> UOp:
+    metadata = (Metadata(name=category, caller=f"repo_sidecar:1::{category}"),)
+    return linear.replace(src=tuple(
+      call.replace(arg=replace(call.arg, metadata=call.arg.metadata or metadata))
+      for call in linear.src
+    ))
+
+  def add_linear_with_sidecar(self, linear: UOp, var_vals: dict[str, int]):
+    if _SIDECAR_STACK:
+      linear = patch_linear_metadata(linear, _SIDECAR_STACK[-1])
+    return original_add_linear(self, linear, var_vals)
+
+  TinyJitClass.add_linear = add_linear_with_sidecar
+  return original_add_linear
+
+
+def captured_sidecar_probe(device: str, jit_mode: int) -> dict[str, Any]:
+  original_add_linear = install_add_linear_sidecar_patch()
+  try:
+    with Context(JIT=jit_mode, TRACEMETA=2):
+      runner = TinyJit(jitted_sidecar_metadata_function)
+      source = Tensor.empty(4, device=device).realize()
+      for _ in range(3):
+        runner(source).realize()
+      captured = runner.captured
+  finally:
+    TinyJitClass.add_linear = original_add_linear
+
+  if captured is None:
+    return {"captured": False}
+
+  input_uops, var_vals, names, expected_info = _prepare_jit_inputs((source,), {})
+  ctx = ExecContext(var_vals, tuple(input_uops), do_update_stats=False, jit=True)
+  del ctx, names, expected_info
+
+  calls = []
+  lowered_exec_item_metadata_count = 0
+  input_uops_tuple = tuple(input_uops)
+  for ordinal, call in enumerate(captured.linear.src):
+    exec_items = resolve_call_to_exec_items(call, input_uops_tuple)
+    item_metadata_counts = [len(item.metadata) for item in exec_items]
+    lowered_exec_item_metadata_count += sum(item_metadata_counts)
+    calls.append({
+      "ordinal": ordinal,
+      "call_metadata_count": len(call.arg.metadata),
+      "call_metadata": metadata_payload(call.arg.metadata),
+      "lowered_exec_item_count": len(exec_items),
+      "lowered_exec_item_metadata_counts": item_metadata_counts,
+    })
+
+  return {
+    "captured": True,
+    "jit_mode": jit_mode,
+    "captured_linear_call_count": len(captured.linear.src),
+    "captured_call_metadata_count": sum(item["call_metadata_count"] for item in calls),
+    "lowered_exec_item_metadata_count": lowered_exec_item_metadata_count,
+    "calls": calls,
+  }
+
+
 def classify_status(lazy_probe: dict[str, Any], captured_probes: list[dict[str, Any]]) -> str:
   lazy_has_metadata = lazy_probe["multiplied_toposort_metadata_count"] > 0
   captured_has_metadata = any(
@@ -145,16 +230,20 @@ def main() -> None:
 
   lazy_probe = lazy_metadata_probe(args.device)
   captured_probes = [captured_metadata_probe(args.device, jit_mode) for jit_mode in (1, 2)]
+  sidecar_probes = [captured_sidecar_probe(args.device, jit_mode) for jit_mode in (1, 2)]
   payload = {
     "device": args.device,
     "lazy_probe": lazy_probe,
     "captured_probes": captured_probes,
+    "sidecar_probes": sidecar_probes,
     "summary": {
       "status": classify_status(lazy_probe, captured_probes),
       "lazy_metadata_count": lazy_probe["multiplied_toposort_metadata_count"],
       "captured_call_metadata_count": sum(probe.get("captured_call_metadata_count", 0) for probe in captured_probes),
       "captured_ast_toposort_metadata_count": sum(probe.get("captured_ast_toposort_metadata_count", 0) for probe in captured_probes),
       "lowered_exec_item_metadata_count": sum(probe.get("lowered_exec_item_metadata_count", 0) for probe in captured_probes),
+      "sidecar_captured_call_metadata_count": sum(probe.get("captured_call_metadata_count", 0) for probe in sidecar_probes),
+      "sidecar_lowered_exec_item_metadata_count": sum(probe.get("lowered_exec_item_metadata_count", 0) for probe in sidecar_probes),
     },
   }
 

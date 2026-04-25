@@ -1,5 +1,48 @@
 # Evolution Log
 
+## 2026-04-25 - Repo Sidecar Metadata Bypass Probe
+
+- Hypothesis: tinygrad's native Tensor metadata remains lost before
+  `CapturedJit.linear`, but a repo-local Python scope sidecar can tag captured
+  `LINEAR` calls at `TinyJit.add_linear` time and preserve that metadata
+  through `linear_to_schedule` and lowered `ExecItem.metadata`. Invalidation
+  criterion: sidecar metadata fails to appear on captured calls or lowered
+  `ExecItem`s in either JIT=1 or JIT=2.
+- Extended `scripts/diagnose_tinygrad_metadata_preservation.py` with a scoped
+  sidecar proof. The diagnostic temporarily patches `TinyJit.add_linear`,
+  adds `Metadata(name="toy_sidecar", caller="repo_sidecar:1::toy_sidecar")`
+  to empty captured call metadata when a Python sidecar scope is active, and
+  restores the original method after the probe.
+- Artifact: `benchmarks/tinygrad-metadata-preservation-current.json`.
+- Result: native metadata is still lost
+  (`captured_call_metadata_count=0`,
+  `captured_ast_toposort_metadata_count=0`,
+  `lowered_exec_item_metadata_count=0`), but the sidecar path succeeds:
+  `sidecar_captured_call_metadata_count=2` and
+  `sidecar_lowered_exec_item_metadata_count=2` across JIT=1 and JIT=2.
+- This accepts the bypass approach for profiler attribution only. It does not
+  change model runtime behavior and does not patch the tinygrad checkout.
+- Verification on 2026-04-25:
+  `.venv/bin/python -m json.tool` passed for the loop-state and diagnostic
+  JSON artifacts; `git diff --check` passed; `.venv/bin/python -m py_compile
+  scripts/diagnose_tinygrad_metadata_preservation.py` passed; rerunning
+  `.venv/bin/python scripts/diagnose_tinygrad_metadata_preservation.py
+  --device METAL --out benchmarks/tinygrad-metadata-preservation-current.json`
+  reproduced `sidecar_captured_call_metadata_count=2` and
+  `sidecar_lowered_exec_item_metadata_count=2`; `.venv/bin/tinygrad-gemma
+  --help` exited 0; full `.venv/bin/python -m pytest -q` passed with
+  `47 passed, 2 warnings in 59.37s`; and `.venv/bin/python
+  scripts/smoke_metal.py` reported `default_device=METAL`,
+  `generated_tokens=4`, `rollout_jit_count=3`, and
+  `decode_fallback=False`.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Next target: integrate the sidecar into `scripts/profile_decode_jit.py`
+  around Gemma attention, MLP, norm, embedding, decoder residual, and
+  logits/argmax scopes, then rerun the default JIT=1 graph profile to verify
+  non-`other` category attribution without claiming a throughput win.
+
 ## 2026-04-25 - Captured Linear Metadata Preservation Probe
 
 - Hypothesis: current tinygrad creates Tensor caller metadata under
