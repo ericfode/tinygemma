@@ -24,6 +24,7 @@ from tinygrad.schedule import linear_to_schedule, pm_post_sched_cache
 from tinygrad.uop.ops import Ops, UOp, graph_rewrite, sym_infer
 
 import tinygrad
+import tinygrad_gemma.model as gemma_model
 from tinygrad_gemma import load_pretrained
 from tinygrad_gemma.loader import load_quantization_manifest, resolve_weight_files
 from tinygrad_gemma.model import (
@@ -71,6 +72,8 @@ CATEGORY_RANGES = {
 PROFILE_CATEGORIES = (
   "logits_argmax",
   "mlp",
+  "attention_key_cache_write",
+  "attention_value_cache_write",
   "attention_cache_write",
   "attention",
   "embedding_per_layer",
@@ -199,6 +202,23 @@ def tensor_realize_sidecar_patch():
 
 
 @contextmanager
+def cache_update_sidecar_patch():
+  original_realize_cache_update = gemma_model.realize_cache_update
+
+  def realize_cache_update_with_sidecar(key_cache: Tensor, value_cache: Tensor, key: Tensor, value: Tensor, start, end) -> None:
+    with sidecar_scope("attention_key_cache_write"):
+      key_cache[:, :, start:end, :].assign(key).realize()
+    with sidecar_scope("attention_value_cache_write"):
+      value_cache[:, :, start:end, :].assign(value).realize()
+
+  gemma_model.realize_cache_update = realize_cache_update_with_sidecar
+  try:
+    yield
+  finally:
+    gemma_model.realize_cache_update = original_realize_cache_update
+
+
+@contextmanager
 def add_linear_sidecar_patch():
   original_add_linear = TinyJitClass.add_linear
 
@@ -245,6 +265,7 @@ def gemma_profile_sidecars():
   with ExitStack() as stack:
     stack.enter_context(add_linear_sidecar_patch())
     stack.enter_context(tensor_realize_sidecar_patch())
+    stack.enter_context(cache_update_sidecar_patch())
     for owner, name, category in patches:
       stack.enter_context(method_sidecar_patch(owner, name, category))
     yield

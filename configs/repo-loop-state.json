@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "attention-cache-write-realize-scope-diagnostic-025",
+  "current_checkpoint": "key-value-cache-write-split-diagnostic-026",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -328,6 +328,19 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "key-value-cache-write-split-diagnostic-026",
+      "summary": "Factored GemmaAttention cache updates into a behavior-preserving sequential helper and let the decode graph profiler monkeypatch that helper to split attention cache-store attribution into key-cache and value-cache writes. The refreshed default JIT=1 E2B int8 METAL artifact keeps complete 8-row MetalGraph attribution over all 5239 source items and shows an even split: 2260 key-cache-write source items, 2260 value-cache-write source items, and 719 unclassified source items. This is profiler instrumentation only; no throughput row was superseded.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-default-current.json",
+        "benchmarks/gemma4-metal-decode-graph-default-current.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -335,7 +348,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "paired-kv-cache-store-realize-prototype",
-  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The default JIT=1 graph profiler now shows all 4520 classified attention-side source items are attention_cache_write realization scope, with 719 source items still unclassified in the final graph range. The next throughput-oriented target is to test whether pairing key/value cache-store realizes in GemmaAttention, for example realizing the key and value assign tensors together instead of as two sequential realize calls, reduces captured source count or MetalGraph batch time without changing decode semantics. Accept only with a real benchmark row that improves the recovered baseline and passes decode_fallback=false plus rollout_jit_count>0.",
-  "updated_at": "2026-04-25T14:55:03-0700"
+  "next_target": "shared-kv-cache-write-elision-feasibility",
+  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. Pairing key/value cache-store realizes is rejected because it triggers tinygrad assign-graph cycles. The profiler now shows key/value cache writes are exactly balanced at 2260 source items each, so optimizing only one store is unlikely to move the floor enough. The next target is to inspect Gemma 4 shared-KV/full-attention layer behavior and test whether any cache write can be legally elided or narrowed for shared KV layers without changing logits; accept only with focused equivalence tests and a real no-fallback benchmark improvement.",
+  "updated_at": "2026-04-25T15:58:04-0700"
 }

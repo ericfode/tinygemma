@@ -200,6 +200,18 @@ def active_cache_tensors(entry: GemmaCacheEntry) -> tuple[Tensor, Tensor]:
   return entry.key[:, :, : entry.length, :], entry.value[:, :, : entry.length, :]
 
 
+def realize_cache_update(
+  key_cache: Tensor,
+  value_cache: Tensor,
+  key: Tensor,
+  value: Tensor,
+  start,
+  end,
+) -> None:
+  key_cache[:, :, start:end, :].assign(key).realize()
+  value_cache[:, :, start:end, :].assign(value).realize()
+
+
 class TextScaledEmbedding:
   def __init__(self, vocab_size: int, embedding_dim: int, embed_scale: float):
     self.weight = Tensor.glorot_uniform(vocab_size, embedding_dim)
@@ -431,13 +443,25 @@ class GemmaAttention:
             entry = GemmaCacheEntry(key=key_cache, value=value_cache, length=0)
             cache.entries[self.layer_idx] = entry
           if isinstance(past_seen_tokens, int):
-            entry.key[:, :, past_seen_tokens:end_pos, :].assign(k).realize()
-            entry.value[:, :, past_seen_tokens:end_pos, :].assign(v).realize()
+            realize_cache_update(
+              entry.key,
+              entry.value,
+              k,
+              v,
+              past_seen_tokens,
+              end_pos,
+            )
             entry.length = end_pos
             current_entry = entry
           else:
-            entry.key[:, :, past_seen_tokens:end_pos, :].assign(k).realize()
-            entry.value[:, :, past_seen_tokens:end_pos, :].assign(v).realize()
+            realize_cache_update(
+              entry.key,
+              entry.value,
+              k,
+              v,
+              past_seen_tokens,
+              end_pos,
+            )
             # Keep the committed cache length concrete until generation accepts this decode step.
             current_entry = GemmaCacheEntry(key=entry.key, value=entry.value, length=end_pos)
           k, v = active_cache_tensors(current_entry)

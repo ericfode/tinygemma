@@ -1,5 +1,49 @@
 # Evolution Log
 
+## 2026-04-25 - Key/Value Cache-Write Split Diagnostic
+
+- Hypothesis: splitting the cache-write profiler sidecar into key-cache and
+  value-cache stores will show whether one side dominates the 4520
+  attention-cache-write source items. Invalidation criterion: the split changes
+  runtime behavior, reintroduces the paired-store assign-graph cycle, makes
+  graph attribution incomplete, changes graph batching unexpectedly, or leaves
+  the real METAL artifact at generic `attention_cache_write`.
+- Research: the rejected paired-store prototype proved that building both
+  assign tensors before the first realize triggers tinygrad's assign-graph
+  cycle detector. This increment keeps the original sequential realization
+  order and only factors it through `realize_cache_update`.
+- Implemented a behavior-preserving `realize_cache_update` helper in
+  `tinygrad_gemma/model.py`, then patched it only inside
+  `scripts/profile_decode_jit.py` to wrap the key-cache and value-cache store
+  realizes with separate sidecar scopes.
+- Artifact: `benchmarks/gemma4-metal-decode-graph-default-current.json` and
+  `benchmarks/gemma4-metal-decode-graph-default-current.csv`.
+- Result: accepted as profiler instrumentation. The refreshed default E2B
+  int8 `METAL` JIT=1 graph profile still has 8 `MetalGraph` rows and complete
+  attribution over all 5239 source items: `source_attribution.status=complete`,
+  `original_exec_count=5239`, `attributed_source_count=5239`,
+  `unparsed_graph_batches=0`, and `unattributed_tail_count=0`.
+- The cache-write attribution splits evenly:
+  `original_capture.category_counts={"attention_key_cache_write": 2260,
+  "attention_value_cache_write": 2260, "other": 719}`.
+- The slowest graph ranges in the accepted artifact are headed by
+  `<batched 2048>` at `25.112875` ms for source range `2016-4063`,
+  `<batched 1175>` at `19.617708` ms for range `4064-5238`, and
+  `<batched 1024>` at `11.937708` ms for range `992-2015`.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Verification on 2026-04-25:
+  `.venv/bin/python -m pytest -q tests/test_profile_decode_jit.py
+  tests/test_tinygrad_gemma.py::test_preallocated_generate_matches_dynamic_cache_for_gemma4`
+  passed with `11 passed, 2 warnings`; `.venv/bin/python -m py_compile
+  scripts/profile_decode_jit.py tinygrad_gemma/model.py` passed; the real E2B
+  int8 `METAL` profiler command refreshed the JSON/CSV artifacts; and
+  `.venv/bin/tinygrad-gemma --help` exited 0.
+- Next target: inspect Gemma 4 shared-KV/full-attention layer behavior and test
+  whether any cache write can be legally elided or narrowed for shared KV
+  layers without changing logits.
+
 ## 2026-04-25 - Attention Cache-Write Realize Scope Diagnostic
 
 - Hypothesis: the 4520 attention-scoped source items in the default JIT=1

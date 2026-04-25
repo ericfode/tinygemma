@@ -52,6 +52,19 @@ class FakeTensor:
   def toposort(self):
     return [FakeUOp(op) for op in self._ops]
 
+  def __getitem__(self, key):
+    return self
+
+  def assign(self, value):
+    del value
+    return self
+
+  def realize(self):
+    calls = getattr(self, "calls", None)
+    if calls is not None:
+      calls.append(profile._SIDECAR_STACK[-1])
+    return self
+
 
 def test_profile_raw_gate_up_mode_is_abandoned():
   try:
@@ -71,9 +84,11 @@ def test_profile_classifies_repo_sidecar_metadata():
     FakeMetadata("norm", "repo_sidecar:1::norm"),
     FakeMetadata("attention", "repo_sidecar:1::attention"),
     FakeMetadata("attention_cache_write", "repo_sidecar:1::attention_cache_write"),
+    FakeMetadata("attention_value_cache_write", "repo_sidecar:1::attention_value_cache_write"),
+    FakeMetadata("attention_key_cache_write", "repo_sidecar:1::attention_key_cache_write"),
   ]
 
-  assert profile.classify_kernel(metadata) == "attention_cache_write"
+  assert profile.classify_kernel(metadata) == "attention_key_cache_write"
 
 
 def test_profile_method_sidecar_patch_restores_original_method():
@@ -98,6 +113,23 @@ def test_profile_refines_attention_store_realize_scope():
   with profile.sidecar_scope("attention"):
     assert profile.attention_realize_sidecar_category([compute_tensor]) is None
     assert profile.attention_realize_sidecar_category([store_tensor]) == "attention_cache_write"
+
+
+def test_profile_cache_update_sidecar_patch_splits_key_and_value_scopes():
+  original = profile.gemma_model.realize_cache_update
+  calls = []
+  key_cache = FakeTensor()
+  value_cache = FakeTensor()
+  key_cache.calls = calls
+  value_cache.calls = calls
+
+  try:
+    with profile.cache_update_sidecar_patch():
+      profile.gemma_model.realize_cache_update(key_cache, value_cache, "key", "value", 0, 1)
+  finally:
+    profile.gemma_model.realize_cache_update = original
+
+  assert calls == ["attention_key_cache_write", "attention_value_cache_write"]
 
 
 def test_graph_batch_attribution_maps_batched_display_to_source_ranges():
