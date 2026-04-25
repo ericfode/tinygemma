@@ -1,0 +1,167 @@
+{
+  "device": "METAL",
+  "diagnostic": "Gemma 4 decode-shape rowwise int8 linear lowering on tinygrad METAL",
+  "metal_tensor_core_dtypes": [
+    {
+      "dims": "(8, 8, 8)",
+      "dtype_in": "dtypes.float",
+      "dtype_out": "dtypes.float"
+    },
+    {
+      "dims": "(8, 8, 8)",
+      "dtype_in": "dtypes.half",
+      "dtype_out": "dtypes.float"
+    },
+    {
+      "dims": "(8, 8, 8)",
+      "dtype_in": "dtypes.half",
+      "dtype_out": "dtypes.half"
+    },
+    {
+      "dims": "(8, 8, 8)",
+      "dtype_in": "dtypes.bfloat16",
+      "dtype_out": "dtypes.float"
+    },
+    {
+      "dims": "(8, 8, 8)",
+      "dtype_in": "dtypes.bfloat16",
+      "dtype_out": "dtypes.bfloat16"
+    }
+  ],
+  "repeats": 20,
+  "seed": 20260424,
+  "shapes": [
+    {
+      "in_features": 1536,
+      "out_features": 12288,
+      "token_count": 1,
+      "variants": [
+        {
+          "kernel_count": 1,
+          "kernels": [
+            {
+              "device": "METAL",
+              "display_name": "r_128_32_3_384_4",
+              "elapsed_ms": 0.1864166697487235,
+              "est_mem": 18951168,
+              "est_ops": 37761024,
+              "ordinal": 0,
+              "source_flags": {
+                "has_simdgroup_multiply_accumulate": false,
+                "has_wmma_name": false,
+                "mentions_int8": true
+              }
+            }
+          ],
+          "max_ms": 0.8571666548959911,
+          "median_ms": 0.18535417621023953,
+          "min_ms": 0.1829999964684248,
+          "name": "rowwise_int8_linear",
+          "source_flags": {
+            "has_simdgroup_multiply_accumulate": false,
+            "has_wmma_name": false,
+            "mentions_int8": true
+          }
+        },
+        {
+          "kernel_count": 1,
+          "kernels": [
+            {
+              "device": "METAL",
+              "display_name": "r_128_32_3_384_4n1",
+              "elapsed_ms": 0.16041670460253954,
+              "est_mem": 37776384,
+              "est_ops": 37748736,
+              "ordinal": 0,
+              "source_flags": {
+                "has_simdgroup_multiply_accumulate": false,
+                "has_wmma_name": false,
+                "mentions_int8": false
+              }
+            }
+          ],
+          "max_ms": 0.8695416618138552,
+          "median_ms": 0.14602081500925124,
+          "min_ms": 0.1414999715052545,
+          "name": "bf16_dequantized_weight_linear",
+          "source_flags": {
+            "has_simdgroup_multiply_accumulate": false,
+            "has_wmma_name": false,
+            "mentions_int8": false
+          }
+        }
+      ]
+    },
+    {
+      "in_features": 1536,
+      "out_features": 12288,
+      "token_count": 8,
+      "variants": [
+        {
+          "kernel_count": 1,
+          "kernels": [
+            {
+              "device": "METAL",
+              "display_name": "r_96_32_4_2_4_192",
+              "elapsed_ms": 0.44525001430884004,
+              "est_mem": 19144704,
+              "est_ops": 302088192,
+              "ordinal": 0,
+              "source_flags": {
+                "has_simdgroup_multiply_accumulate": true,
+                "has_wmma_name": true,
+                "mentions_int8": true
+              }
+            }
+          ],
+          "max_ms": 0.4826249787583947,
+          "median_ms": 0.16900000628083944,
+          "min_ms": 0.15837495448067784,
+          "name": "rowwise_int8_linear",
+          "source_flags": {
+            "has_simdgroup_multiply_accumulate": true,
+            "has_wmma_name": true,
+            "mentions_int8": true
+          }
+        },
+        {
+          "kernel_count": 1,
+          "kernels": [
+            {
+              "device": "METAL",
+              "display_name": "r_96_32_4_2_4_192n1",
+              "elapsed_ms": 0.17045834101736546,
+              "est_mem": 37969920,
+              "est_ops": 301989888,
+              "ordinal": 0,
+              "source_flags": {
+                "has_simdgroup_multiply_accumulate": true,
+                "has_wmma_name": true,
+                "mentions_int8": false
+              }
+            }
+          ],
+          "max_ms": 0.9389999904669821,
+          "median_ms": 0.1653541694395244,
+          "min_ms": 0.15908334171399474,
+          "name": "bf16_dequantized_weight_linear",
+          "source_flags": {
+            "has_simdgroup_multiply_accumulate": true,
+            "has_wmma_name": true,
+            "mentions_int8": false
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "decode_token1_bf16_dequantized_weight_median_ms": 0.14602081500925124,
+    "decode_token1_rowwise_int8_median_ms": 0.18535417621023953,
+    "decode_token1_rowwise_int8_uses_simdgroup_mma": false,
+    "decode_token1_rowwise_int8_vs_bf16_dequantized_ratio": 1.2693681801357999,
+    "interpretation": "Current one-token rowwise int8 decode linear is not using Metal simdgroup MMA and is not materially faster than bf16 dequantized-weight linear.",
+    "metal_tensor_core_registers_int8": false,
+    "rowwise_int8_linear_any_shape_uses_simdgroup_mma": true
+  },
+  "tinygrad_path": "/Users/ericfode/.codex/worktrees/9b17/tinygrad-gemma/.venv/lib/python3.11/site-packages/tinygrad/__init__.py"
+}

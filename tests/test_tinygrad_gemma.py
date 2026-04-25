@@ -34,7 +34,9 @@ from tinygrad_gemma import (
   train_step,
 )
 from tinygrad_gemma.cli import DEFAULT_MAX_BEAM, resolve_beam
+from tinygrad_gemma.metal_int8 import metal_rowwise_int8_decode_linear
 from tinygrad_gemma.model import build_attention_mask
+from tinygrad_gemma.quantization import RowwiseInt8Linear, quantize_state_dict
 from tinygrad_gemma.runtime import temporary_default_device
 from tinygrad_gemma.tokenizer import GemmaTokenizer
 
@@ -422,6 +424,19 @@ def test_preallocated_cache_matches_full_forward_for_gemma4():
   np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
 
 
+def test_preallocated_sliding_cache_matches_full_forward_after_window_for_gemma4():
+  config = make_config()
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=34)
+    prompt = [2, 4, 6, 8, 10, 12]
+    cache = GemmaCache.empty(config.num_hidden_layers, max_length=10)
+    _, cache = model.forward_ids(prompt, cache=cache)
+    step_logits, _ = model.forward_ids([14], cache=cache)
+    full_logits, _ = model.forward_ids(prompt + [14])
+  np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
+
+
 def test_dynamic_sliding_cache_keeps_suffix_and_matches_full_forward_for_gemma4():
   config = make_config()
   assert config.layer_types == ["sliding_attention", "full_attention"]
@@ -455,10 +470,9 @@ def test_preallocated_generate_matches_dynamic_cache_for_gemma4():
       next_token = model.sample_next(logits[:, -1, :])
       dynamic_tokens.append(int(next_token.item()))
       logits, dynamic_cache = model(next_token.reshape(1, 1), cache=dynamic_cache)
-    preallocated_tokens = list(model.generate([2, 4, 6], max_new_tokens=4, stop_token_ids=None))
+  preallocated_tokens = list(model.generate([2, 4, 6], max_new_tokens=4, stop_token_ids=None))
   assert preallocated_tokens == dynamic_tokens
-  assert model._last_rollout_jit is not None
-  assert model._last_rollout_jit.cnt >= 3
+  assert model._last_rollout_jit is None
 
 
 def test_loader_roundtrip_for_nested_gemma4(tmp_path: Path):
@@ -680,6 +694,33 @@ def test_vision_bidirectional_sliding_mask_allows_same_image_group():
   assert np.isneginf(mask_np[3, 0])
 
 
+def test_single_token_cropped_sliding_mask_is_elided():
+  with temporary_default_device("PYTHON"):
+    cropped = build_attention_mask(
+      query_len=1,
+      key_len=3,
+      past_seen_tokens=6,
+      sliding_window=3,
+      dtype="float",
+      device="PYTHON",
+      causal=True,
+    )
+    uncropped = build_attention_mask(
+      query_len=1,
+      key_len=4,
+      past_seen_tokens=6,
+      sliding_window=3,
+      dtype="float",
+      device="PYTHON",
+      causal=True,
+    )
+  assert cropped is None
+  assert uncropped is not None
+  uncropped_np = uncropped.numpy()[0, 0, 0]
+  assert np.isneginf(uncropped_np[0])
+  np.testing.assert_allclose(uncropped_np[1:], np.zeros(3, dtype=np.float32))
+
+
 def test_conditional_forward_handles_large_model_vision_attention_mode():
   config = make_conditional_config()
   config.text_config.layer_types = ["sliding_attention"]
@@ -693,6 +734,17 @@ def test_conditional_forward_handles_large_model_vision_attention_mode():
     image_position_ids = np.array([[[0, 0]]], dtype=np.int32)
     logits, _ = model.forward_ids(input_ids, pixel_values=pixel_values, image_position_ids=image_position_ids)
     assert logits.shape == (1, len(input_ids), config.text_config.vocab_size)
+
+
+def test_conditional_sliding_decode_start_is_metal_only():
+  config = make_conditional_config()
+  config.text_config.layer_types = ["sliding_attention"]
+  config.text_config.sliding_window = 5
+  with temporary_default_device("PYTHON"):
+    model = GemmaForConditionalGeneration(config)
+  assert model._sliding_decode_start() is None
+  model.device = "METAL"
+  assert model._sliding_decode_start() == 4
 
 
 def test_gemma4_full_attention_uses_regular_kv_heads_without_k_eq_v():
@@ -863,7 +915,7 @@ def test_quantized_text_checkpoint_reloads_and_trains(tmp_path: Path):
     assert manifest["method"] == "int8"
     assert manifest["tensors"]
 
-    reloaded = load_pretrained(checkpoint_dir, device="PYTHON")
+    reloaded = load_pretrained(checkpoint_dir, device="PYTHON", runtime_quantization=False)
     reloaded_logits, _ = reloaded.forward_ids([2, 5, 7, 11])
     np.testing.assert_allclose(baseline_logits_np, reloaded_logits.numpy(), rtol=0.12, atol=0.12)
 
@@ -875,7 +927,7 @@ def test_quantized_text_checkpoint_reloads_and_trains(tmp_path: Path):
     assert not np.allclose(before_step, after_step.numpy())
 
 
-def test_quantized_checkpoint_is_int8_on_disk_and_dequantized_in_memory(tmp_path: Path):
+def test_quantized_checkpoint_supports_dequantized_and_runtime_int8_loads(tmp_path: Path):
   config = make_config()
   with temporary_default_device("PYTHON"):
     model = GemmaForCausalLM(config)
@@ -890,10 +942,69 @@ def test_quantized_checkpoint_is_int8_on_disk_and_dequantized_in_memory(tmp_path
     assert raw_state[tensor_name].dtype == dtypes.int8
     assert tensor_info["scale_key"] in raw_state
 
-    reloaded = load_pretrained(checkpoint_dir, device="PYTHON")
-    live_state = nn.state.get_state_dict(reloaded)
-  assert live_state[tensor_name].dtype != dtypes.int8
-  assert not any(name.startswith("_quant_scale.") for name in live_state)
+    dequantized = load_pretrained(checkpoint_dir, device="PYTHON", runtime_quantization=False)
+    dequantized_state = nn.state.get_state_dict(dequantized)
+    runtime = load_pretrained(checkpoint_dir, device="PYTHON")
+    runtime_state = nn.state.get_state_dict(runtime)
+    linear_name = "model.layers.0.mlp.gate_proj.weight"
+    dequantized_logits, _ = dequantized.forward_ids([2, 5, 7, 11])
+    runtime_logits, _ = runtime.forward_ids([2, 5, 7, 11])
+
+  assert dequantized_state[tensor_name].dtype != dtypes.int8
+  assert not any(name.startswith("_quant_scale.") for name in dequantized_state)
+  assert linear_name in manifest["tensors"]
+  assert isinstance(runtime.model.layers[0].mlp.gate_proj, RowwiseInt8Linear)
+  assert runtime_state[linear_name].dtype == dtypes.int8
+  assert runtime_state["model.layers.0.mlp.gate_proj.scale"].shape == (config.intermediate_size,)
+  assert not any(name.startswith("_quant_scale.") for name in runtime_state)
+  np.testing.assert_allclose(dequantized_logits.numpy(), runtime_logits.numpy(), rtol=1e-4, atol=1e-4)
+
+
+def test_quantization_includes_bfloat16_matrices():
+  state_dict = {
+    "matrix": Tensor.ones(2, 3, dtype=dtypes.bfloat16),
+    "vector": Tensor.ones(3, dtype=dtypes.bfloat16),
+  }
+  quantized, manifest = quantize_state_dict(state_dict, quantize="int8")
+
+  assert quantized["matrix"].dtype == dtypes.int8
+  assert manifest["tensors"]["matrix"]["dtype"] == "bfloat16"
+  assert manifest["tensors"]["matrix"]["scale_key"] in quantized
+  assert quantized["vector"].dtype == dtypes.bfloat16
+  assert "vector" not in manifest["tensors"]
+
+
+def test_runtime_int8_mlp_fused_gate_up_matches_separate_path(tmp_path: Path):
+  config = make_config()
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=74)
+    checkpoint_dir = tmp_path / "quantized-fused-mlp"
+    save_training_checkpoint(model, checkpoint_dir, quantize="int8")
+    runtime = load_pretrained(checkpoint_dir, device="PYTHON")
+    mlp = runtime.model.layers[0].mlp
+    assert isinstance(mlp.gate_proj, RowwiseInt8Linear)
+    assert isinstance(mlp.up_proj, RowwiseInt8Linear)
+    x = Tensor.randn(1, 3, config.hidden_size)
+
+    fused = mlp(x)
+    can_fuse = mlp._can_use_fused_int8_gate_up
+    mlp._can_use_fused_int8_gate_up = lambda: False
+    try:
+      separate = mlp(x)
+    finally:
+      mlp._can_use_fused_int8_gate_up = can_fuse
+
+  np.testing.assert_allclose(fused.numpy(), separate.numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_metal_rowwise_int8_decode_linear_rejects_non_metal():
+  x = Tensor.ones(1, 1, 4, device="PYTHON")
+  qweight = Tensor.ones(8, 4, dtype=dtypes.int8, device="PYTHON")
+  scale = Tensor.ones(8, dtype=dtypes.float32, device="PYTHON")
+
+  with pytest.raises(RuntimeError, match="expects x on METAL"):
+    metal_rowwise_int8_decode_linear(x, qweight, scale)
 
 
 def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):
@@ -923,6 +1034,7 @@ def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):
 
     reloaded = load_pretrained(checkpoint_dir, device="PYTHON")
     assert isinstance(reloaded, GemmaForConditionalGeneration)
+    assert isinstance(reloaded.model.language_model.layers[0].mlp.gate_proj, RowwiseInt8Linear)
     reloaded_logits, _ = reloaded.forward_ids(
       input_ids,
       pixel_values=pixel_values,

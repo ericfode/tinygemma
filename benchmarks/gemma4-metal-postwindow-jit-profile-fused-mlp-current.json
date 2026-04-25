@@ -1,0 +1,1118 @@
+{
+  "context_length": 700,
+  "csv": "benchmarks/gemma4-metal-postwindow-jit-profile-fused-mlp-current.csv",
+  "device": "METAL",
+  "jit_mode": "JIT=2 ungraphed per-kernel timing",
+  "max_length": 705,
+  "model_dir": "/Users/ericfode/Downloads/tinygrad-gemma/checkpoints/gemma-4-E2B-int8",
+  "profile_start": 703,
+  "quantization": {
+    "manifest_method": "int8",
+    "manifest_quantized_tensor_count": 0,
+    "raw_dtype_counts": {
+      "__bf16": 2011
+    },
+    "sample_tensors": {
+      "model.language_model.embed_tokens.weight": "(262144, 1536) dtypes.bfloat16",
+      "model.language_model.layers.0.mlp.gate_proj.weight": "(6144, 1536) dtypes.bfloat16",
+      "model.language_model.layers.0.self_attn.q_proj.weight": "(2048, 1536) dtypes.bfloat16",
+      "model.language_model.per_layer_model_projection.weight": "(8960, 1536) dtypes.bfloat16"
+    }
+  },
+  "sliding_start": 511,
+  "summary": {
+    "by_category": {
+      "attention": {
+        "elapsed_ms": 26.236375037115067,
+        "elapsed_share": 0.237860097562603,
+        "est_mem": 2828962844,
+        "est_ops": 6062870300,
+        "kernel_count": 1290,
+        "ops_share": 0.11446551402269725
+      },
+      "decoder_residual": {
+        "elapsed_ms": 6.451914901845157,
+        "elapsed_share": 0.05849333628778813,
+        "est_mem": 183969110,
+        "est_ops": 257335360,
+        "kernel_count": 917,
+        "ops_share": 0.004858428896065259
+      },
+      "embedding_per_layer": {
+        "elapsed_ms": 3.3759581274352968,
+        "elapsed_share": 0.030606580688950245,
+        "est_mem": 162302078900,
+        "est_ops": 886770688,
+        "kernel_count": 147,
+        "ops_share": 0.016742014524404537
+      },
+      "logits_argmax": {
+        "elapsed_ms": 1.7934999777935445,
+        "elapsed_share": 0.016259947461987785,
+        "est_mem": 806366736,
+        "est_ops": 1009911824,
+        "kernel_count": 4,
+        "ops_share": 0.019066889168280535
+      },
+      "mlp": {
+        "elapsed_ms": 38.93804212566465,
+        "elapsed_share": 0.3530139543212507,
+        "est_mem": 13504311924,
+        "est_ops": 38741082112,
+        "kernel_count": 645,
+        "ops_share": 0.7314221908632289
+      },
+      "norm": {
+        "elapsed_ms": 13.44666804652661,
+        "elapsed_share": 0.12190806728879772,
+        "est_mem": 1333734892,
+        "est_ops": 1886243584,
+        "kernel_count": 1411,
+        "ops_share": 0.0356118192755294
+      },
+      "other": {
+        "elapsed_ms": 20.059249829500914,
+        "elapsed_share": 0.1818580163886224,
+        "est_mem": 1019964904,
+        "est_ops": 4122571384,
+        "kernel_count": 393,
+        "ops_share": 0.07783314324979415
+      }
+    },
+    "elapsed_ms": 110.30170804588124,
+    "est_mem": 181979389310,
+    "est_ops": 52966785252,
+    "kernel_count": 4807,
+    "top_elapsed_kernels": [
+      {
+        "category": "logits_argmax",
+        "device": "METAL",
+        "display_name": "r_2048_32_4_384_4",
+        "elapsed_ms": 1.7846249975264072,
+        "est_mem": 805839876,
+        "est_ops": 1008467968,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:225::__call__",
+            "name": "float"
+          },
+          {
+            "caller": "tinygrad_gemma.model:222::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:226::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:226::__call__",
+            "name": "cast"
+          },
+          {
+            "caller": "tinygrad_gemma.multimodal:634::logits",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.multimodal:638::logits",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.multimodal:638::logits",
+            "name": "__mul__"
+          }
+        ],
+        "ordinal": 4802
+      },
+      {
+        "category": "attention",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.37454167613759637,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:451::__call__",
+            "name": "softmax"
+          },
+          {
+            "caller": "tinygrad_gemma.model:451::__call__",
+            "name": "cast"
+          },
+          {
+            "caller": "tinygrad_gemma.model:452::__call__",
+            "name": "__matmul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:453::__call__",
+            "name": "linear"
+          }
+        ],
+        "ordinal": 4693
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_2_4_(gemma_start_pos_window+1)n1",
+        "elapsed_ms": 0.2952499780803919,
+        "est_mem": 22624,
+        "est_ops": 22530,
+        "metadata": [],
+        "ordinal": 2664
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.28416665736585855,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 682
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_384",
+        "elapsed_ms": 0.28137495974078774,
+        "est_mem": 18905088,
+        "est_ops": 113639424,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 3531
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_1536_16_256",
+        "elapsed_ms": 0.26795832673087716,
+        "est_mem": 12605440,
+        "est_ops": 12976128,
+        "metadata": [],
+        "ordinal": 1865
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.2674583229236305,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 3371
+      },
+      {
+        "category": "attention",
+        "device": "METAL",
+        "display_name": "r_1536_16_128",
+        "elapsed_ms": 0.26699999580159783,
+        "est_mem": 6305792,
+        "est_ops": 6684672,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:453::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 631
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.2662499900907278,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 2249
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.2661250182427466,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 3370
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.26595836970955133,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 1353
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.26545830769464374,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 3123
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.26329164393246174,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 2895
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_128_32_3_384_4",
+        "elapsed_ms": 0.2618333091959357,
+        "est_mem": 37782532,
+        "est_ops": 50331648,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:225::__call__",
+            "name": "float"
+          },
+          {
+            "caller": "tinygrad_gemma.model:222::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:226::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:226::__call__",
+            "name": "cast"
+          },
+          {
+            "caller": "tinygrad_gemma.model:260::__call__",
+            "name": "linear"
+          }
+        ],
+        "ordinal": 2134
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.2617083373479545,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 1196
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.25966670364141464,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 2667
+      },
+      {
+        "category": "attention",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.25937502505257726,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:451::__call__",
+            "name": "softmax"
+          },
+          {
+            "caller": "tinygrad_gemma.model:451::__call__",
+            "name": "cast"
+          },
+          {
+            "caller": "tinygrad_gemma.model:452::__call__",
+            "name": "__matmul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:453::__call__",
+            "name": "linear"
+          }
+        ],
+        "ordinal": 4788
+      },
+      {
+        "category": "attention",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.25924999499693513,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:451::__call__",
+            "name": "softmax"
+          },
+          {
+            "caller": "tinygrad_gemma.model:451::__call__",
+            "name": "cast"
+          },
+          {
+            "caller": "tinygrad_gemma.model:452::__call__",
+            "name": "__matmul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:453::__call__",
+            "name": "linear"
+          }
+        ],
+        "ordinal": 558
+      },
+      {
+        "category": "other",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.2589166397228837,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [],
+        "ordinal": 1510
+      },
+      {
+        "category": "attention",
+        "device": "METAL",
+        "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+        "elapsed_ms": 0.25887496303766966,
+        "est_mem": 760928,
+        "est_ops": 8652032,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:451::__call__",
+            "name": "softmax"
+          },
+          {
+            "caller": "tinygrad_gemma.model:451::__call__",
+            "name": "cast"
+          },
+          {
+            "caller": "tinygrad_gemma.model:452::__call__",
+            "name": "__matmul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:453::__call__",
+            "name": "linear"
+          }
+        ],
+        "ordinal": 4598
+      }
+    ],
+    "top_est_ops_kernels": [
+      {
+        "category": "logits_argmax",
+        "device": "METAL",
+        "display_name": "r_2048_32_4_384_4",
+        "elapsed_ms": 1.7846249975264072,
+        "est_mem": 805839876,
+        "est_ops": 1008467968,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:225::__call__",
+            "name": "float"
+          },
+          {
+            "caller": "tinygrad_gemma.model:222::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:226::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:226::__call__",
+            "name": "cast"
+          },
+          {
+            "caller": "tinygrad_gemma.multimodal:634::logits",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.multimodal:638::logits",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.multimodal:638::logits",
+            "name": "__mul__"
+          }
+        ],
+        "ordinal": 4802
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.1170000177808106,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4433
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09433331433683634,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4452
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.0938749872148037,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4471
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09420834248885512,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4490
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09995832806453109,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4509
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09099999442696571,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4528
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09295833297073841,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4547
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.1049166894517839,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4566
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09458331624045968,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4585
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.1016249880194664,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4604
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09074999252334237,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4623
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09074999252334237,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4642
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.0956250005401671,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4661
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09425001917406917,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4680
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.12079166481271386,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4699
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.09154167491942644,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4718
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.0914999982342124,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4737
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.0829166965559125,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4756
+      },
+      {
+        "category": "mlp",
+        "device": "METAL",
+        "display_name": "r_1536_16_768",
+        "elapsed_ms": 0.08266663644462824,
+        "est_mem": 37804032,
+        "est_ops": 226885632,
+        "metadata": [
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "__add__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:61::gelu_pytorch_tanh",
+            "name": "tanh"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "__mul__"
+          },
+          {
+            "caller": "tinygrad_gemma.model:261::__call__",
+            "name": "linear"
+          },
+          {
+            "caller": "tinygrad_gemma.model:221::__call__",
+            "name": "float"
+          }
+        ],
+        "ordinal": 4775
+      }
+    ]
+  },
+  "tensor_dtype": "dtypes.bfloat16",
+  "text_config": {
+    "hidden_size": 1536,
+    "intermediate_size": 6144,
+    "layer_types": [
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention"
+    ],
+    "num_attention_heads": 8,
+    "num_hidden_layers": 35,
+    "num_key_value_heads": 1,
+    "sliding_window": 512,
+    "vocab_size": 262144
+  },
+  "tinygrad_path": "/Users/ericfode/.codex/worktrees/9b17/tinygrad-gemma/.venv/lib/python3.11/site-packages/tinygrad/__init__.py",
+  "var_vals": {
+    "gemma_start_pos_window": 703
+  }
+}

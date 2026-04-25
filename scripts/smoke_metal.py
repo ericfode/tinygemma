@@ -48,6 +48,8 @@ def main() -> None:
     cache = GemmaCache.empty(model.config.num_hidden_layers, max_length=8)
     logits, cache = model.forward_ids([2, 4, 6], cache=cache)
     realized = logits.numpy()
+    generated = list(model.generate([2, 4, 6], max_new_tokens=4, stop_token_ids=None))
+    rollout_jits = getattr(model, "_last_rollout_jits", [])
 
   if model.device != "METAL":
     raise SystemExit(f"expected loaded model on METAL, got {model.device}")
@@ -57,12 +59,22 @@ def main() -> None:
     raise SystemExit("expected populated METAL cache")
   if cache.entries[0].key.device != "METAL" or cache.entries[0].value.device != "METAL":
     raise SystemExit("expected cache tensors on METAL")
+  if len(generated) != 4:
+    raise SystemExit(f"expected 4 generated tokens on METAL, got {len(generated)}")
+  if model._last_decode_fallback:
+    raise SystemExit("expected METAL decode TinyJit replay without eager fallback")
+  rollout_jit_count = sum(getattr(jit, "cnt", 0) for jit in rollout_jits if jit is not None)
+  if rollout_jit_count == 0:
+    raise SystemExit("expected METAL decode TinyJit to run during generation")
 
   print(f"default_device={default_device()}")
   print(f"loaded_model_device={model.device}")
   print(f"logits_device={logits.device}")
   print(f"logits_shape={realized.shape}")
   print(f"cache0_key_device={cache.entries[0].key.device}")
+  print(f"generated_tokens={len(generated)}")
+  print(f"rollout_jit_count={rollout_jit_count}")
+  print(f"decode_fallback={model._last_decode_fallback}")
 
 
 if __name__ == "__main__":

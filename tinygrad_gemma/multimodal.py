@@ -626,6 +626,8 @@ class GemmaForConditionalGeneration:
       self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
     self.device = self.model.language_model.embed_tokens.weight.device
     self._last_rollout_jit: TinyJit | None = None
+    self._last_rollout_jits: list[TinyJit] = []
+    self._last_decode_fallback = False
 
   def logits(self, hidden_states: Tensor) -> Tensor:
     if isinstance(self.lm_head, dict):
@@ -758,12 +760,30 @@ class GemmaForConditionalGeneration:
       return logits.argmax(axis=-1, keepdim=True).cast("int32")
     return (logits / temperature).softmax(-1).multinomial().cast("int32")
 
-  def _rollout_next_token(self, token: Tensor, start_pos, cache: GemmaCache, temperature: float) -> Tensor:
+  def _rollout_next_token(self, token: Tensor, start_pos, cache: GemmaCache, temperature: float, *, decode_sliding_window: bool = False) -> Tensor:
     concrete_start = cache.past_seen_tokens
+    previous_decode_sliding_window = cache.decode_sliding_window
     cache.past_seen_tokens = start_pos
-    logits, _ = self(token.reshape(1, 1), cache=cache)
-    cache.past_seen_tokens = concrete_start
+    cache.decode_sliding_window = decode_sliding_window
+    try:
+      logits, _ = self(token.reshape(1, 1), cache=cache)
+    finally:
+      cache.past_seen_tokens = concrete_start
+      cache.decode_sliding_window = previous_decode_sliding_window
     return self.sample_next(logits[:, -1, :], temperature=temperature)
+
+  def _eager_next_from_token_id(self, token_id: int, cache: GemmaCache, temperature: float) -> tuple[Tensor, GemmaCache | None]:
+    token = Tensor([[token_id]], dtype="int32", device=self.device)
+    logits, cache = self(token, cache=cache)
+    return self.sample_next(logits[:, -1, :], temperature=temperature), cache
+
+  def _sliding_decode_start(self) -> int | None:
+    if str(self.device).upper() != "METAL":
+      return None
+    windows = [layer.self_attn.sliding_window for layer in self.model.language_model.layers if layer.self_attn.sliding_window is not None]
+    if not windows:
+      return None
+    return max(windows) - 1
 
   def generate(
     self,
@@ -779,6 +799,7 @@ class GemmaForConditionalGeneration:
   ):
     if max_new_tokens <= 0:
       return
+    self._last_decode_fallback = False
     cache = GemmaCache.empty(self.config.text_config.num_hidden_layers, max_length=len(input_ids) + max_new_tokens)
     logits, cache = self.forward_ids(
       input_ids,
@@ -791,7 +812,12 @@ class GemmaForConditionalGeneration:
     next_token = self.sample_next(logits[:, -1, :], temperature=temperature)
     max_start_pos = max(1, (cache.max_length or len(input_ids) + max_new_tokens) - 1)
     rollout_jit = TinyJit(lambda token, start_pos: self._rollout_next_token(token, start_pos, cache, temperature))
-    self._last_rollout_jit = rollout_jit
+    sliding_start = self._sliding_decode_start()
+    sliding_rollout_jit = None
+    if sliding_start is not None and sliding_start <= max_start_pos:
+      sliding_rollout_jit = TinyJit(lambda token, start_pos: self._rollout_next_token(token, start_pos, cache, temperature, decode_sliding_window=True))
+    self._last_rollout_jit = sliding_rollout_jit or rollout_jit
+    self._last_rollout_jits = [rollout_jit] + ([sliding_rollout_jit] if sliding_rollout_jit is not None else [])
     for idx in range(max_new_tokens):
       token_id = int(next_token.item())
       yield token_id
@@ -800,9 +826,22 @@ class GemmaForConditionalGeneration:
       if idx == max_new_tokens - 1:
         break
       start_pos = cache.past_seen_tokens
-      start_var = Variable("gemma_start_pos", 0, max_start_pos).bind(start_pos)
-      next_token = rollout_jit(next_token.reshape(1, 1).contiguous(), start_var)
-      cache.set_active_length(start_pos + 1)
+      if self._last_decode_fallback:
+        next_token, cache = self._eager_next_from_token_id(token_id, cache, temperature)
+        continue
+      use_sliding_window = sliding_rollout_jit is not None and sliding_start is not None and start_pos >= sliding_start
+      start_lower = sliding_start if use_sliding_window else 0
+      var_name = "gemma_start_pos_window" if use_sliding_window else "gemma_start_pos"
+      start_var = Variable(var_name, start_lower, max_start_pos).bind(start_pos)
+      active_rollout_jit = sliding_rollout_jit if use_sliding_window else rollout_jit
+      try:
+        next_token = active_rollout_jit(next_token.reshape(1, 1).contiguous(), start_var)
+        cache.set_active_length(start_pos + 1)
+      except RuntimeError as exc:
+        if "input to kernel must be AFTER or BUFFER" not in str(exc):
+          raise
+        self._last_decode_fallback = True
+        next_token, cache = self._eager_next_from_token_id(token_id, cache, temperature)
 
   def default_ignore_token_ids(self) -> set[int]:
     ignore_ids = set()

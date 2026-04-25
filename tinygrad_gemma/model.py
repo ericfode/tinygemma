@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import Sequence
 
 import numpy as np
@@ -8,6 +9,7 @@ import numpy as np
 from tinygrad import Tensor, TinyJit, Variable, nn
 
 from .config import GemmaConfig
+from .metal_int8 import metal_rowwise_int8_decode_linear
 
 DEFAULT_IGNORE_INDEX = -100
 
@@ -120,6 +122,22 @@ def kv_suffix(key: Tensor, value: Tensor, max_tokens: int) -> tuple[Tensor, Tens
   return key[:, :, -max_tokens:, :], value[:, :, -max_tokens:, :]
 
 
+def sliding_decode_kv(
+  key: Tensor,
+  value: Tensor,
+  past_seen_tokens,
+  sliding_window: int,
+) -> tuple[Tensor, Tensor]:
+  if isinstance(past_seen_tokens, int):
+    return kv_suffix(key, value, sliding_window)
+  # Symbolic slicing is only valid once the bound is known to be inside the
+  # sliding window. Generation enables this after the first full window.
+  return (
+    key[:, :, past_seen_tokens - sliding_window + 1 : past_seen_tokens + 1, :],
+    value[:, :, past_seen_tokens - sliding_window + 1 : past_seen_tokens + 1, :],
+  )
+
+
 def build_attention_mask(
   query_len: int,
   key_len: int,
@@ -130,8 +148,9 @@ def build_attention_mask(
   causal: bool = True,
   bidirectional_group_ids: Tensor | None = None,
 ) -> Tensor | None:
-  if query_len == 1 and sliding_window is None and causal and bidirectional_group_ids is None:
-    return None
+  if query_len == 1 and causal and bidirectional_group_ids is None:
+    if sliding_window is None or (isinstance(key_len, int) and key_len <= sliding_window):
+      return None
   query_positions = Tensor.arange(past_seen_tokens, past_seen_tokens + query_len, device=device, dtype="int32").reshape(query_len, 1)
   key_start = past_seen_tokens + query_len - key_len
   key_positions = Tensor.arange(key_start, past_seen_tokens + query_len, device=device, dtype="int32").reshape(1, key_len)
@@ -165,6 +184,7 @@ class GemmaCache:
   entries: list[GemmaCacheEntry | None]
   past_seen_tokens: int = 0
   max_length: int | None = None
+  decode_sliding_window: bool = False
 
   @classmethod
   def empty(cls, num_layers: int, *, max_length: int | None = None) -> "GemmaCache":
@@ -208,6 +228,10 @@ class RMSNorm:
     return (output * scale).cast(x.dtype)
 
 
+_FUSED_GATE_UP_WEIGHTS: dict[tuple[int, int], Tensor] = {}
+_FUSED_INT8_GATE_UP: dict[tuple[int, int, int, int], tuple[Tensor, Tensor]] = {}
+
+
 class GemmaMLP:
   def __init__(self, config: GemmaConfig, layer_idx: int):
     self.config = config
@@ -219,7 +243,65 @@ class GemmaMLP:
     self.up_proj = nn.Linear(config.hidden_size, self.intermediate_size, bias=False)
     self.down_proj = nn.Linear(self.intermediate_size, config.hidden_size, bias=False)
 
+  def _can_use_fused_gate_up(self) -> bool:
+    return (
+      not Tensor.training
+      and not getattr(self.gate_proj, "is_rowwise_int8", False)
+      and not getattr(self.up_proj, "is_rowwise_int8", False)
+      and self.gate_proj.weight.requires_grad is None
+      and self.up_proj.weight.requires_grad is None
+    )
+
+  def _fused_gate_up_weight(self) -> Tensor:
+    key = (id(self.gate_proj.weight), id(self.up_proj.weight))
+    fused = _FUSED_GATE_UP_WEIGHTS.get(key)
+    if fused is None:
+      fused = self.gate_proj.weight.cat(self.up_proj.weight, dim=0).contiguous().realize()
+      _FUSED_GATE_UP_WEIGHTS[key] = fused
+    return fused
+
+  def _can_use_fused_int8_gate_up(self) -> bool:
+    return (
+      not Tensor.training
+      and getattr(self.gate_proj, "is_rowwise_int8", False)
+      and getattr(self.up_proj, "is_rowwise_int8", False)
+      and getattr(self.gate_proj, "bias", None) is None
+      and getattr(self.up_proj, "bias", None) is None
+    )
+
+  def _fused_int8_gate_up_weight_scale(self) -> tuple[Tensor, Tensor]:
+    key = (id(self.gate_proj.weight), id(self.gate_proj.scale), id(self.up_proj.weight), id(self.up_proj.scale))
+    fused = _FUSED_INT8_GATE_UP.get(key)
+    if fused is None:
+      fused = (
+        self.gate_proj.weight.cat(self.up_proj.weight, dim=0).contiguous().realize(),
+        self.gate_proj.scale.cat(self.up_proj.scale, dim=0).contiguous().realize(),
+      )
+      _FUSED_INT8_GATE_UP[key] = fused
+    return fused
+
+  def _can_use_metal_fused_int8_gate_up(self, x: Tensor) -> bool:
+    return (
+      (getattr(self, "_force_metal_fused_int8_gate_up", False) or os.environ.get("TINYGRAD_GEMMA_METAL_INT8_GATE_UP") == "1")
+      and isinstance(x.device, str)
+      and x.device == "METAL"
+      and int(np.prod(x.shape[:-1])) == 1
+      and x.shape[-1] <= 4096
+    )
+
   def __call__(self, x: Tensor) -> Tensor:
+    if self._can_use_fused_gate_up():
+      gate, up = x.linear(self._fused_gate_up_weight().transpose()).chunk(2, dim=-1)
+      return self.down_proj(apply_activation(self.config.activation_name, gate) * up)
+    if self._can_use_fused_int8_gate_up():
+      weight, scale = self._fused_int8_gate_up_weight_scale()
+      if self._can_use_metal_fused_int8_gate_up(x):
+        gate_up = metal_rowwise_int8_decode_linear(x, weight, scale).cast(x.dtype)
+      else:
+        gate_up = x.matmul(weight.transpose(), dtype="float")
+        gate_up = (gate_up * scale.reshape(*([1] * (gate_up.ndim - 1)), scale.shape[0])).cast(x.dtype)
+      gate, up = gate_up.chunk(2, dim=-1)
+      return self.down_proj(apply_activation(self.config.activation_name, gate) * up)
     return self.down_proj(apply_activation(self.config.activation_name, self.gate_proj(x)) * self.up_proj(x))
 
 
@@ -364,10 +446,10 @@ class GemmaAttention:
             entry.length = end_pos
             current_entry = entry
           else:
-            stored_key = Tensor(entry.key.uop.after(entry.key[:, :, past_seen_tokens:end_pos, :].uop.store(k.uop)))
-            stored_value = Tensor(entry.value.uop.after(entry.value[:, :, past_seen_tokens:end_pos, :].uop.store(v.uop)))
-            entry.length = end_pos
-            current_entry = GemmaCacheEntry(key=stored_key, value=stored_value, length=end_pos)
+            entry.key[:, :, past_seen_tokens:end_pos, :].assign(k).realize()
+            entry.value[:, :, past_seen_tokens:end_pos, :].assign(v).realize()
+            # Keep the committed cache length concrete until generation accepts this decode step.
+            current_entry = GemmaCacheEntry(key=entry.key, value=entry.value, length=end_pos)
           k, v = active_cache_tensors(current_entry)
         else:
           if (entry := cache.entries[self.layer_idx]) is not None:
@@ -380,27 +462,37 @@ class GemmaAttention:
       if shared_kv_states is not None and self.store_full_length_kv:
         shared_kv_states[self.layer_idx] = current_entry if cache is not None and cache.max_length is not None else GemmaCacheEntry(key=k, value=v)
 
-    key_states = repeat_kv(k, self.num_key_value_groups)
-    value_states = repeat_kv(v, self.num_key_value_groups)
-    scores = q.matmul(key_states.transpose(-2, -1)).float() * self.scaling
+    if self.sliding_window is not None and query_len == 1 and bidirectional_group_ids is None:
+      if isinstance(past_seen_tokens, int) or (cache is not None and cache.decode_sliding_window):
+        k, v = sliding_decode_kv(k, v, past_seen_tokens, self.sliding_window)
 
     mask = build_attention_mask(
       query_len,
-      key_states.shape[2],
+      k.shape[2],
       past_seen_tokens,
       self.sliding_window,
-      scores.dtype,
+      "float",
       hidden_states.device,
       causal=self.causal,
       bidirectional_group_ids=bidirectional_group_ids if self.is_sliding else None,
     )
     if attention_mask is not None:
       mask = attention_mask if mask is None else mask + attention_mask
-    if mask is not None:
-      scores = scores + mask.float()
-
-    probs = scores.softmax(-1).cast(q.dtype)
-    attn_output = (probs @ value_states).transpose(1, 2).reshape(batch, query_len, -1)
+    if self.num_key_value_groups == 1:
+      scores = q.matmul(k.transpose(-2, -1)).float() * self.scaling
+      if mask is not None:
+        scores = scores + mask.float()
+      probs = scores.softmax(-1).cast(q.dtype)
+      attn_output = (probs @ v).transpose(1, 2).reshape(batch, query_len, -1)
+    else:
+      grouped_q = q.reshape(batch, self.num_key_value_heads, self.num_key_value_groups, query_len, self.head_dim)
+      grouped_k = k.unsqueeze(2)
+      grouped_v = v.unsqueeze(2)
+      scores = grouped_q.matmul(grouped_k.transpose(-2, -1)).float() * self.scaling
+      if mask is not None:
+        scores = scores + mask.unsqueeze(2).float()
+      probs = scores.softmax(-1).cast(q.dtype)
+      attn_output = (probs @ grouped_v).permute(0, 3, 1, 2, 4).reshape(batch, query_len, -1)
     return self.o_proj(attn_output)
 
 
@@ -526,6 +618,7 @@ class GemmaModel:
     inputs_embeds: Tensor | None = None,
     per_layer_inputs: Tensor | None = None,
     bidirectional_group_ids: Tensor | None = None,
+    position_ids: Tensor | None = None,
   ) -> Tensor:
     if (input_ids is None) == (inputs_embeds is None):
       raise ValueError("provide exactly one of input_ids or inputs_embeds")
@@ -546,7 +639,10 @@ class GemmaModel:
         per_layer_inputs = self.project_per_layer_inputs(hidden_states)
 
     past_seen_tokens = 0 if cache is None else cache.past_seen_tokens
-    position_ids = Tensor.arange(past_seen_tokens, past_seen_tokens + seq_len, device=hidden_states.device, dtype="int32").reshape(1, seq_len).expand(batch, seq_len)
+    if position_ids is None:
+      position_ids = Tensor.arange(past_seen_tokens, past_seen_tokens + seq_len, device=hidden_states.device, dtype="int32").reshape(1, seq_len).expand(batch, seq_len)
+    elif position_ids.ndim == 1:
+      position_ids = position_ids.reshape(1, -1).expand(batch, seq_len)
 
     shared_kv_states: dict[int, GemmaCacheEntry] | None = {}
     for i, layer in enumerate(self.layers):
@@ -578,6 +674,8 @@ class GemmaForCausalLM:
       self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
     self.device = self.model.embed_tokens.weight.device
     self._last_rollout_jit: TinyJit | None = None
+    self._last_rollout_jits: list[TinyJit] = []
+    self._last_decode_fallback = False
 
   def logits(self, hidden_states: Tensor) -> Tensor:
     logits = hidden_states.linear(self.lm_head["weight"].transpose()) if self.config.tie_word_embeddings else self.lm_head(hidden_states)
@@ -596,8 +694,9 @@ class GemmaForCausalLM:
     *,
     inputs_embeds: Tensor | None = None,
     per_layer_inputs: Tensor | None = None,
+    position_ids: Tensor | None = None,
   ) -> tuple[Tensor, GemmaCache | None]:
-    hidden_states = self.model(input_ids, cache=cache, attention_mask=attention_mask, inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs)
+    hidden_states = self.model(input_ids, cache=cache, attention_mask=attention_mask, inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs, position_ids=position_ids)
     return self.logits(hidden_states), cache
 
   def default_ignore_token_ids(self) -> set[int]:
@@ -645,12 +744,62 @@ class GemmaForCausalLM:
     probs = (logits / temperature).softmax(-1)
     return probs.multinomial().cast("int32")
 
-  def _rollout_next_token(self, token: Tensor, start_pos, cache: GemmaCache, temperature: float) -> Tensor:
+  def _rollout_next_token(self, token: Tensor, start_pos, cache: GemmaCache, temperature: float, *, decode_sliding_window: bool = False) -> Tensor:
     concrete_start = cache.past_seen_tokens
+    previous_decode_sliding_window = cache.decode_sliding_window
     cache.past_seen_tokens = start_pos
-    logits, _ = self(token.reshape(1, 1), cache=cache)
-    cache.past_seen_tokens = concrete_start
+    cache.decode_sliding_window = decode_sliding_window
+    try:
+      logits, _ = self(token.reshape(1, 1), cache=cache)
+    finally:
+      cache.past_seen_tokens = concrete_start
+      cache.decode_sliding_window = previous_decode_sliding_window
     return self.sample_next(logits[:, -1, :], temperature=temperature)
+
+  def _decode_token_inputs(self, token_id: int, position: int) -> tuple[Tensor, Tensor | None, Tensor]:
+    token = Tensor([[token_id]], dtype="int32", device=self.device)
+    inputs_embeds = self.model.embed_tokens(token).contiguous().realize()
+    per_layer_inputs = None
+    if self.model.hidden_size_per_layer_input:
+      token_identity = self.model.get_per_layer_inputs(token)
+      per_layer_inputs = self.model.project_per_layer_inputs(inputs_embeds, token_identity).contiguous().realize()
+    position_ids = Tensor([[position]], dtype="int32", device=self.device).realize()
+    return inputs_embeds, per_layer_inputs, position_ids
+
+  def _eager_next_from_token_id(self, token_id: int, cache: GemmaCache, temperature: float) -> tuple[Tensor, GemmaCache | None]:
+    token = Tensor([[token_id]], dtype="int32", device=self.device)
+    logits, cache = self(token, cache=cache)
+    return self.sample_next(logits[:, -1, :], temperature=temperature), cache
+
+  def _rollout_next_embeds(
+    self,
+    inputs_embeds: Tensor,
+    position_ids: Tensor,
+    start_pos,
+    cache: GemmaCache,
+    temperature: float,
+    *,
+    per_layer_inputs: Tensor | None = None,
+    decode_sliding_window: bool = False,
+  ) -> Tensor:
+    concrete_start = cache.past_seen_tokens
+    previous_decode_sliding_window = cache.decode_sliding_window
+    cache.past_seen_tokens = start_pos
+    cache.decode_sliding_window = decode_sliding_window
+    try:
+      logits, _ = self(inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs, position_ids=position_ids, cache=cache)
+    finally:
+      cache.past_seen_tokens = concrete_start
+      cache.decode_sliding_window = previous_decode_sliding_window
+    return self.sample_next(logits[:, -1, :], temperature=temperature)
+
+  def _sliding_decode_start(self) -> int | None:
+    if str(self.device).upper() != "METAL":
+      return None
+    windows = [layer.self_attn.sliding_window for layer in self.model.layers if layer.self_attn.sliding_window is not None]
+    if not windows:
+      return None
+    return max(windows) - 1
 
   def generate(
     self,
@@ -661,12 +810,40 @@ class GemmaForCausalLM:
   ):
     if max_new_tokens <= 0:
       return
+    self._last_decode_fallback = False
     cache = GemmaCache.empty(self.config.num_hidden_layers, max_length=len(input_ids) + max_new_tokens)
     logits, cache = self.forward_ids(input_ids, cache=cache)
     next_token = self.sample_next(logits[:, -1, :], temperature=temperature)
+    use_decode_jit = str(self.device).upper() == "METAL"
+    if not use_decode_jit:
+      self._last_rollout_jit = None
+      self._last_rollout_jits = []
+      for idx in range(max_new_tokens):
+        token_id = int(next_token.item())
+        yield token_id
+        if stop_token_ids is not None and token_id in stop_token_ids:
+          break
+        if idx == max_new_tokens - 1:
+          break
+        logits, cache = self(next_token.reshape(1, 1), cache=cache)
+        next_token = self.sample_next(logits[:, -1, :], temperature=temperature)
+      return
+
     max_start_pos = max(1, (cache.max_length or len(input_ids) + max_new_tokens) - 1)
-    rollout_jit = TinyJit(lambda token, start_pos: self._rollout_next_token(token, start_pos, cache, temperature))
-    self._last_rollout_jit = rollout_jit
+    has_per_layer_inputs = bool(self.model.hidden_size_per_layer_input)
+    if has_per_layer_inputs:
+      rollout_jit = TinyJit(lambda inputs_embeds, per_layer_inputs, position_ids, start_pos: self._rollout_next_embeds(inputs_embeds, position_ids, start_pos, cache, temperature, per_layer_inputs=per_layer_inputs))
+    else:
+      rollout_jit = TinyJit(lambda inputs_embeds, position_ids, start_pos: self._rollout_next_embeds(inputs_embeds, position_ids, start_pos, cache, temperature))
+    sliding_start = self._sliding_decode_start()
+    sliding_rollout_jit = None
+    if sliding_start is not None and sliding_start <= max_start_pos:
+      if has_per_layer_inputs:
+        sliding_rollout_jit = TinyJit(lambda inputs_embeds, per_layer_inputs, position_ids, start_pos: self._rollout_next_embeds(inputs_embeds, position_ids, start_pos, cache, temperature, per_layer_inputs=per_layer_inputs, decode_sliding_window=True))
+      else:
+        sliding_rollout_jit = TinyJit(lambda inputs_embeds, position_ids, start_pos: self._rollout_next_embeds(inputs_embeds, position_ids, start_pos, cache, temperature, decode_sliding_window=True))
+    self._last_rollout_jit = sliding_rollout_jit or rollout_jit
+    self._last_rollout_jits = [rollout_jit] + ([sliding_rollout_jit] if sliding_rollout_jit is not None else [])
     for idx in range(max_new_tokens):
       token_id = int(next_token.item())
       yield token_id
@@ -675,6 +852,31 @@ class GemmaForCausalLM:
       if idx == max_new_tokens - 1:
         break
       start_pos = cache.past_seen_tokens
-      start_var = Variable("gemma_start_pos", 0, max_start_pos).bind(start_pos)
-      next_token = rollout_jit(next_token.reshape(1, 1).contiguous(), start_var)
-      cache.set_active_length(start_pos + 1)
+      if self._last_decode_fallback:
+        next_token, cache = self._eager_next_from_token_id(token_id, cache, temperature)
+        continue
+      try:
+        inputs_embeds, per_layer_inputs, position_ids = self._decode_token_inputs(token_id, start_pos)
+      except RuntimeError as exc:
+        if "input to kernel must be AFTER or BUFFER" not in str(exc):
+          raise
+        self._last_decode_fallback = True
+        next_token, cache = self._eager_next_from_token_id(token_id, cache, temperature)
+        continue
+      use_sliding_window = sliding_rollout_jit is not None and sliding_start is not None and start_pos >= sliding_start
+      start_lower = sliding_start if use_sliding_window else 0
+      var_name = "gemma_start_pos_window" if use_sliding_window else "gemma_start_pos"
+      start_var = Variable(var_name, start_lower, max_start_pos).bind(start_pos)
+      active_rollout_jit = sliding_rollout_jit if use_sliding_window else rollout_jit
+      try:
+        if has_per_layer_inputs:
+          next_token = active_rollout_jit(inputs_embeds, per_layer_inputs, position_ids, start_var)
+        else:
+          next_token = active_rollout_jit(inputs_embeds, position_ids, start_var)
+        cache.set_active_length(start_pos + 1)
+      except RuntimeError as exc:
+        if "input to kernel must be AFTER or BUFFER" not in str(exc):
+          raise
+        self._last_decode_fallback = True
+        logits, cache = self(inputs_embeds=inputs_embeds, per_layer_inputs=per_layer_inputs, position_ids=position_ids, cache=cache)
+        next_token = self.sample_next(logits[:, -1, :], temperature=temperature)

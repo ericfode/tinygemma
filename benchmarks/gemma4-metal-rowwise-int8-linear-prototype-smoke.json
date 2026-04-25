@@ -1,0 +1,77 @@
+{
+  "best_variant": {
+    "median_ms": 0.011437485227361321,
+    "min_ms": 0.01087499549612403,
+    "name": "rowwise_int8_decode_linear_global_x"
+  },
+  "device": "METAL",
+  "interpretation": "The repo can compile and launch raw Metal rowwise-int8 decode-linear kernels through tinygrad buffers.",
+  "module_check": {
+    "max_abs_error": 2.384185791015625e-07,
+    "output_shape": [
+      1,
+      1,
+      8
+    ],
+    "passed": true
+  },
+  "prototype": "raw tinygrad MetalProgram rowwise-int8 decode linear",
+  "repeats": 2,
+  "seed": 20260424,
+  "shape": {
+    "in_features": 16,
+    "local_size": 8,
+    "out_features": 8,
+    "threadgroups": [
+      1,
+      1,
+      1
+    ]
+  },
+  "tinygrad_path": "/Users/ericfode/.codex/worktrees/9b17/tinygrad-gemma/.venv/lib/python3.11/site-packages/tinygrad/__init__.py",
+  "variants": [
+    {
+      "correctness": {
+        "atol": 0.001,
+        "max_abs_error": 2.384185791015625e-07,
+        "mean_abs_error": 5.587935447692871e-08,
+        "passed": true
+      },
+      "name": "rowwise_int8_decode_linear_global_x",
+      "timing_ms": {
+        "max": 0.011999974958598614,
+        "median": 0.011437485227361321,
+        "min": 0.01087499549612403,
+        "samples": [
+          0.01087499549612403,
+          0.011999974958598614
+        ],
+        "warmup": [
+          0.014083285350352526
+        ]
+      }
+    },
+    {
+      "correctness": {
+        "atol": 0.001,
+        "max_abs_error": 2.384185791015625e-07,
+        "mean_abs_error": 5.587935447692871e-08,
+        "passed": true
+      },
+      "name": "rowwise_int8_decode_linear_threadgroup_x",
+      "timing_ms": {
+        "max": 0.6033749668858945,
+        "median": 0.30764579423703253,
+        "min": 0.011916621588170528,
+        "samples": [
+          0.6033749668858945,
+          0.011916621588170528
+        ],
+        "warmup": [
+          0.1709166681393981
+        ]
+      }
+    }
+  ],
+  "warmups": 1
+}
