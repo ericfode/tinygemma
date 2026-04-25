@@ -17,6 +17,22 @@ def load_profile_module():
 profile = load_profile_module()
 
 
+class FakeProgram:
+  pass
+
+
+class FakeGraphProgram:
+  def __init__(self, source_items: list["FakeItem"]):
+    self.jit_cache = source_items
+
+
+class FakeItem:
+  def __init__(self, category: str, prg=None):
+    self.category = category
+    self.prg = FakeProgram() if prg is None else prg
+    self.metadata = []
+
+
 def test_profile_raw_gate_up_mode_is_abandoned():
   try:
     profile.validate_metal_int8_gate_up_mode("raw")
@@ -28,3 +44,80 @@ def test_profile_raw_gate_up_mode_is_abandoned():
 
 def test_profile_default_gate_up_mode_is_allowed():
   profile.validate_metal_int8_gate_up_mode("default")
+
+
+def test_graph_batch_attribution_maps_batched_display_to_source_ranges():
+  first_batch = [
+    FakeItem("attention"),
+    FakeItem("mlp"),
+    FakeItem("mlp"),
+  ]
+  second_batch = [
+    FakeItem("norm"),
+    FakeItem("norm"),
+  ]
+  execution_items = [
+    FakeItem("graph_batch", FakeGraphProgram(first_batch)),
+    FakeItem("graph_batch", FakeGraphProgram(second_batch)),
+  ]
+  rows = [
+    {
+      "ordinal": 0,
+      "program_type": "MetalGraph",
+      "display_name": "<batched 3>",
+      "elapsed_ms": 4.0,
+    },
+    {
+      "ordinal": 1,
+      "program_type": "MetalGraph",
+      "display_name": "<batched 2>",
+      "elapsed_ms": 6.0,
+    },
+  ]
+
+  attribution = profile.attribute_execution_source_ranges(execution_items, rows)
+
+  assert attribution["status"] == "complete"
+  assert attribution["attributed_source_count"] == 5
+  assert attribution["items"][0]["source_start"] == 0
+  assert attribution["items"][0]["source_end"] == 2
+  assert attribution["items"][0]["category_counts"] == {"attention": 1, "mlp": 2}
+  assert attribution["items"][0]["category_basis"] == "source_item_metadata"
+  assert attribution["items"][1]["source_start"] == 3
+  assert attribution["items"][1]["source_end"] == 4
+  assert attribution["items"][1]["category_counts"] == {"norm": 2}
+  assert attribution["items"][1]["category_basis"] == "source_item_metadata"
+  assert attribution["category_basis_counts"] == {"source_item_metadata": 2}
+
+
+def test_graph_batch_attribution_rejects_unparsed_graph_display():
+  attribution = profile.attribute_execution_source_ranges(
+    [FakeItem("graph_batch", FakeGraphProgram([FakeItem("attention")]))],
+    [{"ordinal": 0, "program_type": "MetalGraph", "display_name": "<unknown>", "elapsed_ms": 1.0}],
+  )
+
+  assert attribution["status"] == "incomplete"
+  assert attribution["unparsed_graph_batches"] == 1
+  assert attribution["attributed_source_count"] == 1
+
+
+def test_graph_batch_attribution_detects_batch_count_mismatch():
+  attribution = profile.attribute_execution_source_ranges(
+    [FakeItem("graph_batch", FakeGraphProgram([FakeItem("attention")]))],
+    [{"ordinal": 0, "program_type": "MetalGraph", "display_name": "<batched 2>", "elapsed_ms": 1.0}],
+  )
+
+  assert attribution["status"] == "incomplete"
+  assert attribution["source_count_mismatches"] == 1
+
+
+def test_graph_batch_attribution_marks_unclassified_source_metadata():
+  attribution = profile.attribute_execution_source_ranges(
+    [FakeItem("graph_batch", FakeGraphProgram([FakeItem("other"), FakeItem("other")]))],
+    [{"ordinal": 0, "program_type": "MetalGraph", "display_name": "<batched 2>", "elapsed_ms": 1.0}],
+  )
+
+  assert attribution["status"] == "complete"
+  assert attribution["items"][0]["category_counts"] == {"other": 2}
+  assert attribution["items"][0]["category_basis"] == "unclassified_source_item_metadata"
+  assert attribution["category_basis_counts"] == {"unclassified_source_item_metadata": 1}

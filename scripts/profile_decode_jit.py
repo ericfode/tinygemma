@@ -10,13 +10,14 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from tinygrad import Tensor, TinyJit, Variable
-from tinygrad.device import Buffer
+from tinygrad import Device, Tensor, TinyJit, Variable
+from tinygrad.device import MultiBuffer
 from tinygrad.engine.jit import _prepare_jit_inputs
-from tinygrad.engine.realize import CompiledRunner
-from tinygrad.helpers import Context, GlobalCounters
+from tinygrad.engine.realize import CompiledRunner, ExecContext, ExecItem, resolve_params
+from tinygrad.helpers import Context, GlobalCounters, flatten
 from tinygrad.nn import state as nn_state
-from tinygrad.uop.ops import sym_infer
+from tinygrad.schedule import linear_to_schedule, pm_post_sched_cache
+from tinygrad.uop.ops import Ops, UOp, graph_rewrite, sym_infer
 
 import tinygrad
 from tinygrad_gemma import load_pretrained
@@ -39,6 +40,7 @@ from tinygrad_gemma.runtime import prepare_device
 DEFAULT_MODEL_DIR = Path("/Users/ericfode/Downloads/tinygrad-gemma/checkpoints/gemma-4-E2B-int8")
 DEFAULT_OUT = Path("benchmarks/gemma4-metal-postwindow-jit-profile-current.json")
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+BATCHED_DISPLAY_RE = re.compile(r"^<batched (?P<count>\d+)>$")
 
 
 def _source_range(obj) -> tuple[int, int]:
@@ -116,6 +118,126 @@ def classify_exec_item(prg, metadata) -> str:
   return classify_kernel(metadata)
 
 
+def source_category(item) -> str:
+  return getattr(item, "category", None) or classify_exec_item(item.prg, item.metadata)
+
+
+def graph_source_count(row: dict[str, Any]) -> int | None:
+  if "Graph" not in row["program_type"]:
+    return 1
+  match = BATCHED_DISPLAY_RE.match(row["display_name"])
+  return None if match is None else int(match.group("count"))
+
+
+def source_slice_summary(items) -> dict[str, Any]:
+  category_counts: dict[str, int] = defaultdict(int)
+  program_type_counts: dict[str, int] = defaultdict(int)
+  for item in items:
+    program_type_counts[type(item.prg).__name__ if item.prg is not None else ""] += 1
+    category_counts[source_category(item)] += 1
+  return {
+    "category_counts": dict(sorted(category_counts.items())),
+    "program_type_counts": dict(sorted(program_type_counts.items())),
+  }
+
+
+def category_basis(category_counts: dict[str, int], source_count: int) -> str:
+  if source_count == 0:
+    return "empty"
+  if sum(count for category, count in category_counts.items() if category != "other") > 0:
+    return "source_item_metadata"
+  return "unclassified_source_item_metadata"
+
+
+def execution_source_items(execution_item) -> list[Any]:
+  prg = execution_item.prg
+  return list(getattr(prg, "jit_cache", None) or [execution_item])
+
+
+def attribute_execution_source_ranges(execution_items, rows: list[dict[str, Any]]) -> dict[str, Any]:
+  cursor = 0
+  items = []
+  unparsed_graph_batches = 0
+  source_count_mismatches = 0
+  original_exec_count = 0
+  for execution_item, row in zip(execution_items, rows):
+    expected_source_count = graph_source_count(row)
+    source_items = execution_source_items(execution_item)
+    source_count = len(source_items)
+    original_exec_count += source_count
+    if expected_source_count is None:
+      unparsed_graph_batches += 1
+    elif expected_source_count != source_count:
+      source_count_mismatches += 1
+
+    source_start = cursor
+    source_end = cursor + source_count - 1
+    summary = source_slice_summary(source_items)
+    basis = category_basis(summary["category_counts"], source_count)
+    items.append({
+      "ordinal": row["ordinal"],
+      "program_type": row["program_type"],
+      "display_name": row["display_name"],
+      "elapsed_ms": row["elapsed_ms"],
+      "source_count": source_count,
+      "expected_source_count": expected_source_count,
+      "source_start": source_start,
+      "source_end": source_end,
+      "category_basis": basis,
+      **summary,
+    })
+    cursor += source_count
+
+  category_basis_counts: dict[str, int] = defaultdict(int)
+  for item in items:
+    category_basis_counts[item["category_basis"]] += 1
+  return {
+    "status": (
+      "complete"
+      if unparsed_graph_batches == 0 and source_count_mismatches == 0 and len(execution_items) == len(rows)
+      else "incomplete"
+    ),
+    "original_exec_count": original_exec_count,
+    "attributed_source_count": cursor,
+    "unattributed_tail_count": max(0, original_exec_count - cursor),
+    "unparsed_graph_batches": unparsed_graph_batches,
+    "source_count_mismatches": source_count_mismatches,
+    "execution_row_count": len(rows),
+    "execution_item_count": len(execution_items),
+    "category_basis_counts": dict(sorted(category_basis_counts.items())),
+    "items": items,
+  }
+
+
+def attach_source_attribution(rows: list[dict[str, Any]], attribution: dict[str, Any]) -> None:
+  by_ordinal = {item["ordinal"]: item for item in attribution["items"]}
+  for row in rows:
+    item = by_ordinal.get(row["ordinal"])
+    if item is None:
+      continue
+    row["source_start"] = item["source_start"]
+    row["source_end"] = item["source_end"]
+    row["source_count"] = item["source_count"]
+    row["source_category_counts"] = item["category_counts"]
+    row["source_category_basis"] = item["category_basis"]
+
+
+def lower_profile_call(call: UOp, ctx: ExecContext, input_uops: tuple[UOp, ...]) -> ExecItem:
+  ast = call.src[0]
+  if ast.op is Ops.CUSTOM_FUNCTION and ast.arg == "graph":
+    inputs = resolve_params(ctx, call)
+    bufs = flatten([b.bufs if isinstance(b, MultiBuffer) else [b] for b in (u.buffer for u in inputs)])
+    graph_ast = ast.substitute(dict(zip(ast.src[1:], inputs)))
+    graph_device = graph_ast.device if isinstance(graph_ast.device, str) else graph_ast.device[0]
+    return ExecItem(ast, bufs, call.arg.metadata, prg=Device[graph_device].graph(graph_ast, bufs))
+
+  resolved_linear = graph_rewrite(UOp(Ops.LINEAR, src=(call,)), pm_post_sched_cache, ctx=({}, input_uops), walk=True, name="profile jit call params to buffers")
+  items = linear_to_schedule(resolved_linear)
+  if len(items) != 1:
+    raise RuntimeError(f"expected one lowered item for profile call, got {len(items)}")
+  return items[0].lower()
+
+
 def checkpoint_quantization_summary(model_dir: Path) -> dict[str, Any]:
   manifest = load_quantization_manifest(model_dir)
   tensors = {} if manifest is None else manifest.get("tensors", {})
@@ -180,54 +302,45 @@ def build_zero_cache(model, context_length: int, max_length: int) -> GemmaCache:
   return cache
 
 
-def run_captured_items(captured, token: Tensor, start_var) -> tuple[list[dict[str, Any]], dict[str, int]]:
-  input_buffers, var_vals, names, expected_info = _prepare_jit_inputs((token, start_var), {})
+def run_captured_items(captured, token: Tensor, start_var) -> tuple[list[dict[str, Any]], dict[str, int], list[ExecItem]]:
+  input_uops, var_vals, names, expected_info = _prepare_jit_inputs((token, start_var), {})
   if names != captured.expected_names:
     raise RuntimeError(f"JIT input names changed: {names!r} != {captured.expected_names!r}")
   if expected_info != captured.expected_input_info:
     raise RuntimeError("JIT input metadata changed before profiling")
 
-  for idx, offset, device, size, dtype in captured.extra_view_inputs:
-    input_buffers.append(Buffer(device, size, dtype, base=input_buffers[idx], offset=offset).ensure_allocated())
-  for (item_idx, buffer_idx), input_idx in captured._input_replace.items():
-    captured._jit_cache[item_idx].bufs[buffer_idx] = input_buffers[input_idx]
-
+  input_uops_tuple = tuple(input_uops)
+  ctx = ExecContext(var_vals, input_uops_tuple, do_update_stats=False, jit=True)
+  execution_items = [lower_profile_call(call, ctx, input_uops_tuple) for call in captured.linear.src]
   rows = []
-  try:
-    if captured._first_run:
-      for item in captured.jit_cache:
-        for buffer in item.bufs:
-          if buffer is not None:
-            buffer.ensure_allocated()
-      captured._first_run = False
-
-    for ordinal, item in enumerate(captured._jit_cache):
-      item.lower()
-      prg = item.prg
-      metadata = _metadata_payload(item.metadata)
-      category = classify_exec_item(prg, item.metadata)
-      program_type = type(prg).__name__ if prg is not None else ""
-      display_name = "" if prg is None else strip_ansi(prg.display_name)
-      device = "" if prg is None else prg.device
-      est_ops = sym_infer(prg.estimates.ops, var_vals) if isinstance(prg, CompiledRunner) else 0
-      est_mem = sym_infer(prg.estimates.mem, var_vals) if isinstance(prg, CompiledRunner) else 0
-      start = time.perf_counter()
-      elapsed = item.run(var_vals, wait=True, jit=True, do_update_stats=False)
-      wall_elapsed = time.perf_counter() - start
-      rows.append({
-        "ordinal": ordinal,
-        "category": category,
-        "program_type": program_type,
-        "display_name": display_name,
-        "device": device,
-        "elapsed_ms": (elapsed if elapsed is not None else wall_elapsed) * 1000.0,
-        "est_ops": int(est_ops),
-        "est_mem": int(est_mem),
-        "metadata": metadata,
-      })
-  finally:
-    captured._clear_inputs()
-  return rows, var_vals
+  for ordinal, item in enumerate(execution_items):
+    item.lower()
+    for buffer in item.bufs:
+      if buffer is not None:
+        buffer.ensure_allocated()
+    prg = item.prg
+    metadata = _metadata_payload(item.metadata)
+    category = classify_exec_item(prg, item.metadata)
+    program_type = type(prg).__name__ if prg is not None else ""
+    display_name = "" if prg is None else strip_ansi(prg.display_name)
+    device = "" if prg is None else prg.device
+    est_ops = sym_infer(prg.estimates.ops, var_vals) if isinstance(prg, CompiledRunner) else 0
+    est_mem = sym_infer(prg.estimates.mem, var_vals) if isinstance(prg, CompiledRunner) else 0
+    start = time.perf_counter()
+    elapsed = item.run(var_vals, wait=True, jit=True, do_update_stats=False)
+    wall_elapsed = time.perf_counter() - start
+    rows.append({
+      "ordinal": ordinal,
+      "category": category,
+      "program_type": program_type,
+      "display_name": display_name,
+      "device": device,
+      "elapsed_ms": (elapsed if elapsed is not None else wall_elapsed) * 1000.0,
+      "est_ops": int(est_ops),
+      "est_mem": int(est_mem),
+      "metadata": metadata,
+    })
+  return rows, var_vals, execution_items
 
 
 def summarize_exec_items(items) -> dict[str, Any]:
@@ -285,12 +398,32 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
   with path.open("w", newline="") as handle:
-    writer = csv.DictWriter(handle, fieldnames=["ordinal", "category", "program_type", "display_name", "device", "elapsed_ms", "est_ops", "est_mem", "metadata"])
+    writer = csv.DictWriter(handle, fieldnames=[
+      "ordinal",
+      "category",
+      "program_type",
+      "display_name",
+      "device",
+      "elapsed_ms",
+      "est_ops",
+      "est_mem",
+      "source_start",
+      "source_end",
+      "source_count",
+      "source_category_counts",
+      "source_category_basis",
+      "metadata",
+    ], lineterminator="\n")
     writer.writeheader()
     for row in rows:
       writer.writerow({
         **{key: row[key] for key in ("ordinal", "category", "display_name", "device", "elapsed_ms", "est_ops", "est_mem")},
         "program_type": row["program_type"],
+        "source_start": row.get("source_start", ""),
+        "source_end": row.get("source_end", ""),
+        "source_count": row.get("source_count", ""),
+        "source_category_counts": json.dumps(row.get("source_category_counts", {}), sort_keys=True),
+        "source_category_basis": row.get("source_category_basis", ""),
         "metadata": json.dumps(row["metadata"], sort_keys=True),
       })
 
@@ -331,11 +464,30 @@ def main() -> None:
     captured = rollout_jit.captured
     if captured is None:
       raise RuntimeError("decode TinyJit did not capture")
-    original_capture_summary = summarize_exec_items(captured.jit_cache)
-    post_graph_summary = summarize_exec_items(captured._jit_cache)
     GlobalCounters.reset()
-    rows, var_vals = run_captured_items(captured, token, Variable("gemma_start_pos_window", sliding_start, max_length - 1).bind(profile_start))
+    rows, var_vals, execution_items = run_captured_items(captured, token, Variable("gemma_start_pos_window", sliding_start, max_length - 1).bind(profile_start))
 
+  source_attribution = attribute_execution_source_ranges(execution_items, rows)
+  attach_source_attribution(rows, source_attribution)
+  original_capture_summary = {
+    "exec_count": source_attribution["original_exec_count"],
+    "program_type_counts": source_slice_summary([source_item for execution_item in execution_items for source_item in execution_source_items(execution_item)])["program_type_counts"],
+    "category_counts": source_slice_summary([source_item for execution_item in execution_items for source_item in execution_source_items(execution_item)])["category_counts"],
+    "graph_batch_count": 0,
+    "compiled_runner_count": sum(
+      1
+      for execution_item in execution_items
+      for source_item in execution_source_items(execution_item)
+      if type(source_item.prg).__name__ == "CompiledRunner"
+    ),
+    "raw_gate_up_runner_count": sum(
+      1
+      for execution_item in execution_items
+      for source_item in execution_source_items(execution_item)
+      if type(source_item.prg).__name__ == "RowwiseInt8DecodeLinearRunner"
+    ),
+  }
+  post_graph_summary = summarize_exec_items(execution_items)
   csv_out = args.csv_out or args.out.with_suffix(".csv")
   write_csv(csv_out, rows)
   payload = {
@@ -364,6 +516,7 @@ def main() -> None:
     "var_vals": var_vals,
     "original_capture": original_capture_summary,
     "post_graph_execution": post_graph_summary,
+    "source_attribution": source_attribution,
     "summary": summarize_rows(rows),
     "csv": str(csv_out),
   }
@@ -378,6 +531,26 @@ def main() -> None:
     "metal_int8_gate_up": args.metal_int8_gate_up,
     "original_capture": payload["original_capture"],
     "post_graph_execution": payload["post_graph_execution"],
+    "source_attribution": {
+      "status": source_attribution["status"],
+      "original_exec_count": source_attribution["original_exec_count"],
+      "attributed_source_count": source_attribution["attributed_source_count"],
+      "unattributed_tail_count": source_attribution["unattributed_tail_count"],
+      "unparsed_graph_batches": source_attribution["unparsed_graph_batches"],
+      "category_basis_counts": source_attribution["category_basis_counts"],
+      "top_elapsed_batches": [
+        {
+          "ordinal": item["ordinal"],
+          "elapsed_ms": round(item["elapsed_ms"], 3),
+          "source_count": item["source_count"],
+          "source_start": item["source_start"],
+          "source_end": item["source_end"],
+          "category_basis": item["category_basis"],
+          "category_counts": item["category_counts"],
+        }
+        for item in sorted(source_attribution["items"], key=lambda item: item["elapsed_ms"], reverse=True)[:5]
+      ],
+    },
     "by_category": {
       key: {
         "kernel_count": value["kernel_count"],

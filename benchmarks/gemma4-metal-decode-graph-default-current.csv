@@ -1,9 +1,9 @@
-ordinal,category,program_type,display_name,device,elapsed_ms,est_ops,est_mem,metadata
-0,graph_batch,MetalGraph,<batched 32>,METAL,0.2848749281838536,0,0,[]
-1,graph_batch,MetalGraph,<batched 64>,METAL,0.5862499820068479,0,0,[]
-2,graph_batch,MetalGraph,<batched 128>,METAL,1.2399166589602828,0,0,[]
-3,graph_batch,MetalGraph,<batched 256>,METAL,2.7730000438168645,0,0,[]
-4,graph_batch,MetalGraph,<batched 512>,METAL,7.006541593000293,0,0,[]
-5,graph_batch,MetalGraph,<batched 1024>,METAL,12.807291699573398,0,0,[]
-6,graph_batch,MetalGraph,<batched 2048>,METAL,27.314124978147447,0,0,[]
-7,graph_batch,MetalGraph,<batched 743>,METAL,15.704500023275614,0,0,[]
+ordinal,category,program_type,display_name,device,elapsed_ms,est_ops,est_mem,source_start,source_end,source_count,source_category_counts,source_category_basis,metadata
+0,graph_batch,MetalGraph,<batched 32>,METAL,0.8920417167246342,0,0,0,31,32,"{""other"": 32}",unclassified_source_item_metadata,[]
+1,graph_batch,MetalGraph,<batched 64>,METAL,1.9731667125597596,0,0,32,95,64,"{""other"": 64}",unclassified_source_item_metadata,[]
+2,graph_batch,MetalGraph,<batched 128>,METAL,3.2394167501479387,0,0,96,223,128,"{""other"": 128}",unclassified_source_item_metadata,[]
+3,graph_batch,MetalGraph,<batched 256>,METAL,4.117375006899238,0,0,224,479,256,"{""other"": 256}",unclassified_source_item_metadata,[]
+4,graph_batch,MetalGraph,<batched 512>,METAL,8.789166691713035,0,0,480,991,512,"{""other"": 512}",unclassified_source_item_metadata,[]
+5,graph_batch,MetalGraph,<batched 1024>,METAL,12.203749967738986,0,0,992,2015,1024,"{""other"": 1024}",unclassified_source_item_metadata,[]
+6,graph_batch,MetalGraph,<batched 2048>,METAL,26.167416595853865,0,0,2016,4063,2048,"{""other"": 2048}",unclassified_source_item_metadata,[]
+7,graph_batch,MetalGraph,<batched 1175>,METAL,20.695791696198285,0,0,4064,5238,1175,"{""other"": 1175}",unclassified_source_item_metadata,[]

@@ -1,5 +1,57 @@
 # Evolution Log
 
+## 2026-04-25 - Default Graph Batch Attribution
+
+- Hypothesis: the default JIT=1 post-window `MetalGraph` profile can be made
+  structurally attributable under current tinygrad by lowering
+  `CapturedJit.linear` graph calls and mapping each `<batched N>` row to the
+  graph runner's source `ExecItem` range. Invalidation criterion: any unparsed
+  graph display, source-count mismatch, row/item count mismatch, or
+  unattributed source tail.
+- Research: current tinygrad no longer exposes the old
+  `captured.jit_cache`/`captured._jit_cache` surface used by the profiler.
+  The current path is `CapturedJit.linear`; graph calls lower through
+  `exec_graph` using `resolve_params`, `MultiBuffer` flattening, and
+  `Device[graph_device].graph(...)`.
+- Implemented `scripts/profile_decode_jit.py` support for lowering current
+  graph calls into executable profile rows, recording `source_start`,
+  `source_end`, `source_count`, `source_category_counts`, and
+  `source_category_basis` in the CSV/JSON artifacts.
+- Added focused coverage in `tests/test_profile_decode_jit.py` for complete
+  batch attribution, unparsed graph displays, batch-count mismatches, and the
+  unclassified-source-metadata boundary.
+- Real artifact:
+  `benchmarks/gemma4-metal-decode-graph-default-current.json` now reports
+  `source_attribution.status=complete`, `original_exec_count=5239`,
+  `attributed_source_count=5239`, `unparsed_graph_batches=0`,
+  `source_count_mismatches=0`, and `unattributed_tail_count=0`.
+- The refreshed profile still has 8 `MetalGraph` launches and measured the
+  profiled token at `78.078` ms. The slowest rows are `<batched 2048>` at
+  `26.167417` ms for source range `2016-4063`, `<batched 1175>` at
+  `20.695792` ms for range `4064-5238`, and `<batched 1024>` at
+  `12.203750` ms for range `992-2015`.
+- Invalidation attempt: category metadata did not survive the current lowered
+  graph source items. The artifact records
+  `category_basis_counts={"unclassified_source_item_metadata": 8}` so the
+  graph range map is accepted while source-category bottleneck claims remain
+  explicitly blocked.
+- Verification on 2026-04-25: `.venv/bin/python -m pytest -q
+  tests/test_profile_decode_jit.py` passed with `6 passed, 2 warnings`;
+  `.venv/bin/python -m py_compile scripts/profile_decode_jit.py` passed; the
+  real E2B int8 `METAL` profiler command refreshed the JSON/CSV artifacts;
+  `.venv/bin/python -m json.tool configs/repo-loop-state.json` passed;
+  `git diff --check` passed; `.venv/bin/tinygrad-gemma --help` exited 0;
+  full `.venv/bin/python -m pytest -q` passed with `47 passed, 2 warnings in
+  56.86s`; and `.venv/bin/python scripts/smoke_metal.py` reported
+  `default_device=METAL`, `generated_tokens=4`, `rollout_jit_count=3`, and
+  `decode_fallback=False`.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Next target: recover source-category attribution for the complete graph
+  ranges from a current ungraphed sidecar profile or tinygrad source metadata,
+  then choose the next real model-path bottleneck.
+
 ## 2026-04-25 - Raw Gate/Up Path Abandoned
 
 - Hypothesis: raw Metal rowwise-int8 gate/up can only remain a useful 100 TPS

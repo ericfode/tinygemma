@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "raw-gate-up-abandoned-019",
+  "current_checkpoint": "default-graph-batch-attribution-020",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -262,6 +262,18 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "default-graph-batch-attribution-020",
+      "summary": "Updated the decode TinyJit profiler for current tinygrad CapturedJit.linear graph calls and attributed the default JIT=1 MetalGraph profile back to source item ranges. The refreshed artifact proves 8 MetalGraph rows account for all 5239 source items with no unparsed batches, no count mismatches, and no unattributed tail. Current lowered graph metadata is unclassified, so no throughput row or source-category bottleneck was superseded.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-default-current.json",
+        "benchmarks/gemma4-metal-decode-graph-default-current.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -269,7 +281,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "default-decode-graph-batch-attribution",
-  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. Raw Metal rowwise-int8 gate/up is abandoned: it fragments graph batching, regressed the 200/20 row, and fresh raw-mode profiler validation failed with RuntimeError('Invalid library file'). The next narrow target is to attribute the default JIT=1 post-window MetalGraph batches back to JIT=2 source categories or runner ranges, then choose the next real bottleneck among norm, attention, logits/argmax, or cache growth before making another model-path optimization.",
-  "updated_at": "2026-04-25T11:37:05-0700"
+  "next_target": "default-graph-category-recapture",
+  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The default JIT=1 graph artifact now maps 8 MetalGraph batches to all 5239 lowered source items, but current tinygrad lowered graph metadata is unclassified. The next narrow target is to recover category attribution for those source ranges from a current ungraphed sidecar profile or tinygrad source metadata before making another model-path optimization.",
+  "updated_at": "2026-04-25T13:49:34-0700"
 }
