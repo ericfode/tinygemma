@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from typing import Sequence
 
 import numpy as np
@@ -9,8 +8,6 @@ import numpy as np
 from tinygrad import Tensor, TinyJit, Variable, nn
 
 from .config import GemmaConfig
-from .metal_int8 import metal_rowwise_int8_decode_linear
-
 DEFAULT_IGNORE_INDEX = -100
 
 
@@ -281,13 +278,9 @@ class GemmaMLP:
     return fused
 
   def _can_use_metal_fused_int8_gate_up(self, x: Tensor) -> bool:
-    return (
-      (getattr(self, "_force_metal_fused_int8_gate_up", False) or os.environ.get("TINYGRAD_GEMMA_METAL_INT8_GATE_UP") == "1")
-      and isinstance(x.device, str)
-      and x.device == "METAL"
-      and int(np.prod(x.shape[:-1])) == 1
-      and x.shape[-1] <= 4096
-    )
+    # The raw Metal custom Runner is replay-safe but graph-breaking. Keep this
+    # disabled until there is a graphable tinygrad-native replacement.
+    return False
 
   def __call__(self, x: Tensor) -> Tensor:
     if self._can_use_fused_gate_up():
@@ -295,11 +288,8 @@ class GemmaMLP:
       return self.down_proj(apply_activation(self.config.activation_name, gate) * up)
     if self._can_use_fused_int8_gate_up():
       weight, scale = self._fused_int8_gate_up_weight_scale()
-      if self._can_use_metal_fused_int8_gate_up(x):
-        gate_up = metal_rowwise_int8_decode_linear(x, weight, scale).cast(x.dtype)
-      else:
-        gate_up = x.matmul(weight.transpose(), dtype="float")
-        gate_up = (gate_up * scale.reshape(*([1] * (gate_up.ndim - 1)), scale.shape[0])).cast(x.dtype)
+      gate_up = x.matmul(weight.transpose(), dtype="float")
+      gate_up = (gate_up * scale.reshape(*([1] * (gate_up.ndim - 1)), scale.shape[0])).cast(x.dtype)
       gate, up = gate_up.chunk(2, dim=-1)
       return self.down_proj(apply_activation(self.config.activation_name, gate) * up)
     return self.down_proj(apply_activation(self.config.activation_name, self.gate_proj(x)) * self.up_proj(x))

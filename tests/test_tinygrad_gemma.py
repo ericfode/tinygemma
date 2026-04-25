@@ -35,7 +35,7 @@ from tinygrad_gemma import (
 )
 from tinygrad_gemma.cli import DEFAULT_MAX_BEAM, resolve_beam
 from tinygrad_gemma.metal_int8 import metal_rowwise_int8_decode_linear
-from tinygrad_gemma.model import build_attention_mask
+from tinygrad_gemma.model import GemmaMLP, build_attention_mask
 from tinygrad_gemma.quantization import RowwiseInt8Linear, quantize_state_dict
 from tinygrad_gemma.runtime import temporary_default_device
 from tinygrad_gemma.tokenizer import GemmaTokenizer
@@ -1005,6 +1005,14 @@ def test_metal_rowwise_int8_decode_linear_rejects_non_metal():
 
   with pytest.raises(RuntimeError, match="expects x on METAL"):
     metal_rowwise_int8_decode_linear(x, qweight, scale)
+
+
+def test_gemma_mlp_raw_metal_gate_up_path_is_disabled_until_graphable():
+  mlp = GemmaMLP(make_config(), 0)
+  mlp._force_metal_fused_int8_gate_up = True
+  fake_metal_decode_row = type("FakeTensor", (), {"device": "METAL", "shape": (1, 1, 4)})()
+
+  assert mlp._can_use_metal_fused_int8_gate_up(fake_metal_decode_row) is False
 
 
 def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):

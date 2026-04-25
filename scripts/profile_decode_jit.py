@@ -4,7 +4,6 @@ import argparse
 import csv
 import inspect
 import json
-import os
 import re
 import time
 from collections import defaultdict
@@ -144,6 +143,13 @@ def checkpoint_quantization_summary(model_dir: Path) -> dict[str, Any]:
 
 def language_model(model):
   return getattr(model.model, "language_model", model.model)
+
+
+def validate_metal_int8_gate_up_mode(mode: str) -> None:
+  if mode == "raw":
+    raise SystemExit(
+      "--metal-int8-gate-up raw is abandoned: the custom Runner breaks MetalGraph batching and is not a graphable decode optimization path"
+    )
 
 
 def build_zero_cache(model, context_length: int, max_length: int) -> GemmaCache:
@@ -300,11 +306,7 @@ def main() -> None:
   parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
   parser.add_argument("--csv-out", type=Path)
   args = parser.parse_args()
-
-  if args.metal_int8_gate_up == "raw":
-    os.environ["TINYGRAD_GEMMA_METAL_INT8_GATE_UP"] = "1"
-  else:
-    os.environ.pop("TINYGRAD_GEMMA_METAL_INT8_GATE_UP", None)
+  validate_metal_int8_gate_up_mode(args.metal_int8_gate_up)
 
   resolved_device = prepare_device(args.device)
   model = load_pretrained(args.model_dir, device=resolved_device)

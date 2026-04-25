@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "benchmark-acceptance-beam0-contract-018",
+  "current_checkpoint": "raw-gate-up-abandoned-019",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -248,6 +248,20 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "raw-gate-up-abandoned-019",
+      "summary": "Explicitly abandoned the raw Metal rowwise-int8 gate/up Runner as a Gemma decode optimization route after graph-fragmentation evidence and a fresh raw-mode profiler failure. Production GemmaMLP stays on the graphable tinygrad-native fused int8 path, and raw profiler/diagnostic entrypoints now report the abandonment instead of silently enabling the custom Runner. No throughput row was superseded.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/profile_decode_jit.py",
+        "scripts/diagnose_metal_mlp_runtime_gate_up.py",
+        "tests/test_profile_decode_jit.py",
+        "tests/test_tinygrad_gemma.py",
+        "benchmarks/gemma4-metal-mlp-runtime-gate-up-diagnostic-current.json",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -255,7 +269,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "graphable-compiled-int8-gate-up-or-abandon",
-  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The JIT=1 graph diagnostic shows the default path captures 4807 CompiledRunner items and condenses to 8 MetalGraph batches at 67.716500 ms for the profiled post-window token. The opt-in raw gate/up path captures 13657 CompiledRunner items plus 35 RowwiseInt8DecodeLinearRunner items, fragments execution into 37 MetalGraph batches plus 35 raw launches, and measures 197.940124 ms. Do not tune the custom Python Runner further. The next narrow target is to determine whether a graphable compiled/tinygrad-native rowwise-int8 gate/up path can be built in-repo; if not, explicitly abandon raw gate/up and move to the next measured decode bottleneck.",
-  "updated_at": "2026-04-25T11:19:35-0700"
+  "next_target": "default-decode-graph-batch-attribution",
+  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. Raw Metal rowwise-int8 gate/up is abandoned: it fragments graph batching, regressed the 200/20 row, and fresh raw-mode profiler validation failed with RuntimeError('Invalid library file'). The next narrow target is to attribute the default JIT=1 post-window MetalGraph batches back to JIT=2 source categories or runner ranges, then choose the next real bottleneck among norm, attention, logits/argmax, or cache growth before making another model-path optimization.",
+  "updated_at": "2026-04-25T11:37:05-0700"
 }

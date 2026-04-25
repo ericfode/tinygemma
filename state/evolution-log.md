@@ -1,5 +1,48 @@
 # Evolution Log
 
+## 2026-04-25 - Raw Gate/Up Path Abandoned
+
+- Hypothesis: raw Metal rowwise-int8 gate/up can only remain a useful 100 TPS
+  route if it can be made graphable or at least kept as a reliable explicit
+  diagnostic mode without risking production benchmark contamination.
+- Recovery evidence already invalidated the graphability part: the default
+  post-window decode capture condenses to 8 `MetalGraph` batches, while raw
+  gate/up fragments into 37 `MetalGraph` batches plus 35 custom
+  `RowwiseInt8DecodeLinearRunner` launches and regresses the profiled token
+  from `67.716500` ms to `197.940124` ms.
+- Fresh invalidation on 2026-04-25: running
+  `env DEBUG=0 .venv/bin/python scripts/profile_decode_jit.py --jit-mode 1
+  --metal-int8-gate-up raw --out /tmp/tinygrad-gemma-raw-gate-up-private.json
+  --csv-out /tmp/tinygrad-gemma-raw-gate-up-private.csv` failed before
+  producing a row with `RuntimeError: Invalid library file` from the raw Metal
+  program compile path. Re-running outside the sandbox produced the same
+  failure.
+- Implemented the abandonment instead of another raw-kernel tuning pass:
+  `GemmaMLP` no longer imports or dispatches
+  `metal_rowwise_int8_decode_linear`; the fused runtime-int8 MLP path stays on
+  the graphable tinygrad-native matmul/scale implementation.
+- `scripts/profile_decode_jit.py --metal-int8-gate-up raw` now exits with an
+  explicit abandonment message, and
+  `scripts/diagnose_metal_mlp_runtime_gate_up.py` writes
+  `summary.status=abandoned_graph_breaking_runner`.
+- Refreshed
+  `benchmarks/gemma4-metal-mlp-runtime-gate-up-diagnostic-current.json` with
+  that abandoned status so the durable artifact no longer claims the raw path
+  is a live optimization candidate.
+- Verification on 2026-04-25: full tests passed with `43 passed, 2 warnings in
+  60.42s`; `.venv/bin/tinygrad-gemma --help` exited 0;
+  `.venv/bin/python -m py_compile scripts/profile_decode_jit.py
+  scripts/diagnose_metal_mlp_runtime_gate_up.py tinygrad_gemma/model.py`
+  passed; `git diff --check` passed; `.venv/bin/python scripts/smoke_metal.py`
+  reported `default_device=METAL`, `generated_tokens=4`,
+  `rollout_jit_count=3`, and `decode_fallback=False`.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Next target: attribute the default JIT=1 post-window `MetalGraph` batches
+  back to JIT=2 source categories or runner ranges, then choose the next real
+  bottleneck among norm, attention, logits/argmax, or cache growth.
+
 ## 2026-04-25 - Benchmark Acceptance Beam 0 Contract
 
 - Recovery found pre-existing dirty benchmark state in
