@@ -1,5 +1,34 @@
 # Evolution Log
 
+## 2026-04-25 - Benchmark Acceptance Beam 0 Contract
+
+- Recovery found pre-existing dirty benchmark state in
+  `scripts/benchmark_gemma4_matrix.py` and untracked historical benchmark CSV
+  artifacts. The dirty loader override was tested as the current hypothesis:
+  forcing an int8-specific loader kwarg might preserve int8 benchmark
+  truthfulness.
+- The hypothesis was invalidated against the current loader contract:
+  `load_pretrained` now accepts `runtime_quantization`, not
+  `weight_only_quantize`; a stale kwarg would turn real benchmark attempts into
+  `load_error` rows instead of producing acceptance evidence.
+- Kept the useful part of the dirty benchmark change: the default beam matrix
+  now includes `beam=0`, which is the E2B int8 `METAL` acceptance row used by
+  this repo-loop lane.
+- Added focused tests in `tests/test_benchmark_gemma4_matrix.py` for both the
+  default beam list and the `benchmark_checkpoint` call boundary to
+  `load_pretrained`.
+- Verification on 2026-04-25: `.venv/bin/python -m pytest -q
+  tests/test_benchmark_gemma4_matrix.py` passed with `5 passed, 2 warnings in
+  0.14s`; `.venv/bin/python -m py_compile scripts/benchmark_gemma4_matrix.py`
+  passed.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Next target remains `graphable-compiled-int8-gate-up-or-abandon`: determine
+  whether a graphable compiled/tinygrad-native rowwise-int8 gate/up path can be
+  built in-repo; if not, explicitly abandon raw gate/up and move to the next
+  measured decode bottleneck.
+
 ## 2026-04-25 - Raw Gate/Up Graph Fragmentation Diagnostic
 
 - Extended `scripts/profile_decode_jit.py` with `--jit-mode` and

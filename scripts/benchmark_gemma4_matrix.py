@@ -20,6 +20,7 @@ from tinygrad_gemma.tokenizer import GemmaTokenizer
 
 SIZES = ("E2B", "E4B", "26B-A4B", "31B")
 FORMATS = ("bf16", "int8")
+DEFAULT_BEAMS = [0, 1, 2, 3, 4]
 
 
 def checkpoint_dir(root: Path, size: str, fmt: str) -> Path:
@@ -191,12 +192,12 @@ def benchmark_checkpoint(
   return rows
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(description="Benchmark Gemma 4 native tinygrad checkpoints across beam widths.")
   parser.add_argument("--root", type=Path, default=Path("checkpoints"))
   parser.add_argument("--sizes", nargs="*", default=list(SIZES), choices=list(SIZES))
   parser.add_argument("--formats", nargs="*", default=list(FORMATS), choices=list(FORMATS))
-  parser.add_argument("--beams", nargs="*", type=int, default=[1, 2, 3, 4])
+  parser.add_argument("--beams", nargs="*", type=int, default=DEFAULT_BEAMS)
   parser.add_argument("--devices", nargs="*", default=["METAL"])
   parser.add_argument("--prompt", default="hello")
   parser.add_argument("--max-new-tokens", type=int, default=1000)
@@ -205,6 +206,11 @@ def main() -> None:
   parser.add_argument("--resume", action="store_true", help="Append to an existing CSV and skip completed size/format/device/beam rows.")
   parser.add_argument("--progress-every", type=int, default=50, help="Emit progress after this many generated tokens. Use 0 to disable.")
   parser.add_argument("--progress-out", type=Path, help="Optional JSONL sidecar for progress events.")
+  return parser
+
+
+def main() -> None:
+  parser = build_parser()
   args = parser.parse_args()
   try:
     validate_decode_warmup_tokens(args.max_new_tokens, args.decode_warmup_tokens)

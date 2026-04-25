@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "raw-gate-up-graph-fragmentation-diagnostic",
+  "current_checkpoint": "benchmark-acceptance-beam0-contract-018",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -238,6 +238,16 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "benchmark-acceptance-beam0-contract-018",
+      "summary": "Pinned the benchmark matrix default to include the beam=0 acceptance row and added tests that keep benchmark_checkpoint on the current load_pretrained contract, preventing stale int8-loader kwargs from turning measurement runs into load_error rows. No throughput row was superseded.",
+      "artifacts": [
+        "scripts/benchmark_gemma4_matrix.py",
+        "tests/test_benchmark_gemma4_matrix.py",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -247,5 +257,5 @@
   ],
   "next_target": "graphable-compiled-int8-gate-up-or-abandon",
   "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The JIT=1 graph diagnostic shows the default path captures 4807 CompiledRunner items and condenses to 8 MetalGraph batches at 67.716500 ms for the profiled post-window token. The opt-in raw gate/up path captures 13657 CompiledRunner items plus 35 RowwiseInt8DecodeLinearRunner items, fragments execution into 37 MetalGraph batches plus 35 raw launches, and measures 197.940124 ms. Do not tune the custom Python Runner further. The next narrow target is to determine whether a graphable compiled/tinygrad-native rowwise-int8 gate/up path can be built in-repo; if not, explicitly abandon raw gate/up and move to the next measured decode bottleneck.",
-  "updated_at": "2026-04-25T10:53:13-0700"
+  "updated_at": "2026-04-25T11:19:35-0700"
 }
