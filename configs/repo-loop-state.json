@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "jit2-sidecar-category-recapture-rejected-021",
+  "current_checkpoint": "captured-linear-metadata-preservation-probe-022",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -284,6 +284,16 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "captured-linear-metadata-preservation-probe-022",
+      "summary": "Added a minimal METAL diagnostic for tinygrad metadata preservation through TinyJit capture. Direct lazy Tensor ops preserve TRACEMETA caller metadata, but both JIT=1 and JIT=2 CapturedJit.linear calls and lowered ExecItems have zero metadata, proving category loss happens before captured-linear profiling rather than inside the Gemma profiler join. No throughput row was superseded.",
+      "artifacts": [
+        "scripts/diagnose_tinygrad_metadata_preservation.py",
+        "benchmarks/tinygrad-metadata-preservation-current.json",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -291,7 +301,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "captured-linear-metadata-preservation-probe",
-  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The default JIT=1 graph artifact maps 8 MetalGraph batches to all 5239 lowered source items, but current JIT=2 sidecar profiling also loses categories even with TRACEMETA=2 at process start. The next narrow target is to build a minimal current-tinygrad metadata-preservation probe around Tensor metadata, CapturedJit.linear calls, and linear_to_schedule/ExecItem metadata before making another model-path optimization.",
-  "updated_at": "2026-04-25T14:04:02-0700"
+  "next_target": "captured-linear-metadata-retention-fix-or-bypass",
+  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. Direct lazy Tensor ops preserve TRACEMETA caller metadata, but current TinyJit capture loses it before CapturedJit.linear in both JIT=1 and JIT=2. The next narrow target is to test a minimal metadata-retention fix in the local tinygrad capture path or a repo-local pre-capture metadata sidecar; do not make another model-path optimization until profiler category attribution is trustworthy.",
+  "updated_at": "2026-04-25T14:07:48-0700"
 }

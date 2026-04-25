@@ -1,0 +1,107 @@
+{
+  "captured_probes": [
+    {
+      "calls": [
+        {
+          "ast_op": "Ops.SINK",
+          "ast_toposort_metadata_count": 0,
+          "ast_toposort_metadata_examples": [],
+          "call_metadata": [],
+          "call_metadata_count": 0,
+          "lowered_exec_item_count": 1,
+          "lowered_exec_item_metadata_counts": [
+            0
+          ],
+          "ordinal": 0
+        }
+      ],
+      "captured": true,
+      "captured_ast_toposort_metadata_count": 0,
+      "captured_call_metadata_count": 0,
+      "captured_linear_call_count": 1,
+      "jit_mode": 1,
+      "lowered_exec_item_count": 1,
+      "lowered_exec_item_metadata_count": 0
+    },
+    {
+      "calls": [
+        {
+          "ast_op": "Ops.SINK",
+          "ast_toposort_metadata_count": 0,
+          "ast_toposort_metadata_examples": [],
+          "call_metadata": [],
+          "call_metadata_count": 0,
+          "lowered_exec_item_count": 1,
+          "lowered_exec_item_metadata_counts": [
+            0
+          ],
+          "ordinal": 0
+        }
+      ],
+      "captured": true,
+      "captured_ast_toposort_metadata_count": 0,
+      "captured_call_metadata_count": 0,
+      "captured_linear_call_count": 1,
+      "jit_mode": 2,
+      "lowered_exec_item_count": 1,
+      "lowered_exec_item_metadata_count": 0
+    }
+  ],
+  "device": "METAL",
+  "lazy_probe": {
+    "added_uop_metadata": [
+      {
+        "backward": "False",
+        "caller": "__main__:46::lazy_metadata_probe",
+        "name": "__add__"
+      }
+    ],
+    "multiplied_toposort_metadata_count": 6,
+    "multiplied_toposort_metadata_examples": [
+      {
+        "backward": "False",
+        "caller": "__main__:46::lazy_metadata_probe",
+        "name": "__add__"
+      },
+      {
+        "backward": "False",
+        "caller": "__main__:46::lazy_metadata_probe",
+        "name": "__add__"
+      },
+      {
+        "backward": "False",
+        "caller": "__main__:46::lazy_metadata_probe",
+        "name": "__add__"
+      },
+      {
+        "backward": "False",
+        "caller": "__main__:47::lazy_metadata_probe",
+        "name": "__mul__"
+      },
+      {
+        "backward": "False",
+        "caller": "__main__:47::lazy_metadata_probe",
+        "name": "__mul__"
+      },
+      {
+        "backward": "False",
+        "caller": "__main__:47::lazy_metadata_probe",
+        "name": "__mul__"
+      }
+    ],
+    "multiplied_uop_metadata": [
+      {
+        "backward": "False",
+        "caller": "__main__:47::lazy_metadata_probe",
+        "name": "__mul__"
+      }
+    ]
+  },
+  "summary": {
+    "captured_ast_toposort_metadata_count": 0,
+    "captured_call_metadata_count": 0,
+    "lazy_metadata_count": 6,
+    "lowered_exec_item_metadata_count": 0,
+    "status": "metadata_lost_before_captured_linear"
+  }
+}

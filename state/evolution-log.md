@@ -1,5 +1,47 @@
 # Evolution Log
 
+## 2026-04-25 - Captured Linear Metadata Preservation Probe
+
+- Hypothesis: current tinygrad creates Tensor caller metadata under
+  `TRACEMETA=2`, but loses it before or during `TinyJit` capture/lowering into
+  `CapturedJit.linear`. Invalidation criterion: a minimal captured call or
+  lowered `ExecItem` still contains caller metadata, which would put the bug in
+  the Gemma profiler rather than tinygrad capture metadata preservation.
+- Implemented `scripts/diagnose_tinygrad_metadata_preservation.py`, a minimal
+  METAL diagnostic that compares direct lazy Tensor metadata against the same
+  operation through `TinyJit` under JIT=1 and JIT=2, then inspects
+  `CapturedJit.linear` calls and lowered `ExecItem.metadata`.
+- Artifact: `benchmarks/tinygrad-metadata-preservation-current.json`.
+- Result: `summary.status=metadata_lost_before_captured_linear`.
+  Direct lazy Tensor ops preserved 6 metadata entries with callers from
+  `lazy_metadata_probe`, but JIT=1 and JIT=2 both reported
+  `captured_call_metadata_count=0`,
+  `captured_ast_toposort_metadata_count=0`, and
+  `lowered_exec_item_metadata_count=0`.
+- Conclusion: the Gemma graph/source profiler is not the layer losing source
+  categories. The category data is gone before `CapturedJit.linear`, so JIT=2
+  sidecars and graph-batch joins cannot recover categories without either a
+  tinygrad metadata-retention fix or a repo-local pre-capture metadata sidecar.
+- Verification on 2026-04-25:
+  `.venv/bin/python -m py_compile
+  scripts/diagnose_tinygrad_metadata_preservation.py` passed, and
+  `.venv/bin/python scripts/diagnose_tinygrad_metadata_preservation.py
+  --device METAL --out benchmarks/tinygrad-metadata-preservation-current.json`
+  wrote the artifact above. `.venv/bin/python -m json.tool` passed for the
+  loop-state and diagnostic JSON artifacts; `git diff --check` passed;
+  `.venv/bin/tinygrad-gemma --help` exited 0; full
+  `.venv/bin/python -m pytest -q` passed with `47 passed, 2 warnings in
+  59.20s`; and `.venv/bin/python scripts/smoke_metal.py` reported
+  `default_device=METAL`, `generated_tokens=4`, `rollout_jit_count=3`, and
+  `decode_fallback=False`.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Next target: test a minimal metadata-retention fix in the local tinygrad
+  capture path or a repo-local pre-capture metadata sidecar. Do not make
+  another model-path optimization until profiler category attribution is
+  trustworthy.
+
 ## 2026-04-25 - JIT2 Sidecar Category Recapture Rejected
 
 - Hypothesis: a current JIT=2 ungraphed sidecar profile has the same source-row
