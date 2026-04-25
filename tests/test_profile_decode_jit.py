@@ -86,9 +86,11 @@ def test_profile_classifies_repo_sidecar_metadata():
     FakeMetadata("attention_cache_write", "repo_sidecar:1::attention_cache_write"),
     FakeMetadata("attention_value_cache_write", "repo_sidecar:1::attention_value_cache_write"),
     FakeMetadata("attention_key_cache_write", "repo_sidecar:1::attention_key_cache_write"),
+    FakeMetadata("attention_value_cache_write_local", "repo_sidecar:1::attention_value_cache_write_local"),
+    FakeMetadata("attention_key_cache_write_shared_source", "repo_sidecar:1::attention_key_cache_write_shared_source"),
   ]
 
-  assert profile.classify_kernel(metadata) == "attention_key_cache_write"
+  assert profile.classify_kernel(metadata) == "attention_key_cache_write_shared_source"
 
 
 def test_profile_method_sidecar_patch_restores_original_method():
@@ -115,6 +117,13 @@ def test_profile_refines_attention_store_realize_scope():
     assert profile.attention_realize_sidecar_category([store_tensor]) == "attention_cache_write"
 
 
+def test_profile_classifies_cache_write_role():
+  assert profile.cache_write_role(False, False) == "local"
+  assert profile.cache_write_role(False, True) == "shared_source"
+  assert profile.cache_write_role(True, False) == "shared_consumer"
+  assert profile.cache_write_role(True, True) == "shared_consumer"
+
+
 def test_profile_cache_update_sidecar_patch_splits_key_and_value_scopes():
   original = profile.gemma_model.realize_cache_update
   calls = []
@@ -125,11 +134,20 @@ def test_profile_cache_update_sidecar_patch_splits_key_and_value_scopes():
 
   try:
     with profile.cache_update_sidecar_patch():
-      profile.gemma_model.realize_cache_update(key_cache, value_cache, "key", "value", 0, 1)
+      profile.gemma_model.realize_cache_update(
+        key_cache,
+        value_cache,
+        "key",
+        "value",
+        0,
+        1,
+        is_kv_shared_layer=False,
+        store_full_length_kv=True,
+      )
   finally:
     profile.gemma_model.realize_cache_update = original
 
-  assert calls == ["attention_key_cache_write", "attention_value_cache_write"]
+  assert calls == ["attention_key_cache_write_shared_source", "attention_value_cache_write_shared_source"]
 
 
 def test_graph_batch_attribution_maps_batched_display_to_source_ranges():

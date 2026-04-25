@@ -13,8 +13,10 @@
       "unclassified_source_item_metadata": 719
     },
     "category_counts": {
-      "attention_key_cache_write": 2260,
-      "attention_value_cache_write": 2260,
+      "attention_key_cache_write_local": 1696,
+      "attention_key_cache_write_shared_source": 564,
+      "attention_value_cache_write_local": 1696,
+      "attention_value_cache_write_shared_source": 564,
       "other": 719
     },
     "compiled_runner_count": 5239,
@@ -68,11 +70,11 @@
           "repo_sidecar_realize_scope_metadata": 32
         },
         "category_counts": {
-          "attention_key_cache_write": 26,
-          "attention_value_cache_write": 6
+          "attention_key_cache_write_local": 26,
+          "attention_value_cache_write_local": 6
         },
         "display_name": "<batched 32>",
-        "elapsed_ms": 1.0523333912715316,
+        "elapsed_ms": 0.7197083905339241,
         "expected_source_count": 32,
         "ordinal": 0,
         "program_type": "MetalGraph",
@@ -89,11 +91,11 @@
           "repo_sidecar_realize_scope_metadata": 64
         },
         "category_counts": {
-          "attention_key_cache_write": 35,
-          "attention_value_cache_write": 29
+          "attention_key_cache_write_local": 35,
+          "attention_value_cache_write_local": 29
         },
         "display_name": "<batched 64>",
-        "elapsed_ms": 2.3725000210106373,
+        "elapsed_ms": 3.879499970935285,
         "expected_source_count": 64,
         "ordinal": 1,
         "program_type": "MetalGraph",
@@ -110,11 +112,11 @@
           "repo_sidecar_realize_scope_metadata": 128
         },
         "category_counts": {
-          "attention_key_cache_write": 78,
-          "attention_value_cache_write": 50
+          "attention_key_cache_write_local": 78,
+          "attention_value_cache_write_local": 50
         },
         "display_name": "<batched 128>",
-        "elapsed_ms": 2.7317500207573175,
+        "elapsed_ms": 3.423416637815535,
         "expected_source_count": 128,
         "ordinal": 2,
         "program_type": "MetalGraph",
@@ -131,11 +133,11 @@
           "repo_sidecar_realize_scope_metadata": 256
         },
         "category_counts": {
-          "attention_key_cache_write": 106,
-          "attention_value_cache_write": 150
+          "attention_key_cache_write_local": 106,
+          "attention_value_cache_write_local": 150
         },
         "display_name": "<batched 256>",
-        "elapsed_ms": 5.859833327122033,
+        "elapsed_ms": 4.856624989770353,
         "expected_source_count": 256,
         "ordinal": 3,
         "program_type": "MetalGraph",
@@ -152,11 +154,11 @@
           "repo_sidecar_realize_scope_metadata": 512
         },
         "category_counts": {
-          "attention_key_cache_write": 260,
-          "attention_value_cache_write": 252
+          "attention_key_cache_write_local": 260,
+          "attention_value_cache_write_local": 252
         },
         "display_name": "<batched 512>",
-        "elapsed_ms": 8.034458267502487,
+        "elapsed_ms": 9.580166661180556,
         "expected_source_count": 512,
         "ordinal": 4,
         "program_type": "MetalGraph",
@@ -173,11 +175,11 @@
           "repo_sidecar_realize_scope_metadata": 1024
         },
         "category_counts": {
-          "attention_key_cache_write": 511,
-          "attention_value_cache_write": 513
+          "attention_key_cache_write_local": 511,
+          "attention_value_cache_write_local": 513
         },
         "display_name": "<batched 1024>",
-        "elapsed_ms": 11.93774992134422,
+        "elapsed_ms": 11.711166705936193,
         "expected_source_count": 1024,
         "ordinal": 5,
         "program_type": "MetalGraph",
@@ -194,11 +196,13 @@
           "repo_sidecar_realize_scope_metadata": 2048
         },
         "category_counts": {
-          "attention_key_cache_write": 1080,
-          "attention_value_cache_write": 968
+          "attention_key_cache_write_local": 680,
+          "attention_key_cache_write_shared_source": 400,
+          "attention_value_cache_write_local": 696,
+          "attention_value_cache_write_shared_source": 272
         },
         "display_name": "<batched 2048>",
-        "elapsed_ms": 25.113374926149845,
+        "elapsed_ms": 25.056749931536615,
         "expected_source_count": 2048,
         "ordinal": 6,
         "program_type": "MetalGraph",
@@ -216,12 +220,12 @@
           "unclassified_source_item_metadata": 719
         },
         "category_counts": {
-          "attention_key_cache_write": 164,
-          "attention_value_cache_write": 292,
+          "attention_key_cache_write_shared_source": 164,
+          "attention_value_cache_write_shared_source": 292,
           "other": 719
         },
         "display_name": "<batched 1175>",
-        "elapsed_ms": 19.6179166669026,
+        "elapsed_ms": 19.84395831823349,
         "expected_source_count": 1175,
         "ordinal": 7,
         "program_type": "MetalGraph",
@@ -242,7 +246,7 @@
   "summary": {
     "by_category": {
       "graph_batch": {
-        "elapsed_ms": 76.71991654206067,
+        "elapsed_ms": 79.07129160594195,
         "elapsed_share": 1.0,
         "est_mem": 0,
         "est_ops": 0,
@@ -252,12 +256,12 @@
     },
     "by_program_type": {
       "MetalGraph": {
-        "elapsed_ms": 76.71991654206067,
+        "elapsed_ms": 79.07129160594195,
         "elapsed_share": 1.0,
         "kernel_count": 8
       }
     },
-    "elapsed_ms": 76.71991654206067,
+    "elapsed_ms": 79.07129160594195,
     "est_mem": 0,
     "est_ops": 0,
     "kernel_count": 8,
@@ -266,27 +270,39 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 2048>",
-        "elapsed_ms": 25.113374926149845,
+        "elapsed_ms": 25.056749931536615,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
-            "count": "1080",
-            "name": "attention_key_cache_write"
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
+            "count": "680",
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
-            "count": "968",
-            "name": "attention_value_cache_write"
+            "caller": "repo_sidecar:1::attention_key_cache_write_shared_source",
+            "count": "400",
+            "name": "attention_key_cache_write_shared_source"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
+            "count": "696",
+            "name": "attention_value_cache_write_local"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_value_cache_write_shared_source",
+            "count": "272",
+            "name": "attention_value_cache_write_shared_source"
           }
         ],
         "ordinal": 6,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 1080,
-          "attention_value_cache_write": 968
+          "attention_key_cache_write_local": 680,
+          "attention_key_cache_write_shared_source": 400,
+          "attention_value_cache_write_local": 696,
+          "attention_value_cache_write_shared_source": 272
         },
         "source_count": 2048,
         "source_end": 4063,
@@ -296,27 +312,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1175>",
-        "elapsed_ms": 19.6179166669026,
+        "elapsed_ms": 19.84395831823349,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_shared_source",
             "count": "164",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_shared_source"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_shared_source",
             "count": "292",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_shared_source"
           }
         ],
         "ordinal": 7,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 164,
-          "attention_value_cache_write": 292,
+          "attention_key_cache_write_shared_source": 164,
+          "attention_value_cache_write_shared_source": 292,
           "other": 719
         },
         "source_count": 1175,
@@ -327,27 +343,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1024>",
-        "elapsed_ms": 11.93774992134422,
+        "elapsed_ms": 11.711166705936193,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "511",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "513",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 5,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 511,
-          "attention_value_cache_write": 513
+          "attention_key_cache_write_local": 511,
+          "attention_value_cache_write_local": 513
         },
         "source_count": 1024,
         "source_end": 2015,
@@ -357,27 +373,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 512>",
-        "elapsed_ms": 8.034458267502487,
+        "elapsed_ms": 9.580166661180556,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "260",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "252",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 4,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 260,
-          "attention_value_cache_write": 252
+          "attention_key_cache_write_local": 260,
+          "attention_value_cache_write_local": 252
         },
         "source_count": 512,
         "source_end": 991,
@@ -387,27 +403,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 256>",
-        "elapsed_ms": 5.859833327122033,
+        "elapsed_ms": 4.856624989770353,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "106",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "150",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 3,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 106,
-          "attention_value_cache_write": 150
+          "attention_key_cache_write_local": 106,
+          "attention_value_cache_write_local": 150
         },
         "source_count": 256,
         "source_end": 479,
@@ -416,58 +432,28 @@
       {
         "category": "graph_batch",
         "device": "METAL",
-        "display_name": "<batched 128>",
-        "elapsed_ms": 2.7317500207573175,
-        "est_mem": 0,
-        "est_ops": 0,
-        "metadata": [
-          {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
-            "count": "78",
-            "name": "attention_key_cache_write"
-          },
-          {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
-            "count": "50",
-            "name": "attention_value_cache_write"
-          }
-        ],
-        "ordinal": 2,
-        "program_type": "MetalGraph",
-        "source_category_basis": "repo_sidecar_realize_scope_metadata",
-        "source_category_counts": {
-          "attention_key_cache_write": 78,
-          "attention_value_cache_write": 50
-        },
-        "source_count": 128,
-        "source_end": 223,
-        "source_start": 96
-      },
-      {
-        "category": "graph_batch",
-        "device": "METAL",
         "display_name": "<batched 64>",
-        "elapsed_ms": 2.3725000210106373,
+        "elapsed_ms": 3.879499970935285,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "35",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "29",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 1,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 35,
-          "attention_value_cache_write": 29
+          "attention_key_cache_write_local": 35,
+          "attention_value_cache_write_local": 29
         },
         "source_count": 64,
         "source_end": 95,
@@ -476,28 +462,58 @@
       {
         "category": "graph_batch",
         "device": "METAL",
-        "display_name": "<batched 32>",
-        "elapsed_ms": 1.0523333912715316,
+        "display_name": "<batched 128>",
+        "elapsed_ms": 3.423416637815535,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
-            "count": "26",
-            "name": "attention_key_cache_write"
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
+            "count": "78",
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
+            "count": "50",
+            "name": "attention_value_cache_write_local"
+          }
+        ],
+        "ordinal": 2,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_key_cache_write_local": 78,
+          "attention_value_cache_write_local": 50
+        },
+        "source_count": 128,
+        "source_end": 223,
+        "source_start": 96
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 32>",
+        "elapsed_ms": 0.7197083905339241,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
+            "count": "26",
+            "name": "attention_key_cache_write_local"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "6",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 0,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 26,
-          "attention_value_cache_write": 6
+          "attention_key_cache_write_local": 26,
+          "attention_value_cache_write_local": 6
         },
         "source_count": 32,
         "source_end": 31,
@@ -509,27 +525,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 32>",
-        "elapsed_ms": 1.0523333912715316,
+        "elapsed_ms": 0.7197083905339241,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "26",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "6",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 0,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 26,
-          "attention_value_cache_write": 6
+          "attention_key_cache_write_local": 26,
+          "attention_value_cache_write_local": 6
         },
         "source_count": 32,
         "source_end": 31,
@@ -539,27 +555,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 64>",
-        "elapsed_ms": 2.3725000210106373,
+        "elapsed_ms": 3.879499970935285,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "35",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "29",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 1,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 35,
-          "attention_value_cache_write": 29
+          "attention_key_cache_write_local": 35,
+          "attention_value_cache_write_local": 29
         },
         "source_count": 64,
         "source_end": 95,
@@ -569,27 +585,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 128>",
-        "elapsed_ms": 2.7317500207573175,
+        "elapsed_ms": 3.423416637815535,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "78",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "50",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 2,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 78,
-          "attention_value_cache_write": 50
+          "attention_key_cache_write_local": 78,
+          "attention_value_cache_write_local": 50
         },
         "source_count": 128,
         "source_end": 223,
@@ -599,27 +615,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 256>",
-        "elapsed_ms": 5.859833327122033,
+        "elapsed_ms": 4.856624989770353,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "106",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "150",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 3,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 106,
-          "attention_value_cache_write": 150
+          "attention_key_cache_write_local": 106,
+          "attention_value_cache_write_local": 150
         },
         "source_count": 256,
         "source_end": 479,
@@ -629,27 +645,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 512>",
-        "elapsed_ms": 8.034458267502487,
+        "elapsed_ms": 9.580166661180556,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "260",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "252",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 4,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 260,
-          "attention_value_cache_write": 252
+          "attention_key_cache_write_local": 260,
+          "attention_value_cache_write_local": 252
         },
         "source_count": 512,
         "source_end": 991,
@@ -659,27 +675,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1024>",
-        "elapsed_ms": 11.93774992134422,
+        "elapsed_ms": 11.711166705936193,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
             "count": "511",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
             "count": "513",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_local"
           }
         ],
         "ordinal": 5,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 511,
-          "attention_value_cache_write": 513
+          "attention_key_cache_write_local": 511,
+          "attention_value_cache_write_local": 513
         },
         "source_count": 1024,
         "source_end": 2015,
@@ -689,27 +705,39 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 2048>",
-        "elapsed_ms": 25.113374926149845,
+        "elapsed_ms": 25.056749931536615,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
-            "count": "1080",
-            "name": "attention_key_cache_write"
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
+            "count": "680",
+            "name": "attention_key_cache_write_local"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
-            "count": "968",
-            "name": "attention_value_cache_write"
+            "caller": "repo_sidecar:1::attention_key_cache_write_shared_source",
+            "count": "400",
+            "name": "attention_key_cache_write_shared_source"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
+            "count": "696",
+            "name": "attention_value_cache_write_local"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_value_cache_write_shared_source",
+            "count": "272",
+            "name": "attention_value_cache_write_shared_source"
           }
         ],
         "ordinal": 6,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 1080,
-          "attention_value_cache_write": 968
+          "attention_key_cache_write_local": 680,
+          "attention_key_cache_write_shared_source": 400,
+          "attention_value_cache_write_local": 696,
+          "attention_value_cache_write_shared_source": 272
         },
         "source_count": 2048,
         "source_end": 4063,
@@ -719,27 +747,27 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1175>",
-        "elapsed_ms": 19.6179166669026,
+        "elapsed_ms": 19.84395831823349,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
           {
-            "caller": "repo_sidecar:1::attention_key_cache_write",
+            "caller": "repo_sidecar:1::attention_key_cache_write_shared_source",
             "count": "164",
-            "name": "attention_key_cache_write"
+            "name": "attention_key_cache_write_shared_source"
           },
           {
-            "caller": "repo_sidecar:1::attention_value_cache_write",
+            "caller": "repo_sidecar:1::attention_value_cache_write_shared_source",
             "count": "292",
-            "name": "attention_value_cache_write"
+            "name": "attention_value_cache_write_shared_source"
           }
         ],
         "ordinal": 7,
         "program_type": "MetalGraph",
         "source_category_basis": "repo_sidecar_realize_scope_metadata",
         "source_category_counts": {
-          "attention_key_cache_write": 164,
-          "attention_value_cache_write": 292,
+          "attention_key_cache_write_shared_source": 164,
+          "attention_value_cache_write_shared_source": 292,
           "other": 719
         },
         "source_count": 1175,

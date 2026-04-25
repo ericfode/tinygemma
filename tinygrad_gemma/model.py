@@ -207,7 +207,13 @@ def realize_cache_update(
   value: Tensor,
   start,
   end,
+  *,
+  layer_idx: int | None = None,
+  layer_type: str | None = None,
+  is_kv_shared_layer: bool = False,
+  store_full_length_kv: bool = False,
 ) -> None:
+  del layer_idx, layer_type, is_kv_shared_layer, store_full_length_kv
   key_cache[:, :, start:end, :].assign(key).realize()
   value_cache[:, :, start:end, :].assign(value).realize()
 
@@ -450,6 +456,10 @@ class GemmaAttention:
               v,
               past_seen_tokens,
               end_pos,
+              layer_idx=self.layer_idx,
+              layer_type=self.layer_type,
+              is_kv_shared_layer=self.is_kv_shared_layer,
+              store_full_length_kv=self.store_full_length_kv,
             )
             entry.length = end_pos
             current_entry = entry
@@ -461,6 +471,10 @@ class GemmaAttention:
               v,
               past_seen_tokens,
               end_pos,
+              layer_idx=self.layer_idx,
+              layer_type=self.layer_type,
+              is_kv_shared_layer=self.is_kv_shared_layer,
+              store_full_length_kv=self.store_full_length_kv,
             )
             # Keep the committed cache length concrete until generation accepts this decode step.
             current_entry = GemmaCacheEntry(key=entry.key, value=entry.value, length=end_pos)

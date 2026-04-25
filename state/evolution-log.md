@@ -1,5 +1,49 @@
 # Evolution Log
 
+## 2026-04-25 - Shared-KV Cache-Write Elision Rejected
+
+- Hypothesis: some cache-write source items come from shared-KV consumer
+  layers, which would make them candidates for legal elision or narrowing.
+  Invalidation criterion: the real graph profile shows zero
+  `shared_consumer` cache-write source items, graph attribution becomes
+  incomplete, or the role tagging changes runtime behavior.
+- Research: the E2B config has 35 layers and `num_kv_shared_layers=20`.
+  Layers 15-34 are shared-KV consumers; layers 13 and 14 are the
+  `store_full_length_kv` shared sources; earlier layers are local producers.
+- Extended the behavior-preserving `realize_cache_update` helper to accept
+  layer-role metadata, then patched it only inside
+  `scripts/profile_decode_jit.py` to tag key/value cache writes as
+  `local`, `shared_source`, or unexpected `shared_consumer`.
+- Artifact: `benchmarks/gemma4-metal-decode-graph-default-current.json` and
+  `benchmarks/gemma4-metal-decode-graph-default-current.csv`.
+- Result: rejected shared-consumer cache-write elision. The refreshed default
+  E2B int8 `METAL` JIT=1 graph profile still has 8 `MetalGraph` rows and
+  complete attribution over all 5239 source items:
+  `source_attribution.status=complete`, `original_exec_count=5239`,
+  `attributed_source_count=5239`, `unparsed_graph_batches=0`, and
+  `unattributed_tail_count=0`.
+- Cache-write role counts in the accepted artifact:
+  `attention_key_cache_write_local=1696`,
+  `attention_value_cache_write_local=1696`,
+  `attention_key_cache_write_shared_source=564`,
+  `attention_value_cache_write_shared_source=564`, and `other=719`.
+  There are zero `attention_*_shared_consumer` source items.
+- Conclusion: shared-KV consumer layers already avoid cache writes. The next
+  useful target is not shared-consumer elision; it is either required producer
+  cache-write optimization or classification of the remaining 719 unclassified
+  source items in the final graph range.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Verification on 2026-04-25:
+  `.venv/bin/python -m pytest -q tests/test_profile_decode_jit.py
+  tests/test_tinygrad_gemma.py::test_preallocated_generate_matches_dynamic_cache_for_gemma4`
+  passed with `12 passed, 2 warnings`; `.venv/bin/python -m py_compile
+  scripts/profile_decode_jit.py tinygrad_gemma/model.py` passed; and the real
+  E2B int8 `METAL` profiler command refreshed the JSON/CSV artifacts.
+- Next target: classify the 719 unclassified source items in the final graph
+  range before attempting another runtime patch.
+
 ## 2026-04-25 - Key/Value Cache-Write Split Diagnostic
 
 - Hypothesis: splitting the cache-write profiler sidecar into key-cache and

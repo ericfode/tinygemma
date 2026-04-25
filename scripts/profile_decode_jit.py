@@ -72,6 +72,12 @@ CATEGORY_RANGES = {
 PROFILE_CATEGORIES = (
   "logits_argmax",
   "mlp",
+  "attention_key_cache_write_shared_source",
+  "attention_value_cache_write_shared_source",
+  "attention_key_cache_write_shared_consumer",
+  "attention_value_cache_write_shared_consumer",
+  "attention_key_cache_write_local",
+  "attention_value_cache_write_local",
   "attention_key_cache_write",
   "attention_value_cache_write",
   "attention_cache_write",
@@ -201,14 +207,36 @@ def tensor_realize_sidecar_patch():
     Tensor.realize = original_realize
 
 
+def cache_write_role(is_kv_shared_layer: bool, store_full_length_kv: bool) -> str:
+  if is_kv_shared_layer:
+    return "shared_consumer"
+  if store_full_length_kv:
+    return "shared_source"
+  return "local"
+
+
 @contextmanager
 def cache_update_sidecar_patch():
   original_realize_cache_update = gemma_model.realize_cache_update
 
-  def realize_cache_update_with_sidecar(key_cache: Tensor, value_cache: Tensor, key: Tensor, value: Tensor, start, end) -> None:
-    with sidecar_scope("attention_key_cache_write"):
+  def realize_cache_update_with_sidecar(
+    key_cache: Tensor,
+    value_cache: Tensor,
+    key: Tensor,
+    value: Tensor,
+    start,
+    end,
+    *,
+    layer_idx: int | None = None,
+    layer_type: str | None = None,
+    is_kv_shared_layer: bool = False,
+    store_full_length_kv: bool = False,
+  ) -> None:
+    del layer_idx, layer_type
+    role = cache_write_role(is_kv_shared_layer, store_full_length_kv)
+    with sidecar_scope(f"attention_key_cache_write_{role}"):
       key_cache[:, :, start:end, :].assign(key).realize()
-    with sidecar_scope("attention_value_cache_write"):
+    with sidecar_scope(f"attention_value_cache_write_{role}"):
       value_cache[:, :, start:end, :].assign(value).realize()
 
   gemma_model.realize_cache_update = realize_cache_update_with_sidecar
