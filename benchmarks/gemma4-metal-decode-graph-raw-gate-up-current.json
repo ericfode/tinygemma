@@ -1,0 +1,592 @@
+{
+  "context_length": 700,
+  "csv": "benchmarks/gemma4-metal-decode-graph-raw-gate-up-current.csv",
+  "device": "METAL",
+  "jit_interpretation": "JIT=1 graph-batched execution",
+  "jit_mode": 1,
+  "max_length": 705,
+  "metal_int8_gate_up": "raw",
+  "model_dir": "/Users/ericfode/Downloads/tinygrad-gemma/checkpoints/gemma-4-E2B-int8",
+  "original_capture": {
+    "category_counts": {
+      "attention": 2932,
+      "decoder_residual": 1573,
+      "embedding_per_layer": 318,
+      "logits_argmax": 3,
+      "mlp": 1680,
+      "norm": 4866,
+      "other": 2285,
+      "raw_metal_int8_gate_up": 35
+    },
+    "compiled_runner_count": 13657,
+    "exec_count": 13692,
+    "graph_batch_count": 0,
+    "program_type_counts": {
+      "CompiledRunner": 13657,
+      "RowwiseInt8DecodeLinearRunner": 35
+    },
+    "raw_gate_up_runner_count": 35
+  },
+  "post_graph_execution": {
+    "category_counts": {
+      "graph_batch": 37,
+      "raw_metal_int8_gate_up": 35
+    },
+    "compiled_runner_count": 0,
+    "exec_count": 72,
+    "graph_batch_count": 37,
+    "program_type_counts": {
+      "MetalGraph": 37,
+      "RowwiseInt8DecodeLinearRunner": 35
+    },
+    "raw_gate_up_runner_count": 35
+  },
+  "profile_start": 703,
+  "quantization": {
+    "manifest_method": "int8",
+    "manifest_quantized_tensor_count": 582,
+    "raw_dtype_counts": {
+      "__bf16": 1429,
+      "float": 582,
+      "signed char": 582
+    },
+    "sample_tensors": {
+      "model.language_model.embed_tokens.weight": "(262144, 1536) dtypes.char",
+      "model.language_model.layers.0.mlp.gate_proj.weight": "(6144, 1536) dtypes.char",
+      "model.language_model.layers.0.self_attn.q_proj.weight": "(2048, 1536) dtypes.char",
+      "model.language_model.per_layer_model_projection.weight": "(8960, 1536) dtypes.char"
+    }
+  },
+  "sliding_start": 511,
+  "summary": {
+    "by_category": {
+      "graph_batch": {
+        "elapsed_ms": 194.24287462607026,
+        "elapsed_share": 0.981321373886727,
+        "est_mem": 0,
+        "est_ops": 0,
+        "kernel_count": 37,
+        "ops_share": 0.0
+      },
+      "raw_metal_int8_gate_up": {
+        "elapsed_ms": 3.697249572724104,
+        "elapsed_share": 0.018678626113273013,
+        "est_mem": 0,
+        "est_ops": 0,
+        "kernel_count": 35,
+        "ops_share": 0.0
+      }
+    },
+    "by_program_type": {
+      "MetalGraph": {
+        "elapsed_ms": 194.24287462607026,
+        "elapsed_share": 0.981321373886727,
+        "kernel_count": 37
+      },
+      "RowwiseInt8DecodeLinearRunner": {
+        "elapsed_ms": 3.697249572724104,
+        "elapsed_share": 0.018678626113273013,
+        "kernel_count": 35
+      }
+    },
+    "elapsed_ms": 197.94012419879436,
+    "est_mem": 0,
+    "est_ops": 0,
+    "kernel_count": 72,
+    "top_elapsed_kernels": [
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 537>",
+        "elapsed_ms": 11.6553750121966,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 71,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 680>",
+        "elapsed_ms": 8.96037498023361,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 29,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 532>",
+        "elapsed_ms": 8.154624956659973,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 69,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 632>",
+        "elapsed_ms": 8.114374941214919,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 27,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 468>",
+        "elapsed_ms": 7.959791691973805,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 61,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 457>",
+        "elapsed_ms": 7.693750085309148,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 59,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 516>",
+        "elapsed_ms": 7.616125047206879,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 67,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 484>",
+        "elapsed_ms": 7.519458304159343,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 63,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 584>",
+        "elapsed_ms": 7.292166585102677,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 25,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 500>",
+        "elapsed_ms": 7.283749990165234,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 65,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 488>",
+        "elapsed_ms": 6.908208248205483,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 21,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 536>",
+        "elapsed_ms": 6.771708256565034,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 23,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 441>",
+        "elapsed_ms": 6.506374920718372,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 57,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 425>",
+        "elapsed_ms": 6.339375046081841,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 55,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 409>",
+        "elapsed_ms": 6.076708319596946,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 53,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 393>",
+        "elapsed_ms": 5.990249919705093,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 51,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 382>",
+        "elapsed_ms": 5.9350833762437105,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 49,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 455>",
+        "elapsed_ms": 5.8026667684316635,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 19,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 366>",
+        "elapsed_ms": 5.202875006943941,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 47,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 350>",
+        "elapsed_ms": 4.9787916941568255,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 45,
+        "program_type": "MetalGraph"
+      }
+    ],
+    "top_est_ops_kernels": [
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 26>",
+        "elapsed_ms": 0.11216674465686083,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 0,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "raw_metal_int8_gate_up",
+        "device": "METAL",
+        "display_name": "rowwise_int8_decode_linear_threadgroup_x",
+        "elapsed_ms": 0.09154155850410461,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 1,
+        "program_type": "RowwiseInt8DecodeLinearRunner"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 64>",
+        "elapsed_ms": 0.5712916608899832,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 2,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 19>",
+        "elapsed_ms": 0.11312495917081833,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 3,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "raw_metal_int8_gate_up",
+        "device": "METAL",
+        "display_name": "rowwise_int8_decode_linear_threadgroup_x",
+        "elapsed_ms": 0.08962489664554596,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 4,
+        "program_type": "RowwiseInt8DecodeLinearRunner"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 134>",
+        "elapsed_ms": 1.455791643820703,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 5,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "raw_metal_int8_gate_up",
+        "device": "METAL",
+        "display_name": "rowwise_int8_decode_linear_threadgroup_x",
+        "elapsed_ms": 0.09045843034982681,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 6,
+        "program_type": "RowwiseInt8DecodeLinearRunner"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 182>",
+        "elapsed_ms": 1.4365833485499024,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 7,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "raw_metal_int8_gate_up",
+        "device": "METAL",
+        "display_name": "rowwise_int8_decode_linear_threadgroup_x",
+        "elapsed_ms": 0.08937495294958353,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 8,
+        "program_type": "RowwiseInt8DecodeLinearRunner"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 230>",
+        "elapsed_ms": 2.270249999128282,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 9,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "raw_metal_int8_gate_up",
+        "device": "METAL",
+        "display_name": "rowwise_int8_decode_linear_threadgroup_x",
+        "elapsed_ms": 0.09412493091076612,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 10,
+        "program_type": "RowwiseInt8DecodeLinearRunner"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 263>",
+        "elapsed_ms": 3.7917083827778697,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 11,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "raw_metal_int8_gate_up",
+        "device": "METAL",
+        "display_name": "rowwise_int8_decode_linear_threadgroup_x",
+        "elapsed_ms": 0.08891662582755089,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 12,
+        "program_type": "RowwiseInt8DecodeLinearRunner"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 311>",
+        "elapsed_ms": 4.03933331836015,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 13,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "raw_metal_int8_gate_up",
+        "device": "METAL",
+        "display_name": "rowwise_int8_decode_linear_threadgroup_x",
+        "elapsed_ms": 0.08862500544637442,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 14,
+        "program_type": "RowwiseInt8DecodeLinearRunner"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 359>",
+        "elapsed_ms": 4.492416745051742,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 15,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "raw_metal_int8_gate_up",
+        "device": "METAL",
+        "display_name": "rowwise_int8_decode_linear_threadgroup_x",
+        "elapsed_ms": 0.09287497960031033,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 16,
+        "program_type": "RowwiseInt8DecodeLinearRunner"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 407>",
+        "elapsed_ms": 4.486874910071492,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 17,
+        "program_type": "MetalGraph"
+      },
+      {
+        "category": "raw_metal_int8_gate_up",
+        "device": "METAL",
+        "display_name": "rowwise_int8_decode_linear_threadgroup_x",
+        "elapsed_ms": 0.08824991527944803,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 18,
+        "program_type": "RowwiseInt8DecodeLinearRunner"
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 455>",
+        "elapsed_ms": 5.8026667684316635,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [],
+        "ordinal": 19,
+        "program_type": "MetalGraph"
+      }
+    ]
+  },
+  "tensor_dtype": "dtypes.float",
+  "text_config": {
+    "hidden_size": 1536,
+    "intermediate_size": 6144,
+    "layer_types": [
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention"
+    ],
+    "num_attention_heads": 8,
+    "num_hidden_layers": 35,
+    "num_key_value_heads": 1,
+    "sliding_window": 512,
+    "vocab_size": 262144
+  },
+  "tinygrad_path": "/Users/ericfode/.codex/worktrees/9b17/tinygrad-gemma/.venv/lib/python3.11/site-packages/tinygrad/__init__.py",
+  "var_vals": {
+    "gemma_start_pos_window": 703
+  }
+}

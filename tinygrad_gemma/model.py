@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import Sequence
 
 import numpy as np
@@ -8,6 +9,7 @@ import numpy as np
 from tinygrad import Tensor, TinyJit, Variable, nn
 
 from .config import GemmaConfig
+from .metal_int8 import metal_rowwise_int8_decode_linear
 
 DEFAULT_IGNORE_INDEX = -100
 
@@ -227,6 +229,7 @@ class RMSNorm:
 
 
 _FUSED_GATE_UP_WEIGHTS: dict[tuple[int, int], Tensor] = {}
+_FUSED_INT8_GATE_UP: dict[tuple[int, int, int, int], tuple[Tensor, Tensor]] = {}
 
 
 class GemmaMLP:
@@ -257,9 +260,47 @@ class GemmaMLP:
       _FUSED_GATE_UP_WEIGHTS[key] = fused
     return fused
 
+  def _can_use_fused_int8_gate_up(self) -> bool:
+    return (
+      not Tensor.training
+      and getattr(self.gate_proj, "is_rowwise_int8", False)
+      and getattr(self.up_proj, "is_rowwise_int8", False)
+      and getattr(self.gate_proj, "bias", None) is None
+      and getattr(self.up_proj, "bias", None) is None
+    )
+
+  def _fused_int8_gate_up_weight_scale(self) -> tuple[Tensor, Tensor]:
+    key = (id(self.gate_proj.weight), id(self.gate_proj.scale), id(self.up_proj.weight), id(self.up_proj.scale))
+    fused = _FUSED_INT8_GATE_UP.get(key)
+    if fused is None:
+      fused = (
+        self.gate_proj.weight.cat(self.up_proj.weight, dim=0).contiguous().realize(),
+        self.gate_proj.scale.cat(self.up_proj.scale, dim=0).contiguous().realize(),
+      )
+      _FUSED_INT8_GATE_UP[key] = fused
+    return fused
+
+  def _can_use_metal_fused_int8_gate_up(self, x: Tensor) -> bool:
+    return (
+      (getattr(self, "_force_metal_fused_int8_gate_up", False) or os.environ.get("TINYGRAD_GEMMA_METAL_INT8_GATE_UP") == "1")
+      and isinstance(x.device, str)
+      and x.device == "METAL"
+      and int(np.prod(x.shape[:-1])) == 1
+      and x.shape[-1] <= 4096
+    )
+
   def __call__(self, x: Tensor) -> Tensor:
     if self._can_use_fused_gate_up():
       gate, up = x.linear(self._fused_gate_up_weight().transpose()).chunk(2, dim=-1)
+      return self.down_proj(apply_activation(self.config.activation_name, gate) * up)
+    if self._can_use_fused_int8_gate_up():
+      weight, scale = self._fused_int8_gate_up_weight_scale()
+      if self._can_use_metal_fused_int8_gate_up(x):
+        gate_up = metal_rowwise_int8_decode_linear(x, weight, scale).cast(x.dtype)
+      else:
+        gate_up = x.matmul(weight.transpose(), dtype="float")
+        gate_up = (gate_up * scale.reshape(*([1] * (gate_up.ndim - 1)), scale.shape[0])).cast(x.dtype)
+      gate, up = gate_up.chunk(2, dim=-1)
       return self.down_proj(apply_activation(self.config.activation_name, gate) * up)
     return self.down_proj(apply_activation(self.config.activation_name, self.gate_proj(x)) * self.up_proj(x))
 

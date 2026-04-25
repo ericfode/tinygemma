@@ -34,6 +34,7 @@ from tinygrad_gemma import (
   train_step,
 )
 from tinygrad_gemma.cli import DEFAULT_MAX_BEAM, resolve_beam
+from tinygrad_gemma.metal_int8 import metal_rowwise_int8_decode_linear
 from tinygrad_gemma.model import build_attention_mask
 from tinygrad_gemma.quantization import RowwiseInt8Linear, quantize_state_dict
 from tinygrad_gemma.runtime import temporary_default_device
@@ -971,6 +972,39 @@ def test_quantization_includes_bfloat16_matrices():
   assert manifest["tensors"]["matrix"]["scale_key"] in quantized
   assert quantized["vector"].dtype == dtypes.bfloat16
   assert "vector" not in manifest["tensors"]
+
+
+def test_runtime_int8_mlp_fused_gate_up_matches_separate_path(tmp_path: Path):
+  config = make_config()
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=74)
+    checkpoint_dir = tmp_path / "quantized-fused-mlp"
+    save_training_checkpoint(model, checkpoint_dir, quantize="int8")
+    runtime = load_pretrained(checkpoint_dir, device="PYTHON")
+    mlp = runtime.model.layers[0].mlp
+    assert isinstance(mlp.gate_proj, RowwiseInt8Linear)
+    assert isinstance(mlp.up_proj, RowwiseInt8Linear)
+    x = Tensor.randn(1, 3, config.hidden_size)
+
+    fused = mlp(x)
+    can_fuse = mlp._can_use_fused_int8_gate_up
+    mlp._can_use_fused_int8_gate_up = lambda: False
+    try:
+      separate = mlp(x)
+    finally:
+      mlp._can_use_fused_int8_gate_up = can_fuse
+
+  np.testing.assert_allclose(fused.numpy(), separate.numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_metal_rowwise_int8_decode_linear_rejects_non_metal():
+  x = Tensor.ones(1, 1, 4, device="PYTHON")
+  qweight = Tensor.ones(8, 4, dtype=dtypes.int8, device="PYTHON")
+  scale = Tensor.ones(8, dtype=dtypes.float32, device="PYTHON")
+
+  with pytest.raises(RuntimeError, match="expects x on METAL"):
+    metal_rowwise_int8_decode_linear(x, qweight, scale)
 
 
 def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):

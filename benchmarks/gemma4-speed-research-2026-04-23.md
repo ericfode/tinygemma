@@ -36,9 +36,34 @@ replay in this repo.
 Current `HEAD` has a TinyJit decode experiment in `generate()` and rollout-JIT
 metrics in the benchmark script. It is a real improvement: E2B int8 now
 completes the 1000-token Metal gate without decode fallback. The previous
-22 tok/s 1000-token note is stale for the current code path; the latest fused
-MLP row measures 9.303522 warmup-excluded tok/s and still shows a large gap to
-the 50 tok/s target.
+22 tok/s 1000-token note is stale for the current code path; the latest accepted
+fused rowwise-int8 gate/up row measures 10.863932 warmup-excluded tok/s and
+still shows a large gap to the 50 tok/s target.
+
+Update on 2026-04-24: a raw Metal rowwise-int8 gate/up primitive measured
+0.123437 ms median in isolation. Direct TinyJit decode wiring was initially
+rejected because the raw `MetalProgram` launch replayed stale capture-time
+output. The primitive now appends a repo-local custom `Runner` `ExecItem` during
+capture. `benchmarks/gemma4-metal-runtime-bridge-tinyjit-diagnostic-current.json`
+records `safe_for_decode_tinyjit_replay` for both `float32` and `bfloat16`
+inputs under `JIT=1` and `JIT=2`. This still does not update the Gemma tok/s
+row until it is wired into the MLP path.
+
+Second update on 2026-04-24: wiring that replay-safe raw Metal primitive into
+the real Gemma MLP path was correct but slower. The focused MLP diagnostic
+passes against the existing fused rowwise-int8 path, but the real E2B int8
+`METAL` 200/20 row regressed to 6.609982 tok/s with `decode_fallback=false`.
+The raw path is now opt-in only; default decode remains on the existing
+tinygrad fused rowwise-int8 matmul path.
+
+Update on 2026-04-25: the raw Metal gate/up regression is now explained. Under
+`JIT=1`, the default post-window decode capture has 4807 `CompiledRunner` items
+and graph-batches into 8 `MetalGraph` launches, measuring 67.716500 ms for the
+profiled token. With the opt-in raw gate/up path, the capture grows to 13657
+`CompiledRunner` items plus 35 custom `RowwiseInt8DecodeLinearRunner` items and
+fragments into 37 `MetalGraph` batches plus 35 raw runner launches, measuring
+197.940124 ms. The raw kernel is replay-safe, but the Python custom `Runner` is
+not graphable in tinygrad's Metal graph path.
 
 | Run | Result |
 | --- | ---: |
@@ -60,6 +85,11 @@ the 50 tok/s target.
 | Fused MLP gate/up, beam=0, 1000 tokens, 20-token warmup | 136.105067 s total, 9.303522 measured tok/s, `rollout_jit_count=999`, `decode_fallback=false` |
 | Diagnostic: window all 7 full-attention layers, 700 tokens, 520-token warmup | 114.692150 s total, 12.496987 measured post-window tok/s, `rollout_jit_count=699`, `decode_fallback=false` |
 | Diagnostic: sync-free tensor loop, 700 tokens, 520-token warmup | 114.792884 s total, 11.052106 measured post-window tok/s, `rollout_jit_count=699`, `decode_fallback=false` |
+| Runtime int8 matmul, beam=0, 1000 tokens, 20-token warmup | 10.721864 measured tok/s, `rollout_jit_count=999`, `decode_fallback=false` |
+| Fused rowwise-int8 gate/up, beam=0, 1000 tokens, 20-token warmup | 10.863932 measured tok/s, `rollout_jit_count=999`, `decode_fallback=false` |
+| Diagnostic: raw Metal runtime TinyJit bridge | `safe_for_decode_tinyjit_replay`; no throughput row superseded |
+| Rejected raw Metal MLP gate/up, beam=0, 200 tokens, 20-token warmup | 74.828046 s total, 6.609982 measured tok/s, `rollout_jit_count=199`, `decode_fallback=false` |
+| Diagnostic: raw gate/up graph fragmentation, post-window token at context 703 | default 8 `MetalGraph` batches / 67.716500 ms; raw 37 `MetalGraph` batches + 35 raw runners / 197.940124 ms |
 | Interrupted beam=4 row, 1000-token target | 986 tokens, 438.910876 s, `status=interrupted`, `decode_fallback=false` |
 
 `beam=1` is currently worse end-to-end because the BEAM compile/search cliff is
@@ -170,6 +200,34 @@ slows with context length but still completes, unlike the earlier long attempts.
      89.465 ms but regressed the real 200/20 row to 11.272605 tok/s, so do not
      move token embedding/per-layer input prep out of the conditional JIT.
      Prefer a replay-local MLP/RowwiseInt8Linear kernel-volume reduction next.
+   - Fusing rowwise-int8 MLP gate/up was a small real-row win despite a worse
+     synthetic profile. The 200/20 row moved to 16.025808 tok/s and the
+     1000/20 row moved to 10.863932 tok/s, both with `decode_fallback=false`.
+     The synthetic profile rose to 97.738 ms, so keep benchmark truth above
+     profiler intuition when they disagree.
+   - The Metal int8 lowering diagnostic is now explicit in
+     `benchmarks/gemma4-metal-int8-matmul-lowering-diagnostic-current.json`.
+     For the exact one-token E2B gate/up shape, rowwise int8 captured one
+     kernel, did not emit `simdgroup_multiply_accumulate`, and measured
+     0.185354 ms median over 20 diagnostic replays versus 0.146021 ms for the
+     bf16 dequantized-weight control. tinygrad's visible Metal tensor-core
+     registry contains float/half/bfloat16 entries and no int8 entry. This
+     makes a lower-level kernel path, not another Python reshape, the credible
+     route to a step change.
+   - The first raw Metal prototype is in
+     `benchmarks/gemma4-metal-rowwise-int8-linear-prototype-current.json`.
+     It compiles through tinygrad's Metal runtime and runs against tinygrad
+     buffers. The threadgroup-x variant stages the decode hidden vector in
+     threadgroup memory and measured 0.087417 ms median over 100 replays for
+     the `(1536) @ (12288, 1536).T` gate/up shape, with
+     `max_abs_error=0.00023651123046875`. This is a viable lower-level path,
+     but not a Gemma throughput row yet.
+   - The raw Metal path is now a reusable repo primitive in
+     `tinygrad_gemma/metal_int8.py`. The refreshed prototype artifact includes
+     a tensor-wrapper module check with output shape `[1, 1, 12288]`,
+     `max_abs_error=0.00023651123046875`, and `passed=true`. The current
+     threadgroup-x timing is 0.123437 ms median over 100 replays. The next
+     useful row must come from wiring this guarded primitive into decode.
 
 8. Use the post-window JIT profile before guessing.
    - `scripts/profile_decode_jit.py` profiles a synthetic post-window decode
@@ -222,6 +280,51 @@ slows with context length but still completes, unlike the earlier long attempts.
     with `decode_fallback=false` and `rollout_jit_count=199`;
     `--max-new-tokens 1000 --decode-warmup-tokens 20` measured 10.721864
     tok/s with `decode_fallback=false` and `rollout_jit_count=999`.
+  - Current fused-rowwise-int8-gate-up proofs:
+    `--max-new-tokens 200 --decode-warmup-tokens 20` measured 16.025808 tok/s
+    with `decode_fallback=false` and `rollout_jit_count=199`;
+    `--max-new-tokens 1000 --decode-warmup-tokens 20` measured 10.863932
+    tok/s with `decode_fallback=false` and `rollout_jit_count=999`.
+  - Current Metal int8 lowering diagnostic:
+    `scripts/diagnose_metal_int8_matmul.py --repeats 20` writes
+    `benchmarks/gemma4-metal-int8-matmul-lowering-diagnostic-current.json` and
+    records that the exact one-token rowwise-int8 decode shape does not use
+    Metal simdgroup MMA.
+  - Current raw Metal rowwise-int8 prototype:
+    `scripts/prototype_metal_rowwise_int8_linear.py --repeats 100` writes
+    `benchmarks/gemma4-metal-rowwise-int8-linear-prototype-current.json` and
+    records a correct threadgroup-x kernel at 0.123437 ms median for the E2B
+    gate/up shape. This does not update the accepted tok/s row until it is
+    wired into decode replay.
+  - Current Metal rowwise-int8 runtime bridge:
+    the same prototype artifact now verifies
+    `tinygrad_gemma.metal_int8.metal_rowwise_int8_decode_linear` with
+    `module_check.passed=true` and output shape `[1, 1, 12288]`.
+  - Current Metal runtime TinyJit bridge diagnostic:
+    `scripts/diagnose_metal_runtime_tinyjit_bridge.py --calls 4` writes
+    `benchmarks/gemma4-metal-runtime-bridge-tinyjit-diagnostic-current.json`
+    and records `summary.status=safe_for_decode_tinyjit_replay`. The bridge
+    appends a repo-local custom `Runner` `ExecItem` during capture. Under both
+    `JIT=1` and `JIT=2`, `float32` captures one runner item and `bfloat16`
+    captures the normal cast plus the runner item.
+  - Current raw Metal MLP gate/up diagnostic and rejected row:
+    `scripts/diagnose_metal_mlp_runtime_gate_up.py` writes
+    `benchmarks/gemma4-metal-mlp-runtime-gate-up-diagnostic-current.json` and
+    records `summary.status=safe_for_decode_tinyjit_replay` against the
+    existing fused rowwise-int8 path, but the real E2B int8 200/20 row in
+    `benchmarks/gemma4-metal-runtime-gate-up-200-current.csv` measured only
+    6.609982 tok/s. Keep `TINYGRAD_GEMMA_METAL_INT8_GATE_UP` opt-in until the
+    custom runner is graph-compatible or replaced.
+  - Current raw gate/up graph diagnostic:
+    `scripts/profile_decode_jit.py --jit-mode 1 --metal-int8-gate-up default`
+    writes `benchmarks/gemma4-metal-decode-graph-default-current.json`; the
+    default capture condenses from 4807 `CompiledRunner` items to 8
+    `MetalGraph` batches and measures 67.716500 ms. The matching
+    `--metal-int8-gate-up raw` artifact
+    `benchmarks/gemma4-metal-decode-graph-raw-gate-up-current.json` captures
+    13657 `CompiledRunner` items plus 35 raw runners, executes as 37
+    `MetalGraph` batches plus 35 raw launches, and measures 197.940124 ms.
+    This rejects the custom Python `Runner` as a default decode route.
   - Current post-int8 profile proof:
     `scripts/profile_decode_jit.py --context-length 700` measured 96.651 ms
     and is recorded in

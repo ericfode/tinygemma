@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "runtime-int8-matmul",
+  "current_checkpoint": "raw-gate-up-graph-fragmentation-diagnostic",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -129,6 +129,115 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "metal-fused-rowwise-int8-gate-up-010",
+      "summary": "Fused rowwise-int8 MLP gate/up projections inside replay, improving the E2B int8 METAL 1000-token warmup-excluded row from 10.721864 tok/s to 10.863932 tok/s with decode_fallback=false.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "tests/test_tinygrad_gemma.py",
+        "benchmarks/gemma4-metal-postwindow-jit-profile-int8-fused-gate-up-current.json",
+        "benchmarks/gemma4-metal-postwindow-jit-profile-int8-fused-gate-up-current.csv",
+        "benchmarks/gemma4-metal-int8-fused-gate-up-200-current.csv",
+        "benchmarks/gemma4-metal-int8-fused-gate-up-200-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-int8-fused-gate-up-1000-current.csv",
+        "benchmarks/gemma4-metal-int8-fused-gate-up-1000-current.csv.progress.jsonl",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-int8-matmul-lowering-diagnostic-011",
+      "summary": "Added a METAL lowering diagnostic for the Gemma 4 E2B decode-shape rowwise-int8 gate/up linear and recorded that the exact one-token path does not use simdgroup MMA while tinygrad's visible Metal tensor-core registry has no int8 input dtype.",
+      "artifacts": [
+        "scripts/diagnose_metal_int8_matmul.py",
+        "benchmarks/gemma4-metal-int8-matmul-lowering-diagnostic-current.json",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "raw-metal-rowwise-int8-linear-prototype-012",
+      "summary": "Added a raw tinygrad MetalProgram prototype for the E2B rowwise-int8 gate/up decode linear; the threadgroup-x variant is correct against NumPy and measured 0.123437 ms median over 100 replays, faster than the prior 0.185354 ms tinygrad lowering diagnostic but not yet integrated into Gemma decode.",
+      "artifacts": [
+        "scripts/prototype_metal_rowwise_int8_linear.py",
+        "benchmarks/gemma4-metal-rowwise-int8-linear-prototype-current.json",
+        "benchmarks/gemma4-metal-rowwise-int8-linear-prototype-smoke.json",
+        "benchmarks/gemma4-metal-rowwise-int8-linear-prototype-ls64.json",
+        "benchmarks/gemma4-metal-rowwise-int8-linear-prototype-ls128.json",
+        "benchmarks/gemma4-metal-rowwise-int8-linear-prototype-ls512.json",
+        "benchmarks/gemma4-metal-rowwise-int8-linear-prototype-ls1024.json",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-rowwise-int8-runtime-bridge-013",
+      "summary": "Extracted the raw Metal threadgroup-x rowwise-int8 decode linear into tinygrad_gemma.metal_int8, added a tensor-wrapper module check to the prototype artifact, and pinned the non-METAL boundary in tests. The refreshed prototype measured 0.123437 ms median and module_check.passed=true, but no Gemma throughput row was superseded.",
+      "artifacts": [
+        "tinygrad_gemma/metal_int8.py",
+        "scripts/prototype_metal_rowwise_int8_linear.py",
+        "tests/test_tinygrad_gemma.py",
+        "benchmarks/gemma4-metal-rowwise-int8-linear-prototype-current.json",
+        "benchmarks/gemma4-metal-rowwise-int8-linear-prototype-smoke.json",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-runtime-tinyjit-bridge-diagnostic-014",
+      "summary": "Added a METAL diagnostic proving the raw rowwise-int8 runtime primitive is unsafe to wire directly into TinyJit decode: float32 produces no capture, while bfloat16 captures one cast kernel and replays the stale capture-time raw Metal output. No Gemma throughput row was superseded.",
+      "artifacts": [
+        "scripts/diagnose_metal_runtime_tinyjit_bridge.py",
+        "benchmarks/gemma4-metal-runtime-bridge-tinyjit-diagnostic-current.json",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-runtime-captured-runner-bridge-015",
+      "summary": "Made the raw Metal rowwise-int8 decode linear participate in TinyJit replay by appending a repo-local custom Runner ExecItem during capture. The bridge diagnostic now reports safe_for_decode_tinyjit_replay for float32 and bfloat16 inputs under JIT=1 and JIT=2, but no Gemma throughput row was superseded.",
+      "artifacts": [
+        "tinygrad_gemma/metal_int8.py",
+        "benchmarks/gemma4-metal-runtime-bridge-tinyjit-diagnostic-current.json",
+        "scripts/diagnose_metal_runtime_tinyjit_bridge.py",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "guarded-gemma-mlp-metal-runtime-gate-up-rejected-016",
+      "summary": "Wired the replay-safe raw Metal rowwise-int8 gate/up primitive into GemmaMLP behind strict METAL/decode guards, then rejected it as a default path after the real E2B int8 METAL 200/20 row regressed to 6.609982 tok/s despite decode_fallback=false and rollout_jit_count=199. The raw path is now explicit opt-in only.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/diagnose_metal_mlp_runtime_gate_up.py",
+        "benchmarks/gemma4-metal-mlp-runtime-gate-up-diagnostic-current.json",
+        "benchmarks/gemma4-metal-runtime-gate-up-200-current.csv",
+        "benchmarks/gemma4-metal-runtime-gate-up-200-current.csv.progress.jsonl",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "raw-gate-up-graph-fragmentation-diagnostic-017",
+      "summary": "Extended the decode TinyJit profiler to compare default and opt-in raw gate/up under JIT=1 Metal graph batching, proving the raw custom Runner fragments the post-window decode graph from 8 MetalGraph batches to 37 MetalGraph batches plus 35 raw runner launches and grows the profiled token from 67.716500 ms to 197.940124 ms. No throughput row was superseded.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-default-current.json",
+        "benchmarks/gemma4-metal-decode-graph-default-current.csv",
+        "benchmarks/gemma4-metal-decode-graph-raw-gate-up-current.json",
+        "benchmarks/gemma4-metal-decode-graph-raw-gate-up-current.csv",
+        "benchmarks/gemma4-speed-research-2026-04-23.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -136,7 +245,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "fuse-rowwise-int8-gate-up-or-scale-path",
-  "next_target_plan": "Current proof remains the runtime-int8 1000-token row: 10.721864 measured tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The post-int8 synthetic post-window profile measured 96.651 ms over 4807 kernels: other 31.712 ms, MLP 22.190 ms, norm 16.797 ms, attention 15.262 ms, logits_argmax 3.727 ms, embedding_per_layer 3.016 ms. A conditional pre-embed experiment improved synthetic profile timing to 89.465 ms but regressed the real 200-token row to 11.272605 tok/s, so do not move token embedding/per-layer input prep out of the conditional JIT. Next narrow target should keep work inside replay and reduce RowwiseInt8Linear MLP kernel volume, likely by fusing rowwise-int8 gate/up or folding the row-scale path.",
-  "updated_at": "2026-04-23T20:57:31-0700"
+  "next_target": "graphable-compiled-int8-gate-up-or-abandon",
+  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The JIT=1 graph diagnostic shows the default path captures 4807 CompiledRunner items and condenses to 8 MetalGraph batches at 67.716500 ms for the profiled post-window token. The opt-in raw gate/up path captures 13657 CompiledRunner items plus 35 RowwiseInt8DecodeLinearRunner items, fragments execution into 37 MetalGraph batches plus 35 raw launches, and measures 197.940124 ms. Do not tune the custom Python Runner further. The next narrow target is to determine whether a graphable compiled/tinygrad-native rowwise-int8 gate/up path can be built in-repo; if not, explicitly abandon raw gate/up and move to the next measured decode bottleneck.",
+  "updated_at": "2026-04-25T10:53:13-0700"
 }

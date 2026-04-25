@@ -4,6 +4,7 @@ import argparse
 import csv
 import inspect
 import json
+import os
 import re
 import time
 from collections import defaultdict
@@ -107,6 +108,15 @@ def classify_kernel(metadata) -> str:
   return "other"
 
 
+def classify_exec_item(prg, metadata) -> str:
+  program_type = type(prg).__name__ if prg is not None else ""
+  if "Graph" in program_type:
+    return "graph_batch"
+  if program_type == "RowwiseInt8DecodeLinearRunner":
+    return "raw_metal_int8_gate_up"
+  return classify_kernel(metadata)
+
+
 def checkpoint_quantization_summary(model_dir: Path) -> dict[str, Any]:
   manifest = load_quantization_manifest(model_dir)
   tensors = {} if manifest is None else manifest.get("tensors", {})
@@ -189,7 +199,8 @@ def run_captured_items(captured, token: Tensor, start_var) -> tuple[list[dict[st
       item.lower()
       prg = item.prg
       metadata = _metadata_payload(item.metadata)
-      category = classify_kernel(item.metadata)
+      category = classify_exec_item(prg, item.metadata)
+      program_type = type(prg).__name__ if prg is not None else ""
       display_name = "" if prg is None else strip_ansi(prg.display_name)
       device = "" if prg is None else prg.device
       est_ops = sym_infer(prg.estimates.ops, var_vals) if isinstance(prg, CompiledRunner) else 0
@@ -200,6 +211,7 @@ def run_captured_items(captured, token: Tensor, start_var) -> tuple[list[dict[st
       rows.append({
         "ordinal": ordinal,
         "category": category,
+        "program_type": program_type,
         "display_name": display_name,
         "device": device,
         "elapsed_ms": (elapsed if elapsed is not None else wall_elapsed) * 1000.0,
@@ -212,8 +224,27 @@ def run_captured_items(captured, token: Tensor, start_var) -> tuple[list[dict[st
   return rows, var_vals
 
 
+def summarize_exec_items(items) -> dict[str, Any]:
+  by_program_type: dict[str, int] = defaultdict(int)
+  by_category: dict[str, int] = defaultdict(int)
+  for item in items:
+    prg = item.prg
+    program_type = type(prg).__name__ if prg is not None else ""
+    by_program_type[program_type] += 1
+    by_category[classify_exec_item(prg, item.metadata)] += 1
+  return {
+    "exec_count": len(items),
+    "program_type_counts": dict(sorted(by_program_type.items())),
+    "category_counts": dict(sorted(by_category.items())),
+    "graph_batch_count": sum(count for name, count in by_program_type.items() if "Graph" in name),
+    "compiled_runner_count": by_program_type.get("CompiledRunner", 0),
+    "raw_gate_up_runner_count": by_program_type.get("RowwiseInt8DecodeLinearRunner", 0),
+  }
+
+
 def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
   by_category: dict[str, dict[str, Any]] = {}
+  by_program_type: dict[str, dict[str, Any]] = {}
   for row in rows:
     category = row["category"]
     entry = by_category.setdefault(category, {"kernel_count": 0, "elapsed_ms": 0.0, "est_ops": 0, "est_mem": 0})
@@ -221,18 +252,25 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     entry["elapsed_ms"] += row["elapsed_ms"]
     entry["est_ops"] += row["est_ops"]
     entry["est_mem"] += row["est_mem"]
+    program_type = row["program_type"]
+    program_entry = by_program_type.setdefault(program_type, {"kernel_count": 0, "elapsed_ms": 0.0})
+    program_entry["kernel_count"] += 1
+    program_entry["elapsed_ms"] += row["elapsed_ms"]
   total_elapsed = sum(row["elapsed_ms"] for row in rows)
   total_ops = sum(row["est_ops"] for row in rows)
   total_mem = sum(row["est_mem"] for row in rows)
   for entry in by_category.values():
     entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed > 0 else 0.0
     entry["ops_share"] = entry["est_ops"] / total_ops if total_ops else 0.0
+  for entry in by_program_type.values():
+    entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed > 0 else 0.0
   return {
     "kernel_count": len(rows),
     "elapsed_ms": total_elapsed,
     "est_ops": total_ops,
     "est_mem": total_mem,
     "by_category": dict(sorted(by_category.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+    "by_program_type": dict(sorted(by_program_type.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
     "top_elapsed_kernels": sorted(rows, key=lambda row: row["elapsed_ms"], reverse=True)[:20],
     "top_est_ops_kernels": sorted(rows, key=lambda row: row["est_ops"], reverse=True)[:20],
   }
@@ -241,11 +279,12 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
   with path.open("w", newline="") as handle:
-    writer = csv.DictWriter(handle, fieldnames=["ordinal", "category", "display_name", "device", "elapsed_ms", "est_ops", "est_mem", "metadata"])
+    writer = csv.DictWriter(handle, fieldnames=["ordinal", "category", "program_type", "display_name", "device", "elapsed_ms", "est_ops", "est_mem", "metadata"])
     writer.writeheader()
     for row in rows:
       writer.writerow({
         **{key: row[key] for key in ("ordinal", "category", "display_name", "device", "elapsed_ms", "est_ops", "est_mem")},
+        "program_type": row["program_type"],
         "metadata": json.dumps(row["metadata"], sort_keys=True),
       })
 
@@ -256,9 +295,16 @@ def main() -> None:
   parser.add_argument("--device", default="METAL")
   parser.add_argument("--context-length", type=int, default=700)
   parser.add_argument("--profile-start", type=int, help="Decode position to profile. Defaults to context length plus 3.")
+  parser.add_argument("--jit-mode", type=int, default=2, choices=[1, 2], help="tinygrad JIT mode. JIT=1 applies Metal graph batching; JIT=2 profiles ungraphed items.")
+  parser.add_argument("--metal-int8-gate-up", choices=["default", "raw"], default="default", help="Use the default tinygrad fused int8 gate/up path or opt into the raw Metal gate/up Runner.")
   parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
   parser.add_argument("--csv-out", type=Path)
   args = parser.parse_args()
+
+  if args.metal_int8_gate_up == "raw":
+    os.environ["TINYGRAD_GEMMA_METAL_INT8_GATE_UP"] = "1"
+  else:
+    os.environ.pop("TINYGRAD_GEMMA_METAL_INT8_GATE_UP", None)
 
   resolved_device = prepare_device(args.device)
   model = load_pretrained(args.model_dir, device=resolved_device)
@@ -274,7 +320,7 @@ def main() -> None:
   cache = build_zero_cache(model, args.context_length, max_length)
   token = Tensor([[2]], dtype="int32", device=model.device).realize()
 
-  with Context(JIT=2, BEAM=0, TRACEMETA=2):
+  with Context(JIT=args.jit_mode, BEAM=0, TRACEMETA=2):
     rollout_jit = TinyJit(lambda token, start_pos: model._rollout_next_token(token, start_pos, cache, 0.0, decode_sliding_window=True))
     for offset in range(3):
       out = rollout_jit(token, Variable("gemma_start_pos_window", sliding_start, max_length - 1).bind(args.context_length + offset))
@@ -283,6 +329,8 @@ def main() -> None:
     captured = rollout_jit.captured
     if captured is None:
       raise RuntimeError("decode TinyJit did not capture")
+    original_capture_summary = summarize_exec_items(captured.jit_cache)
+    post_graph_summary = summarize_exec_items(captured._jit_cache)
     GlobalCounters.reset()
     rows, var_vals = run_captured_items(captured, token, Variable("gemma_start_pos_window", sliding_start, max_length - 1).bind(profile_start))
 
@@ -296,7 +344,9 @@ def main() -> None:
     "profile_start": profile_start,
     "sliding_start": sliding_start,
     "max_length": max_length,
-    "jit_mode": "JIT=2 ungraphed per-kernel timing",
+    "jit_mode": args.jit_mode,
+    "jit_interpretation": "JIT=1 graph-batched execution" if args.jit_mode == 1 else "JIT=2 ungraphed per-kernel timing",
+    "metal_int8_gate_up": args.metal_int8_gate_up,
     "tensor_dtype": str(lm.embed_tokens.weight.dtype),
     "text_config": {
       "num_hidden_layers": lm.config.num_hidden_layers,
@@ -310,6 +360,8 @@ def main() -> None:
     },
     "quantization": checkpoint_quantization_summary(args.model_dir),
     "var_vals": var_vals,
+    "original_capture": original_capture_summary,
+    "post_graph_execution": post_graph_summary,
     "summary": summarize_rows(rows),
     "csv": str(csv_out),
   }
@@ -320,6 +372,10 @@ def main() -> None:
     "csv": str(csv_out),
     "kernel_count": payload["summary"]["kernel_count"],
     "elapsed_ms": round(payload["summary"]["elapsed_ms"], 3),
+    "jit_mode": args.jit_mode,
+    "metal_int8_gate_up": args.metal_int8_gate_up,
+    "original_capture": payload["original_capture"],
+    "post_graph_execution": payload["post_graph_execution"],
     "by_category": {
       key: {
         "kernel_count": value["kernel_count"],
@@ -327,6 +383,14 @@ def main() -> None:
         "elapsed_share": round(value["elapsed_share"], 4),
       }
       for key, value in payload["summary"]["by_category"].items()
+    },
+    "by_program_type": {
+      key: {
+        "kernel_count": value["kernel_count"],
+        "elapsed_ms": round(value["elapsed_ms"], 3),
+        "elapsed_share": round(value["elapsed_share"], 4),
+      }
+      for key, value in payload["summary"]["by_program_type"].items()
     },
   }, sort_keys=True))
 

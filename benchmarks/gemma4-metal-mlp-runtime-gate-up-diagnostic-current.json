@@ -1,0 +1,101 @@
+{
+  "atol": 0.02,
+  "calls": 4,
+  "cases": [
+    {
+      "captured": true,
+      "captured_kernel_count": 3,
+      "dtype": "bfloat16",
+      "interpretation": "Metal MLP gate/up replay matched the existing tinygrad fused-int8 path for changed inputs.",
+      "jit_count_final": 4,
+      "jit_mode": 1,
+      "rows": [
+        {
+          "call_index": 0,
+          "jit_count_after_call": 1,
+          "matches_capture_output": null,
+          "max_abs_error": 1.52587890625e-05,
+          "ok": true
+        },
+        {
+          "call_index": 1,
+          "jit_count_after_call": 2,
+          "matches_capture_output": true,
+          "max_abs_error": 2.288818359375e-05,
+          "ok": true
+        },
+        {
+          "call_index": 2,
+          "jit_count_after_call": 3,
+          "matches_capture_output": true,
+          "max_abs_error": 1.52587890625e-05,
+          "ok": true
+        },
+        {
+          "call_index": 3,
+          "jit_count_after_call": 4,
+          "matches_capture_output": true,
+          "max_abs_error": 1.52587890625e-05,
+          "ok": true
+        }
+      ],
+      "status": "safe_for_tinyjit_replay"
+    },
+    {
+      "captured": true,
+      "captured_kernel_count": 3,
+      "dtype": "bfloat16",
+      "interpretation": "Metal MLP gate/up replay matched the existing tinygrad fused-int8 path for changed inputs.",
+      "jit_count_final": 4,
+      "jit_mode": 2,
+      "rows": [
+        {
+          "call_index": 0,
+          "jit_count_after_call": 1,
+          "matches_capture_output": null,
+          "max_abs_error": 1.52587890625e-05,
+          "ok": true
+        },
+        {
+          "call_index": 1,
+          "jit_count_after_call": 2,
+          "matches_capture_output": true,
+          "max_abs_error": 2.288818359375e-05,
+          "ok": true
+        },
+        {
+          "call_index": 2,
+          "jit_count_after_call": 3,
+          "matches_capture_output": true,
+          "max_abs_error": 1.52587890625e-05,
+          "ok": true
+        },
+        {
+          "call_index": 3,
+          "jit_count_after_call": 4,
+          "matches_capture_output": true,
+          "max_abs_error": 1.52587890625e-05,
+          "ok": true
+        }
+      ],
+      "status": "safe_for_tinyjit_replay"
+    }
+  ],
+  "device": "METAL",
+  "diagnostic": "GemmaMLP raw Metal runtime gate/up against existing fused rowwise-int8 path",
+  "jit_modes": [
+    1,
+    2
+  ],
+  "seed": 20260424,
+  "shape": {
+    "gate_up_out_features": 12288,
+    "hidden_size": 1536,
+    "intermediate_size": 6144
+  },
+  "summary": {
+    "safe_for_decode_tinyjit_replay": true,
+    "status": "safe_for_decode_tinyjit_replay"
+  },
+  "tinygrad_path": "/Users/ericfode/.codex/worktrees/9b17/tinygrad-gemma/.venv/lib/python3.11/site-packages/tinygrad/__init__.py"
+}
