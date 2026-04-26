@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "unclassified-final-tail-structural-attribution-028",
+  "current_checkpoint": "uop-sidecar-source-attributed-timing-029",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -366,6 +366,20 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "uop-sidecar-source-attributed-timing-029",
+      "summary": "Patched the decode TinyJit profiler with a profiler-only UOp creation sidecar and UOp.replace propagation so the previous 719-item final tail becomes source-attributed. The refreshed E2B int8 METAL artifact shows 96.28% of profiled decode-token time is attention cache-write work and only 3.72% is MLP, while a 128/16 beam=0 tok/s gate measured 17.504447 warmup-excluded tok/s with decode_fallback=false. This is instrumentation/benchmark improvement only; the accepted 1000/20 floor was not superseded.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-default-current.json",
+        "benchmarks/gemma4-metal-decode-graph-default-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-current.csv.progress.jsonl",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -373,7 +387,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "final-tail-norm-logits-sidecar-attribution",
-  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The current graph profiler artifact keeps complete source attribution and now identifies the remaining 719 unclassified source items as Ops.SINK roots in the final <batched 1175> graph range, with top display signatures including r_16_96=176, E_16_32_3=70, and E_16_32_3n1=35. The next target is to add narrow profiler-only sidecar scopes around final language-model norm, logits/softcap, and sample_next realization boundaries to classify the final tail before attempting any runtime patch.",
-  "updated_at": "2026-04-25T17:19:52-0700"
+  "next_target": "cache-write-kernel-fragmentation-reduction",
+  "next_target_plan": "Treat tok/s as the hard metric. The refreshed profiler artifact benchmarks/gemma4-metal-decode-graph-default-current.json reports source_attribution.status=complete over 5239 source items and source_attributed_summary={attention_key_cache_write_local 23.419337 ms, attention_key_cache_write_shared_source 21.428166 ms, attention_value_cache_write_local 23.801497 ms, attention_value_cache_write_shared_source 7.927042 ms, mlp 2.958875 ms}. This makes attention cache-write work 76.576041 ms / 79.534916 ms = 96.28% of the profiled decode-token time, so the next runtime increment should target producer cache-write kernel count/fragmentation or a legal cache layout/store idiom, not MLP. The short beam=0 E2B int8 METAL 128/16 benchmark row measured 17.504447 warmup-excluded tok/s with rollout_jit_count=127 and decode_fallback=false; the accepted long 1000/20 floor remains 10.863932 tok/s until rerun on the same 1000/20 gate.",
+  "updated_at": "2026-04-25T17:36:10-0700"
 }

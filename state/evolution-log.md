@@ -1,5 +1,56 @@
 # Evolution Log
 
+## 2026-04-25 - UOp Sidecar Source-Attributed Timing
+
+- Hypothesis: the previous 719-item final decode graph tail can be classified
+  without changing model runtime by tagging UOp creation while profiler scopes
+  are active and propagating that side table through `UOp.replace`.
+  Invalidation criterion: focused profiler tests fail, the real E2B int8
+  `METAL` artifact keeps an unattributed tail, or the profiler changes Gemma
+  throughput behavior.
+- Implemented profiler-only UOp sidecar attribution in
+  `scripts/profile_decode_jit.py`, including `UOpMetaClass.__call__` tagging
+  and `UOp.replace` side-table propagation. Added JSON
+  `source_attributed_summary` output so benchmark artifacts report timing by
+  best available source category, not only the coarse lowered row category.
+- Artifact: `benchmarks/gemma4-metal-decode-graph-default-current.json` and
+  `benchmarks/gemma4-metal-decode-graph-default-current.csv`.
+- Result: accepted as profiler/benchmark instrumentation. The refreshed E2B
+  int8 `METAL` JIT=2 profile has `source_attribution.status=complete`,
+  `original_exec_count=5239`, `attributed_source_count=5239`,
+  `unparsed_graph_batches=0`, and `unattributed_tail_count=0`.
+- The former 719-item tail is now attributed by UOp sidecar metadata rather
+  than left as `other`: the accepted artifact reports
+  `category_basis_counts={"repo_sidecar_realize_scope_metadata": 4520,
+  "repo_sidecar_uop_creation_metadata": 719}`.
+- Source-attributed timing in the accepted artifact: total profiled token
+  `79.534916` ms; `attention_key_cache_write_local=23.419337` ms,
+  `attention_key_cache_write_shared_source=21.428166` ms,
+  `attention_value_cache_write_local=23.801497` ms,
+  `attention_value_cache_write_shared_source=7.927042` ms, and
+  `mlp=2.958875` ms. Cache-write work is therefore `76.576041` ms,
+  or about `96.28%` of the profiled decode-token time.
+- Throughput gate: `.venv/bin/python scripts/benchmark_gemma4_matrix.py
+  --root checkpoints --sizes E2B --formats int8 --devices METAL --beams 0
+  --max-new-tokens 128 --decode-warmup-tokens 16 --progress-every 64
+  --out benchmarks/gemma4-metal-e2b-int8-128-current.csv` produced an `ok`
+  row with `generated_tokens=128`, `measured_decode_tokens=112`,
+  `measured_decode_tokens_per_second=17.504447`, `rollout_jit_count=127`,
+  and `decode_fallback=false`.
+- No long-floor Gemma throughput row was superseded. Current accepted E2B int8
+  `METAL`, `beam=0`, `1000/20` floor remains `10.863932` tok/s until rerun
+  on the same gate.
+- Verification on 2026-04-25: `.venv/bin/python -m pytest
+  tests/test_profile_decode_jit.py -q` passed; the real E2B int8 `METAL`
+  profiler command refreshed the JSON/CSV artifacts; full
+  `.venv/bin/python -m pytest -q` passed with `57 passed, 2 warnings in
+  58.43s`; `.venv/bin/tinygrad-gemma --help` exited 0; and
+  `.venv/bin/python scripts/smoke_metal.py` reported `default_device=METAL`,
+  `generated_tokens=4`, `rollout_jit_count=3`, and `decode_fallback=False`.
+- Next target: stop treating MLP as the main 100 tok/s lever. The next runtime
+  increment should attack attention cache-write kernel count/fragmentation or a
+  legal cache layout/store idiom for required producer writes.
+
 ## 2026-04-25 - Unclassified Final-Tail Structural Attribution
 
 - Hypothesis: the 719 unclassified final-tail source items are structurally

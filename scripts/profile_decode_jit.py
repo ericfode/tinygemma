@@ -21,7 +21,7 @@ from tinygrad.engine.realize import CompiledRunner, ExecContext, ExecItem, resol
 from tinygrad.helpers import Context, GlobalCounters, Metadata, flatten
 from tinygrad.nn import state as nn_state
 from tinygrad.schedule import linear_to_schedule, pm_post_sched_cache
-from tinygrad.uop.ops import Ops, UOp, graph_rewrite, sym_infer
+from tinygrad.uop.ops import Ops, UOp, UOpMetaClass, all_metadata, graph_rewrite, sym_infer
 
 import tinygrad
 import tinygrad_gemma.model as gemma_model
@@ -87,6 +87,19 @@ PROFILE_CATEGORIES = (
   "norm",
 )
 _SIDECAR_STACK: list[str] = []
+UOP_SIDECAR_CATEGORY_BASIS = "repo_sidecar_uop_creation_metadata"
+UOP_SIDECAR_IGNORED_OPS = {
+  Ops.CONST,
+  Ops.VCONST,
+  Ops.DEVICE,
+  Ops.UNIQUE,
+  Ops.LUNIQUE,
+  Ops.DEFINE_VAR,
+  Ops.BIND,
+  Ops.NOOP,
+  Ops.BUFFER,
+  Ops.PARAM,
+}
 
 
 def _line_from_caller(caller: str) -> int | None:
@@ -127,11 +140,49 @@ def sidecar_metadata_category(metadata) -> str:
     caller = str(getattr(item, "caller", ""))
     if name in PROFILE_CATEGORIES:
       categories.add(name)
-    if caller.startswith("repo_sidecar:") and "::" in caller:
+    if caller.startswith(("repo_sidecar:", "repo_uop_sidecar:")) and "::" in caller:
       category = caller.rsplit("::", 1)[-1]
       if category in PROFILE_CATEGORIES:
         categories.add(category)
   return priority_category(categories)
+
+
+def merge_metadata(existing, extra) -> tuple[Metadata, ...]:
+  merged = tuple(existing or ())
+  extra_tuple = tuple(extra or ())
+  seen = {(str(getattr(item, "name", "")), str(getattr(item, "caller", ""))) for item in merged}
+  additions = [
+    item
+    for item in extra_tuple
+    if (str(getattr(item, "name", "")), str(getattr(item, "caller", ""))) not in seen
+  ]
+  return merged + tuple(additions)
+
+
+def uop_sidecar_metadata(category: str) -> tuple[Metadata, ...]:
+  return (Metadata(name=category, caller=f"repo_uop_sidecar:1::{category}"),)
+
+
+def ast_uop_sidecar_category_counts(ast) -> dict[str, int]:
+  if ast is None:
+    return {}
+  counts: dict[str, int] = defaultdict(int)
+  try:
+    uops = ast.toposort()
+  except Exception:
+    return {"error": 1}
+  for uop in uops:
+    if getattr(uop, "op", None) in UOP_SIDECAR_IGNORED_OPS:
+      continue
+    category = sidecar_metadata_category(getattr(uop, "metadata", None) or ())
+    if category != "other":
+      counts[category] += 1
+  return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def ast_uop_sidecar_category(ast) -> str:
+  counts = ast_uop_sidecar_category_counts(ast)
+  return priority_category(set(counts)) if counts else "other"
 
 
 def source_range_metadata_category(metadata) -> str:
@@ -172,6 +223,46 @@ def add_sidecar_metadata(linear: UOp, category: str) -> UOp:
     call.replace(arg=replace(call.arg, metadata=call.arg.metadata or metadata))
     for call in linear.src
   ))
+
+
+@contextmanager
+def uop_creation_sidecar_patch():
+  original_call = UOpMetaClass.__call__
+
+  def call_with_uop_sidecar(cls, *args, **kwargs):
+    uop = original_call(cls, *args, **kwargs)
+    if _SIDECAR_STACK:
+      all_metadata[uop] = merge_metadata(all_metadata.get(uop, ()), uop_sidecar_metadata(_SIDECAR_STACK[-1]))
+    return uop
+
+  UOpMetaClass.__call__ = call_with_uop_sidecar
+  try:
+    yield
+  finally:
+    UOpMetaClass.__call__ = original_call
+
+
+@contextmanager
+def uop_replace_sidecar_patch():
+  original_replace = UOp.replace
+
+  def replace_with_metadata(self, **kwargs):
+    previous_metadata = all_metadata.get(self, ())
+    new_uop = original_replace(self, **kwargs)
+    current_metadata = all_metadata.get(new_uop, ())
+    if previous_metadata:
+      current_metadata = merge_metadata(current_metadata, previous_metadata)
+    if _SIDECAR_STACK:
+      current_metadata = merge_metadata(current_metadata, uop_sidecar_metadata(_SIDECAR_STACK[-1]))
+    if current_metadata:
+      all_metadata[new_uop] = current_metadata
+    return new_uop
+
+  UOp.replace = replace_with_metadata
+  try:
+    yield
+  finally:
+    UOp.replace = original_replace
 
 
 def tensor_has_op(tensor: Tensor, op: Ops) -> bool:
@@ -291,6 +382,8 @@ def gemma_profile_sidecars():
     (GemmaForConditionalGeneration, "sample_next", "logits_argmax"),
   ]
   with ExitStack() as stack:
+    stack.enter_context(uop_creation_sidecar_patch())
+    stack.enter_context(uop_replace_sidecar_patch())
     stack.enter_context(add_linear_sidecar_patch())
     stack.enter_context(tensor_realize_sidecar_patch())
     stack.enter_context(cache_update_sidecar_patch())
@@ -309,17 +402,25 @@ def classify_exec_item(prg, metadata) -> str:
 
 
 def source_category(item) -> str:
-  return getattr(item, "category", None) or classify_exec_item(item.prg, item.metadata)
+  explicit_category = getattr(item, "category", None)
+  if explicit_category is not None and explicit_category != "other":
+    return explicit_category
+  category = classify_exec_item(item.prg, item.metadata)
+  if category != "other":
+    return category
+  return ast_uop_sidecar_category(getattr(item, "ast", None))
 
 
 def source_item_category_basis(item) -> str:
   explicit_category = getattr(item, "category", None)
-  if explicit_category is not None:
-    return "source_item_metadata" if explicit_category != "other" else "unclassified_source_item_metadata"
+  if explicit_category is not None and explicit_category != "other":
+    return "source_item_metadata"
   if sidecar_metadata_category(item.metadata) != "other":
     return "repo_sidecar_realize_scope_metadata"
   if source_range_metadata_category(item.metadata) != "other":
     return "source_item_metadata"
+  if ast_uop_sidecar_category(getattr(item, "ast", None)) != "other":
+    return UOP_SIDECAR_CATEGORY_BASIS
   return "unclassified_source_item_metadata"
 
 
@@ -383,6 +484,10 @@ def source_slice_summary(items) -> dict[str, Any]:
       "display_name_counts": count_map(source_item_display_name(item) for item in unclassified_items),
       "ast_root_counts": count_map(source_item_ast_root(item) for item in unclassified_items),
       "op_signature_counts": count_map(source_item_op_signature(item) for item in unclassified_items),
+      "uop_sidecar_category_counts": count_map(
+        json.dumps(ast_uop_sidecar_category_counts(getattr(item, "ast", None)), sort_keys=True)
+        for item in unclassified_items
+      ),
     },
   }
 
@@ -394,6 +499,8 @@ def category_basis(category_basis_counts: dict[str, int], source_count: int) -> 
     return "repo_sidecar_realize_scope_metadata"
   if category_basis_counts.get("source_item_metadata", 0) > 0:
     return "source_item_metadata"
+  if category_basis_counts.get(UOP_SIDECAR_CATEGORY_BASIS, 0) > 0:
+    return UOP_SIDECAR_CATEGORY_BASIS
   return "unclassified_source_item_metadata"
 
 
@@ -643,6 +750,35 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
   }
 
 
+def summarize_source_attribution(attribution: dict[str, Any]) -> dict[str, Any]:
+  by_category: dict[str, dict[str, Any]] = {}
+  by_basis: dict[str, dict[str, Any]] = {}
+  total_elapsed = sum(float(item["elapsed_ms"]) for item in attribution["items"])
+  total_source_count = sum(int(item["source_count"]) for item in attribution["items"])
+  for item in attribution["items"]:
+    source_count = max(1, int(item["source_count"]))
+    elapsed_ms = float(item["elapsed_ms"])
+    basis = item["category_basis"]
+    basis_entry = by_basis.setdefault(basis, {"source_count": 0, "execution_count": 0, "elapsed_ms": 0.0})
+    basis_entry["source_count"] += source_count
+    basis_entry["execution_count"] += 1
+    basis_entry["elapsed_ms"] += elapsed_ms
+    for category, count in item["category_counts"].items():
+      entry = by_category.setdefault(category, {"source_count": 0, "elapsed_ms": 0.0})
+      entry["source_count"] += int(count)
+      entry["elapsed_ms"] += elapsed_ms * (int(count) / source_count)
+  for entry in by_category.values():
+    entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed else 0.0
+  for entry in by_basis.values():
+    entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed else 0.0
+  return {
+    "source_count": total_source_count,
+    "elapsed_ms": total_elapsed,
+    "by_category": dict(sorted(by_category.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+    "by_category_basis": dict(sorted(by_basis.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+  }
+
+
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
   with path.open("w", newline="") as handle:
@@ -744,6 +880,7 @@ def main() -> None:
     ),
   }
   post_graph_summary = summarize_exec_items(execution_items)
+  source_attributed_summary = summarize_source_attribution(source_attribution)
   csv_out = args.csv_out or args.out.with_suffix(".csv")
   write_csv(csv_out, rows)
   payload = {
@@ -773,6 +910,7 @@ def main() -> None:
     "original_capture": original_capture_summary,
     "post_graph_execution": post_graph_summary,
     "source_attribution": source_attribution,
+    "source_attributed_summary": source_attributed_summary,
     "summary": summarize_rows(rows),
     "csv": str(csv_out),
   }
@@ -807,6 +945,23 @@ def main() -> None:
         }
         for item in sorted(source_attribution["items"], key=lambda item: item["elapsed_ms"], reverse=True)[:5]
       ],
+    },
+    "source_attributed_by_category": {
+      key: {
+        "source_count": value["source_count"],
+        "elapsed_ms": round(value["elapsed_ms"], 3),
+        "elapsed_share": round(value["elapsed_share"], 4),
+      }
+      for key, value in source_attributed_summary["by_category"].items()
+    },
+    "source_attributed_by_basis": {
+      key: {
+        "source_count": value["source_count"],
+        "execution_count": value["execution_count"],
+        "elapsed_ms": round(value["elapsed_ms"], 3),
+        "elapsed_share": round(value["elapsed_share"], 4),
+      }
+      for key, value in source_attributed_summary["by_category_basis"].items()
     },
     "by_category": {
       key: {

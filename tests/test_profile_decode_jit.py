@@ -51,8 +51,9 @@ class FakeMetadata:
 
 
 class FakeUOp:
-  def __init__(self, op):
+  def __init__(self, op, metadata=None):
     self.op = op
+    self.metadata = metadata or []
 
 
 class FakeTensor:
@@ -102,6 +103,76 @@ def test_profile_classifies_repo_sidecar_metadata():
   ]
 
   assert profile.classify_kernel(metadata) == "attention_key_cache_write_shared_source"
+
+
+def test_profile_uop_creation_sidecar_patch_restores_and_stamps_cached_uops():
+  original = profile.UOpMetaClass.__call__
+  marker = "PROFILE_TEST_UOP_SIDECAR_REUSE"
+  base = profile.UOp(profile.Ops.DEVICE, arg=marker)
+
+  with profile.uop_creation_sidecar_patch():
+    with profile.sidecar_scope("logits_argmax"):
+      reused = profile.UOp(profile.Ops.DEVICE, arg=marker)
+
+  assert reused is base
+  assert profile.UOpMetaClass.__call__ is original
+  assert profile.sidecar_metadata_category(reused.metadata or ()) == "logits_argmax"
+
+
+def test_profile_uop_replace_sidecar_patch_preserves_metadata_across_replace():
+  original = profile.UOp.replace
+  source = profile.UOp(profile.Ops.CONST, arg=1)
+  profile.all_metadata[source] = profile.uop_sidecar_metadata("mlp")
+
+  with profile.uop_replace_sidecar_patch():
+    replaced = source.replace(arg=2)
+
+  assert profile.UOp.replace is original
+  assert replaced is not source
+  assert profile.sidecar_metadata_category(replaced.metadata or ()) == "mlp"
+
+
+def test_profile_classifies_source_item_from_ast_uop_sidecar_metadata():
+  ast = FakeAst(
+    FakeUOp("Ops.SINK", [FakeMetadata("logits_argmax", "repo_uop_sidecar:1::logits_argmax")]),
+    FakeUOp(profile.Ops.CONST, [FakeMetadata("attention", "repo_uop_sidecar:1::attention")]),
+  )
+  item = FakeItem("other", ast=ast)
+
+  assert profile.source_category(item) == "logits_argmax"
+  assert profile.source_item_category_basis(item) == profile.UOP_SIDECAR_CATEGORY_BASIS
+  assert profile.ast_uop_sidecar_category_counts(ast) == {"logits_argmax": 1}
+
+
+def test_profile_batch_category_basis_preserves_uop_sidecar_metadata():
+  counts = {profile.UOP_SIDECAR_CATEGORY_BASIS: 1, "unclassified_source_item_metadata": 2}
+
+  assert profile.category_basis(counts, 3) == profile.UOP_SIDECAR_CATEGORY_BASIS
+
+
+def test_profile_summarizes_source_attribution_by_best_available_category():
+  summary = profile.summarize_source_attribution({
+    "items": [
+      {
+        "elapsed_ms": 10.0,
+        "source_count": 2,
+        "category_basis": "repo_sidecar_uop_creation_metadata",
+        "category_counts": {"mlp": 1, "attention_key_cache_write_shared_source": 1},
+      },
+      {
+        "elapsed_ms": 5.0,
+        "source_count": 1,
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_counts": {"attention_value_cache_write_local": 1},
+      },
+    ]
+  })
+
+  assert summary["source_count"] == 3
+  assert summary["elapsed_ms"] == 15.0
+  assert summary["by_category"]["mlp"]["elapsed_ms"] == 5.0
+  assert summary["by_category"]["attention_key_cache_write_shared_source"]["elapsed_ms"] == 5.0
+  assert summary["by_category_basis"]["repo_sidecar_uop_creation_metadata"]["source_count"] == 2
 
 
 def test_profile_method_sidecar_patch_restores_original_method():
