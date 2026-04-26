@@ -1,0 +1,57 @@
+{
+  "artifact": "synthetic tinygrad MetalGraph JIT_BATCH_SIZE policy probe",
+  "repo": "/Users/ericfode/Downloads/tinygrad-gemma",
+  "tinygrad_path": "/Users/ericfode/src/.tinygrad_research/tinygrad",
+  "kernel_count": 100,
+  "interpretation": "JIT_BATCH_SIZE controls graph batch grouping for graphable tinygrad kernels; JIT_BATCH_SIZE=0 collapses all 100 synthetic kernels into one MetalGraph on this runtime.",
+  "results": [
+    {
+      "jit_batch_size": "32",
+      "cnt": 5,
+      "graph_count": 3,
+      "graph_source_counts": [
+        32,
+        64,
+        4
+      ],
+      "call_count_recursive": 7
+    },
+    {
+      "jit_batch_size": "64",
+      "cnt": 5,
+      "graph_count": 2,
+      "graph_source_counts": [
+        64,
+        36
+      ],
+      "call_count_recursive": 6
+    },
+    {
+      "jit_batch_size": "128",
+      "cnt": 5,
+      "graph_count": 1,
+      "graph_source_counts": [
+        100
+      ],
+      "call_count_recursive": 5
+    },
+    {
+      "jit_batch_size": "512",
+      "cnt": 5,
+      "graph_count": 1,
+      "graph_source_counts": [
+        100
+      ],
+      "call_count_recursive": 5
+    },
+    {
+      "jit_batch_size": "0",
+      "cnt": 5,
+      "graph_count": 1,
+      "graph_source_counts": [
+        100
+      ],
+      "call_count_recursive": 5
+    }
+  ]
+}

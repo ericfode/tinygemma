@@ -1,0 +1,3 @@
+Auto-continue sentinel for Hermes CLI plugin.
+
+This project should keep advancing autonomously toward the repo-loop next_target. Stop only with PROJECT COMPLETE, WHOLE PROJECT COMPLETE, ACTUAL QUESTION:, BLOCKED:, or UNRESOLVED BLOCKER:.

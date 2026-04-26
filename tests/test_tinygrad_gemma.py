@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 import math
 import wave
@@ -35,7 +36,8 @@ from tinygrad_gemma import (
 )
 from tinygrad_gemma.cli import DEFAULT_MAX_BEAM, resolve_beam
 from tinygrad_gemma.metal_int8 import metal_rowwise_int8_decode_linear
-from tinygrad_gemma.model import GemmaMLP, build_attention_mask
+from tinygrad_gemma.model import GemmaCacheEntry, GemmaMLP, build_attention_mask
+import tinygrad_gemma.model as model_module
 from tinygrad_gemma.quantization import RowwiseInt8Linear, quantize_state_dict
 from tinygrad_gemma.runtime import temporary_default_device
 from tinygrad_gemma.tokenizer import GemmaTokenizer
@@ -419,8 +421,121 @@ def test_preallocated_cache_matches_full_forward_for_gemma4():
     prompt = [2, 4, 6]
     cache = GemmaCache.empty(config.num_hidden_layers, max_length=8)
     _, cache = model.forward_ids(prompt, cache=cache)
+    packed_entry = cache.entries[0]
+    assert packed_entry is not None
+    assert packed_entry.packed is not None
+    assert packed_entry.packed.shape == (1, config.num_key_value_heads, cache.max_length, config.head_dim, 2)
     step_logits, _ = model.forward_ids([9], cache=cache)
     full_logits, _ = model.forward_ids(prompt + [9])
+  np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
+
+
+def test_roll_sliding_cache_entry_aligns_absolute_positions_by_modulo_slot():
+  key = Tensor(np.arange(6, dtype=np.float32).reshape(1, 1, 6, 1))
+  value = Tensor((100 + np.arange(6, dtype=np.float32)).reshape(1, 1, 6, 1))
+  entry = GemmaCacheEntry(key=key, value=value, length=6)
+
+  rolled = model_module.roll_sliding_cache_entry(entry, window=4)
+
+  assert rolled.length == 6
+  assert rolled.window == 4
+  assert rolled.packed is not None
+  assert rolled.packed.shape == (1, 1, 4, 1, 2)
+  assert rolled.key.shape == (1, 1, 4, 1)
+  np.testing.assert_allclose(rolled.key.numpy().reshape(4), np.array([4, 5, 2, 3], dtype=np.float32))
+  np.testing.assert_allclose(rolled.value.numpy().reshape(4), np.array([104, 105, 102, 103], dtype=np.float32))
+
+
+def test_rolled_sliding_cache_decode_matches_full_forward_for_gemma4():
+  config = make_config()
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=41)
+    prompt = [2, 4, 6, 8, 10, 12]
+    cache = GemmaCache.empty(config.num_hidden_layers, max_length=10)
+    _, cache = model.forward_ids(prompt, cache=cache)
+    entry = cache.entries[0]
+    assert entry is not None
+    cache.entries[0] = model_module.roll_sliding_cache_entry(entry, config.sliding_window)
+    cache.decode_sliding_window = True
+
+    step_logits, _ = model.forward_ids([14], cache=cache)
+    full_logits, _ = model.forward_ids(prompt + [14])
+
+  np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
+
+
+def test_roll_sliding_cache_entries_only_rolls_sliding_producers():
+  config = make_config()
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=42)
+    cache = GemmaCache.empty(config.num_hidden_layers, max_length=10)
+    _, cache = model.forward_ids([2, 4, 6, 8, 10, 12], cache=cache)
+    model_module.roll_sliding_cache_entries(cache, model.model.layers)
+
+  sliding_entry = cache.entries[0]
+  full_entry = cache.entries[1]
+  assert sliding_entry is not None
+  assert full_entry is not None
+  assert sliding_entry.window == config.sliding_window
+  assert sliding_entry.key.shape[2] == config.sliding_window
+  assert full_entry.window is None
+  assert full_entry.key.shape[2] == cache.max_length
+
+
+def test_roll_sliding_cache_entries_rolls_shared_sliding_sources_only():
+  config = replace(
+    make_config(),
+    num_hidden_layers=4,
+    layer_types=["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+    num_kv_shared_layers=2,
+  )
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=43)
+    cache = GemmaCache.empty(config.num_hidden_layers, max_length=10)
+    _, cache = model.forward_ids([2, 4, 6, 8, 10, 12], cache=cache)
+    assert model.model.layers[0].self_attn.store_full_length_kv
+    assert model.model.layers[1].self_attn.store_full_length_kv
+
+    model_module.roll_sliding_cache_entries(cache, model.model.layers)
+
+  shared_sliding_source = cache.entries[0]
+  shared_full_source = cache.entries[1]
+  assert shared_sliding_source is not None
+  assert shared_full_source is not None
+  assert shared_sliding_source.window == config.sliding_window
+  assert shared_sliding_source.key.shape[2] == config.sliding_window
+  assert shared_full_source.window is None
+  assert shared_full_source.key.shape[2] == cache.max_length
+
+
+def test_rolled_shared_sliding_source_matches_full_forward_after_window():
+  config = replace(
+    make_config(),
+    num_hidden_layers=4,
+    layer_types=["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+    num_kv_shared_layers=2,
+  )
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=44)
+    prompt = [2, 4, 6, 8, 10, 12]
+    cache = GemmaCache.empty(config.num_hidden_layers, max_length=10)
+    _, cache = model.forward_ids(prompt, cache=cache)
+    model_module.roll_sliding_cache_entries(cache, model.model.layers)
+    cache.decode_sliding_window = True
+
+    shared_sliding_source = cache.entries[0]
+    shared_full_source = cache.entries[1]
+    assert shared_sliding_source is not None
+    assert shared_full_source is not None
+    assert shared_sliding_source.window == config.sliding_window
+    assert shared_full_source.window is None
+
+    step_logits, _ = model.forward_ids([14], cache=cache)
+    full_logits, _ = model.forward_ids(prompt + [14])
   np.testing.assert_allclose(step_logits.numpy(), full_logits.numpy()[:, -1:, :], rtol=1e-4, atol=1e-4)
 
 
@@ -996,6 +1111,32 @@ def test_runtime_int8_mlp_fused_gate_up_matches_separate_path(tmp_path: Path):
       mlp._can_use_fused_int8_gate_up = can_fuse
 
   np.testing.assert_allclose(fused.numpy(), separate.numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_runtime_int8_attention_fused_kv_matches_separate_path(tmp_path: Path):
+  config = make_config()
+  with temporary_default_device("PYTHON"):
+    model = GemmaForCausalLM(config)
+    randomize_model(model, seed=75)
+    checkpoint_dir = tmp_path / "quantized-fused-kv"
+    save_training_checkpoint(model, checkpoint_dir, quantize="int8")
+    runtime = load_pretrained(checkpoint_dir, device="PYTHON")
+    attention = runtime.model.layers[0].self_attn
+    assert isinstance(attention.k_proj, RowwiseInt8Linear)
+    assert isinstance(attention.v_proj, RowwiseInt8Linear)
+    x = Tensor.randn(1, 3, config.hidden_size)
+    hidden_shape = (1, 3, -1, attention.head_dim)
+
+    fused_k, fused_v = attention._project_kv(x, hidden_shape)
+    can_fuse = attention._can_use_fused_int8_kv
+    attention._can_use_fused_int8_kv = lambda: False
+    try:
+      separate_k, separate_v = attention._project_kv(x, hidden_shape)
+    finally:
+      attention._can_use_fused_int8_kv = can_fuse
+
+  np.testing.assert_allclose(fused_k.numpy(), separate_k.numpy(), rtol=1e-5, atol=1e-5)
+  np.testing.assert_allclose(fused_v.numpy(), separate_v.numpy(), rtol=1e-5, atol=1e-5)
 
 
 def test_metal_rowwise_int8_decode_linear_rejects_non_metal():

@@ -71,6 +71,18 @@ class FakeTensor:
     del value
     return self
 
+  def squeeze(self, dim=None):
+    del dim
+    return self
+
+  def unsqueeze(self, dim):
+    del dim
+    return self
+
+  def cat(self, other, dim=0):
+    del other, dim
+    return self
+
   def realize(self):
     calls = getattr(self, "calls", None)
     if calls is not None:
@@ -103,6 +115,29 @@ def test_profile_classifies_repo_sidecar_metadata():
   ]
 
   assert profile.classify_kernel(metadata) == "attention_key_cache_write_shared_source"
+
+
+def test_profile_cache_write_category_metadata_is_parseable_and_rolls_up():
+  category = profile.cache_write_sidecar_category("packed", "local", 0, "sliding_attention")
+  assert category == "attention_packed_cache_write__role_local__layer_00__type_sliding_attention"
+  assert profile.cache_write_category_metadata(category) == {
+    "kind": "packed",
+    "layout": "packed",
+    "role": "local",
+    "layer_idx": 0,
+    "layer": "00",
+    "layer_type": "sliding_attention",
+    "rollup": "attention_packed_cache_write_local",
+  }
+  assert profile.category_rollup(category) == "attention_packed_cache_write_local"
+  assert profile.sidecar_metadata_category([FakeMetadata(category, f"repo_sidecar:1::{category}")]) == category
+
+
+def test_profile_cache_write_category_sanitizes_unknown_layer_metadata():
+  category = profile.cache_write_sidecar_category("key", "shared_consumer", None, "full-attention")
+  assert category == "attention_key_cache_write__role_shared_consumer__layer_unknown__type_full_attention"
+  assert profile.cache_write_category_metadata(category)["layout"] == "split"
+  assert profile.category_rollup(category) == "attention_key_cache_write_shared_consumer"
 
 
 def test_profile_uop_creation_sidecar_patch_restores_and_stamps_cached_uops():
@@ -172,7 +207,39 @@ def test_profile_summarizes_source_attribution_by_best_available_category():
   assert summary["elapsed_ms"] == 15.0
   assert summary["by_category"]["mlp"]["elapsed_ms"] == 5.0
   assert summary["by_category"]["attention_key_cache_write_shared_source"]["elapsed_ms"] == 5.0
+  assert summary["by_category_rollup"]["attention_key_cache_write_shared_source"]["elapsed_ms"] == 5.0
   assert summary["by_category_basis"]["repo_sidecar_uop_creation_metadata"]["source_count"] == 2
+
+
+def test_profile_summarizes_detailed_cache_categories_with_backward_compatible_rollup():
+  detailed = profile.cache_write_sidecar_category("packed", "shared_source", 17, "sliding_attention")
+  attribution = {
+    "items": [
+      {
+        "elapsed_ms": 9.0,
+        "source_count": 3,
+        "category_basis": "repo_sidecar_uop_creation_metadata",
+        "category_counts": {detailed: 2, "mlp": 1},
+      }
+    ]
+  }
+
+  summary = profile.summarize_source_attribution(attribution)
+
+  assert summary["source_count"] == 3
+  assert summary["by_category"][detailed]["source_count"] == 2
+  assert summary["by_category"][detailed]["elapsed_ms"] == 6.0
+  assert summary["by_category_rollup"]["attention_packed_cache_write_shared_source"]["source_count"] == 2
+  assert summary["by_category_rollup"]["attention_packed_cache_write_shared_source"]["elapsed_ms"] == 6.0
+
+
+def test_profile_source_slice_summary_keeps_detailed_counts_and_rollups():
+  detailed = profile.cache_write_sidecar_category("value", "local", 3, "sliding_attention")
+
+  summary = profile.source_slice_summary([FakeItem(detailed), FakeItem("mlp")])
+
+  assert summary["category_counts"] == {detailed: 1, "mlp": 1}
+  assert summary["category_counts_rollup"] == {"attention_value_cache_write_local": 1, "mlp": 1}
 
 
 def test_profile_method_sidecar_patch_restores_original_method():
@@ -223,13 +290,48 @@ def test_profile_cache_update_sidecar_patch_splits_key_and_value_scopes():
         "value",
         0,
         1,
+        layer_idx=0,
+        layer_type="sliding_attention",
         is_kv_shared_layer=False,
         store_full_length_kv=True,
       )
   finally:
     profile.gemma_model.realize_cache_update = original
 
-  assert calls == ["attention_key_cache_write_shared_source", "attention_value_cache_write_shared_source"]
+  assert calls == [
+    "attention_key_cache_write__role_shared_source__layer_00__type_sliding_attention",
+    "attention_value_cache_write__role_shared_source__layer_00__type_sliding_attention",
+  ]
+
+
+def test_profile_cache_update_sidecar_patch_tracks_packed_cache_scope():
+  original = profile.gemma_model.realize_cache_update
+  calls = []
+  key_cache = FakeTensor()
+  value_cache = FakeTensor()
+  packed_cache = FakeTensor()
+  packed_cache.calls = calls
+
+  try:
+    with profile.cache_update_sidecar_patch():
+      profile.gemma_model.realize_cache_update(
+        key_cache,
+        value_cache,
+        FakeTensor(),
+        FakeTensor(),
+        0,
+        1,
+        layer_idx=12,
+        layer_type="full_attention",
+        is_kv_shared_layer=False,
+        store_full_length_kv=False,
+        single_position=True,
+        packed_cache=packed_cache,
+      )
+  finally:
+    profile.gemma_model.realize_cache_update = original
+
+  assert calls == ["attention_packed_cache_write__role_local__layer_12__type_full_attention"]
 
 
 def test_graph_batch_attribution_maps_batched_display_to_source_ranges():

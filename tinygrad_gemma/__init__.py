@@ -4,7 +4,10 @@ os.environ.setdefault("CACHELEVEL", "0")
 
 from tinygrad.helpers import CACHELEVEL
 
-CACHELEVEL.value = int(os.environ["CACHELEVEL"])
+if hasattr(CACHELEVEL, "value"):
+    CACHELEVEL.value = int(os.environ["CACHELEVEL"])
+else:
+    os.environ["CACHELEVEL"] = str(os.environ["CACHELEVEL"])
 
 from .config import GemmaAudioConfig, GemmaConditionalConfig, GemmaConfig, GemmaVisionConfig
 from .loader import load_config, load_pretrained, load_state_dict, load_text_config

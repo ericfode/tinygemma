@@ -125,6 +125,8 @@ def sliding_decode_kv(
   past_seen_tokens,
   sliding_window: int,
 ) -> tuple[Tensor, Tensor]:
+  if isinstance(key.shape[2], int) and key.shape[2] <= sliding_window:
+    return key, value
   if isinstance(past_seen_tokens, int):
     return kv_suffix(key, value, sliding_window)
   # Symbolic slicing is only valid once the bound is known to be inside the
@@ -174,6 +176,8 @@ class GemmaCacheEntry:
   key: Tensor
   value: Tensor
   length: int | None = None
+  window: int | None = None
+  packed: Tensor | None = None
 
 
 @dataclass
@@ -194,10 +198,83 @@ class GemmaCache:
         entry.length = length
 
 
+def make_packed_cache_entry(
+  batch: int,
+  heads: int,
+  length: int,
+  head_dim: int,
+  *,
+  device,
+  dtype,
+  active_length: int | None = 0,
+  window: int | None = None,
+) -> GemmaCacheEntry:
+  packed = Tensor.zeros(batch, heads, length, head_dim, 2, device=device, dtype=dtype).contiguous().realize()
+  return GemmaCacheEntry(key=packed[..., 0], value=packed[..., 1], length=active_length, window=window, packed=packed)
+
+
 def active_cache_tensors(entry: GemmaCacheEntry) -> tuple[Tensor, Tensor]:
   if entry.length is None:
     return entry.key, entry.value
+  if entry.window is not None:
+    if isinstance(entry.length, int) and entry.length < entry.window:
+      return entry.key[:, :, : entry.length, :], entry.value[:, :, : entry.length, :]
+    return entry.key[:, :, : entry.window, :], entry.value[:, :, : entry.window, :]
   return entry.key[:, :, : entry.length, :], entry.value[:, :, : entry.length, :]
+
+
+def roll_sliding_cache_entry(entry: GemmaCacheEntry, window: int) -> GemmaCacheEntry:
+  if entry.length is None:
+    return GemmaCacheEntry(key=entry.key, value=entry.value, length=entry.length, window=window)
+  if not isinstance(entry.length, int):
+    return GemmaCacheEntry(key=entry.key, value=entry.value, length=entry.length, window=window)
+  if entry.window == window and isinstance(entry.key.shape[2], int) and entry.key.shape[2] == window:
+    return entry
+
+  length = entry.length
+  physical_len = min(length, window)
+  logical_start = length - physical_len
+  batch, heads, _, head_dim = entry.key.shape
+  rolled_entry = make_packed_cache_entry(
+    batch,
+    heads,
+    window,
+    head_dim,
+    device=entry.key.device,
+    dtype=entry.key.dtype,
+    active_length=length,
+    window=window,
+  )
+  rolled_key, rolled_value = rolled_entry.key, rolled_entry.value
+  if physical_len > 0:
+    source_key = entry.key[:, :, logical_start:length, :]
+    source_value = entry.value[:, :, logical_start:length, :]
+    first_slot = logical_start % window
+    first_count = min(physical_len, window - first_slot)
+    rolled_key[:, :, first_slot:first_slot + first_count, :].assign(source_key[:, :, :first_count, :]).realize()
+    rolled_value[:, :, first_slot:first_slot + first_count, :].assign(source_value[:, :, :first_count, :]).realize()
+    remaining = physical_len - first_count
+    if remaining > 0:
+      rolled_key[:, :, :remaining, :].assign(source_key[:, :, first_count:, :]).realize()
+      rolled_value[:, :, :remaining, :].assign(source_value[:, :, first_count:, :]).realize()
+  return rolled_entry
+
+
+def roll_sliding_cache_entries(cache: GemmaCache, layers: Sequence) -> None:
+  for layer_idx, layer in enumerate(layers):
+    attention = layer.self_attn
+    # Shared full-attention sources must retain absolute-position storage because
+    # full-attention consumers can attend arbitrarily far back. Shared sliding
+    # sources feed only sliding consumers of the same layer type, so decode can
+    # use the same physical ring as ordinary sliding producers: K/V order is not
+    # semantically observed for one-token causal sliding attention when no mask is
+    # needed, provided key and value are permuted together.
+    shared_full_source_needs_absolute = attention.store_full_length_kv and attention.config.num_kv_shared_layers > 0 and attention.sliding_window is None
+    if attention.sliding_window is None or attention.is_kv_shared_layer or shared_full_source_needs_absolute:
+      continue
+    entry = cache.entries[layer_idx]
+    if entry is not None:
+      cache.entries[layer_idx] = roll_sliding_cache_entry(entry, attention.sliding_window)
 
 
 def realize_cache_update(
@@ -212,8 +289,21 @@ def realize_cache_update(
   layer_type: str | None = None,
   is_kv_shared_layer: bool = False,
   store_full_length_kv: bool = False,
+  single_position: bool = False,
+  packed_cache: Tensor | None = None,
 ) -> None:
   del layer_idx, layer_type, is_kv_shared_layer, store_full_length_kv
+  if packed_cache is not None:
+    if single_position:
+      packed_kv = key.squeeze(2).unsqueeze(-1).cat(value.squeeze(2).unsqueeze(-1), dim=-1)
+      packed_cache[:, :, start, :, :].assign(packed_kv).realize()
+      return
+    packed_cache[:, :, start:end, :, :].assign(key.unsqueeze(-1).cat(value.unsqueeze(-1), dim=-1)).realize()
+    return
+  if single_position:
+    key_cache[:, :, start, :].assign(key.squeeze(2)).realize()
+    value_cache[:, :, start, :].assign(value.squeeze(2)).realize()
+    return
   key_cache[:, :, start:end, :].assign(key).realize()
   value_cache[:, :, start:end, :].assign(value).realize()
 
@@ -245,6 +335,7 @@ class RMSNorm:
 
 _FUSED_GATE_UP_WEIGHTS: dict[tuple[int, int], Tensor] = {}
 _FUSED_INT8_GATE_UP: dict[tuple[int, int, int, int], tuple[Tensor, Tensor]] = {}
+_FUSED_INT8_KV: dict[tuple[int, int, int, int], tuple[Tensor, Tensor]] = {}
 
 
 class GemmaMLP:
@@ -393,6 +484,42 @@ class GemmaAttention:
       self.v_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
     self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
 
+  def _can_use_fused_int8_kv(self) -> bool:
+    return (
+      not Tensor.training
+      and not self.is_kv_shared_layer
+      and self.v_proj is not None
+      and getattr(self.k_proj, "is_rowwise_int8", False)
+      and getattr(self.v_proj, "is_rowwise_int8", False)
+      and getattr(self.k_proj, "bias", None) is None
+      and getattr(self.v_proj, "bias", None) is None
+    )
+
+  def _fused_int8_kv_weight_scale(self) -> tuple[Tensor, Tensor]:
+    key = (id(self.k_proj.weight), id(self.k_proj.scale), id(self.v_proj.weight), id(self.v_proj.scale))
+    fused = _FUSED_INT8_KV.get(key)
+    if fused is None:
+      fused = (
+        self.k_proj.weight.cat(self.v_proj.weight, dim=0).contiguous().realize(),
+        self.k_proj.scale.cat(self.v_proj.scale, dim=0).contiguous().realize(),
+      )
+      _FUSED_INT8_KV[key] = fused
+    return fused
+
+  def _project_kv(self, hidden_states: Tensor, hidden_shape: tuple) -> tuple[Tensor, Tensor]:
+    if self._can_use_fused_int8_kv():
+      weight, scale = self._fused_int8_kv_weight_scale()
+      kv = hidden_states.matmul(weight.transpose(), dtype="float")
+      kv = (kv * scale.reshape(*([1] * (kv.ndim - 1)), scale.shape[0])).cast(hidden_states.dtype)
+      raw_k, raw_v = kv.chunk(2, dim=-1)
+    else:
+      raw_k = self.k_proj(hidden_states)
+      raw_v = self.v_proj(hidden_states) if self.v_proj is not None else raw_k
+    return (
+      raw_k.reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim),
+      raw_v.reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim),
+    )
+
   def rope_parameters(self) -> tuple[float, float]:
     params = (self.config.rope_parameters or {}).get(self.layer_type, {})
     return float(params.get("rope_theta", 10000.0)), float(params.get("partial_rotary_factor", 1.0))
@@ -431,8 +558,7 @@ class GemmaAttention:
       entry = self.shared_state(cache, shared_kv_states)
       k, v = active_cache_tensors(entry)
     else:
-      raw_k = self.k_proj(hidden_states).reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim)
-      raw_v = self.v_proj(hidden_states).reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim) if self.v_proj is not None else raw_k
+      raw_k, raw_v = self._project_kv(hidden_states, hidden_shape)
       k = self.k_norm(raw_k)
       k = apply_rotary_pos_emb(k, cos, sin, unsqueeze_dim=2).transpose(1, 2)
       v = self.v_norm(raw_v).transpose(1, 2)
@@ -444,40 +570,54 @@ class GemmaAttention:
             raise ValueError(f"cache capacity exceeded: need {end_pos}, capacity {cache.max_length}")
           entry = cache.entries[self.layer_idx]
           if entry is None:
-            key_cache = Tensor.zeros(batch, self.num_key_value_heads, cache.max_length, self.head_dim, device=k.device, dtype=k.dtype).contiguous().realize()
-            value_cache = Tensor.zeros(batch, self.num_key_value_heads, cache.max_length, self.head_dim, device=v.device, dtype=v.dtype).contiguous().realize()
-            entry = GemmaCacheEntry(key=key_cache, value=value_cache, length=0)
+            entry = make_packed_cache_entry(
+              batch,
+              self.num_key_value_heads,
+              cache.max_length,
+              self.head_dim,
+              device=k.device,
+              dtype=k.dtype,
+              active_length=0,
+            )
             cache.entries[self.layer_idx] = entry
           if isinstance(past_seen_tokens, int):
+            write_start = past_seen_tokens % entry.window if entry.window is not None and query_len == 1 else past_seen_tokens
+            write_end = write_start + 1 if entry.window is not None and query_len == 1 else end_pos
             realize_cache_update(
               entry.key,
               entry.value,
               k,
               v,
-              past_seen_tokens,
-              end_pos,
+              write_start,
+              write_end,
               layer_idx=self.layer_idx,
               layer_type=self.layer_type,
               is_kv_shared_layer=self.is_kv_shared_layer,
               store_full_length_kv=self.store_full_length_kv,
+              single_position=query_len == 1,
+              packed_cache=entry.packed,
             )
             entry.length = end_pos
             current_entry = entry
           else:
+            write_start = past_seen_tokens % entry.window if entry.window is not None and query_len == 1 else past_seen_tokens
+            write_end = write_start + 1 if entry.window is not None and query_len == 1 else end_pos
             realize_cache_update(
               entry.key,
               entry.value,
               k,
               v,
-              past_seen_tokens,
-              end_pos,
+              write_start,
+              write_end,
               layer_idx=self.layer_idx,
               layer_type=self.layer_type,
               is_kv_shared_layer=self.is_kv_shared_layer,
               store_full_length_kv=self.store_full_length_kv,
+              single_position=query_len == 1,
+              packed_cache=entry.packed,
             )
             # Keep the committed cache length concrete until generation accepts this decode step.
-            current_entry = GemmaCacheEntry(key=entry.key, value=entry.value, length=end_pos)
+            current_entry = GemmaCacheEntry(key=entry.key, value=entry.value, length=end_pos, window=entry.window, packed=entry.packed)
           k, v = active_cache_tensors(current_entry)
         else:
           if (entry := cache.entries[self.layer_idx]) is not None:
@@ -872,6 +1012,7 @@ class GemmaForCausalLM:
         sliding_rollout_jit = TinyJit(lambda inputs_embeds, position_ids, start_pos: self._rollout_next_embeds(inputs_embeds, position_ids, start_pos, cache, temperature, decode_sliding_window=True))
     self._last_rollout_jit = sliding_rollout_jit or rollout_jit
     self._last_rollout_jits = [rollout_jit] + ([sliding_rollout_jit] if sliding_rollout_jit is not None else [])
+    rolled_sliding_cache = False
     for idx in range(max_new_tokens):
       token_id = int(next_token.item())
       yield token_id
@@ -892,6 +1033,10 @@ class GemmaForCausalLM:
         next_token, cache = self._eager_next_from_token_id(token_id, cache, temperature)
         continue
       use_sliding_window = sliding_rollout_jit is not None and sliding_start is not None and start_pos >= sliding_start
+      if use_sliding_window and not rolled_sliding_cache:
+        roll_sliding_cache_entries(cache, self.model.layers)
+        cache.decode_sliding_window = True
+        rolled_sliding_cache = True
       start_lower = sliding_start if use_sliding_window else 0
       var_name = "gemma_start_pos_window" if use_sliding_window else "gemma_start_pos"
       start_var = Variable(var_name, start_lower, max_start_pos).bind(start_pos)

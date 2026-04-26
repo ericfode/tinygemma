@@ -17,10 +17,19 @@ from tinygrad import Device, Tensor, TinyJit, Variable
 from tinygrad.device import MultiBuffer
 from tinygrad.engine.jit import TinyJit as TinyJitClass
 from tinygrad.engine.jit import _prepare_jit_inputs
-from tinygrad.engine.realize import CompiledRunner, ExecContext, ExecItem, resolve_params
+from tinygrad.engine.realize import CompiledRunner, ExecItem
+try:
+  from tinygrad.engine.realize import ExecContext, resolve_params
+except ImportError:  # pragma: no cover - exercised by plain repo test collection on stock tinygrad.
+  ExecContext = None  # type: ignore[assignment]
+  resolve_params = None  # type: ignore[assignment]
 from tinygrad.helpers import Context, GlobalCounters, Metadata, flatten
 from tinygrad.nn import state as nn_state
-from tinygrad.schedule import linear_to_schedule, pm_post_sched_cache
+try:
+  from tinygrad.schedule import linear_to_schedule, pm_post_sched_cache
+except ImportError:  # pragma: no cover - stock tinygrad lacks captured-JIT profiling lowerer helpers.
+  linear_to_schedule = None  # type: ignore[assignment]
+  pm_post_sched_cache = None  # type: ignore[assignment]
 from tinygrad.uop.ops import Ops, UOp, UOpMetaClass, all_metadata, graph_rewrite, sym_infer
 
 import tinygrad
@@ -38,6 +47,7 @@ from tinygrad_gemma.model import (
   TextScaledEmbedding,
   gelu_pytorch_tanh,
 )
+from tinygrad_gemma.model import make_packed_cache_entry
 from tinygrad_gemma.multimodal import GemmaForConditionalGeneration
 from tinygrad_gemma.runtime import prepare_device
 
@@ -46,6 +56,14 @@ DEFAULT_MODEL_DIR = Path("/Users/ericfode/Downloads/tinygrad-gemma/checkpoints/g
 DEFAULT_OUT = Path("benchmarks/gemma4-metal-postwindow-jit-profile-current.json")
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 BATCHED_DISPLAY_RE = re.compile(r"^<batched (?P<count>\d+)>$")
+CACHE_WRITE_CATEGORY_RE = re.compile(
+  r"^(?P<base>attention_(?P<kind>key|value|packed)_cache_write)"
+  r"__role_(?P<role>local|shared_source|shared_consumer)"
+  r"__layer_(?P<layer>\d+|unknown)"
+  r"__type_(?P<layer_type>[A-Za-z0-9_]+|unknown)$"
+)
+CACHE_WRITE_ROLES = ("shared_source", "shared_consumer", "local")
+CACHE_WRITE_KINDS = ("key", "value", "packed")
 
 
 def _source_range(obj) -> tuple[int, int]:
@@ -78,6 +96,9 @@ PROFILE_CATEGORIES = (
   "attention_value_cache_write_shared_consumer",
   "attention_key_cache_write_local",
   "attention_value_cache_write_local",
+  "attention_packed_cache_write_shared_source",
+  "attention_packed_cache_write_shared_consumer",
+  "attention_packed_cache_write_local",
   "attention_key_cache_write",
   "attention_value_cache_write",
   "attention_cache_write",
@@ -89,16 +110,20 @@ PROFILE_CATEGORIES = (
 _SIDECAR_STACK: list[str] = []
 UOP_SIDECAR_CATEGORY_BASIS = "repo_sidecar_uop_creation_metadata"
 UOP_SIDECAR_IGNORED_OPS = {
-  Ops.CONST,
-  Ops.VCONST,
-  Ops.DEVICE,
-  Ops.UNIQUE,
-  Ops.LUNIQUE,
-  Ops.DEFINE_VAR,
-  Ops.BIND,
-  Ops.NOOP,
-  Ops.BUFFER,
-  Ops.PARAM,
+  op
+  for name in (
+    "CONST",
+    "VCONST",
+    "DEVICE",
+    "UNIQUE",
+    "LUNIQUE",
+    "DEFINE_VAR",
+    "BIND",
+    "NOOP",
+    "BUFFER",
+    "PARAM",
+  )
+  if (op := getattr(Ops, name, None)) is not None
 }
 
 
@@ -122,14 +147,114 @@ def _metadata_payload(metadata) -> list[dict[str, str]]:
   ]
 
 
+def cache_write_layer_label(layer_idx: int | None) -> str:
+  if layer_idx is None:
+    return "unknown"
+  try:
+    return f"{int(layer_idx):02d}"
+  except (TypeError, ValueError):
+    return "unknown"
+
+
+def cache_write_layer_type_label(layer_type: str | None) -> str:
+  if layer_type is None:
+    return "unknown"
+  label = re.sub(r"[^A-Za-z0-9_]+", "_", str(layer_type)).strip("_")
+  return label or "unknown"
+
+
+def cache_write_sidecar_category(kind: str, role: str, layer_idx: int | None, layer_type: str | None) -> str:
+  if kind not in CACHE_WRITE_KINDS:
+    raise ValueError(f"unknown cache write kind {kind!r}")
+  if role not in CACHE_WRITE_ROLES:
+    raise ValueError(f"unknown cache write role {role!r}")
+  return (
+    f"attention_{kind}_cache_write"
+    f"__role_{role}"
+    f"__layer_{cache_write_layer_label(layer_idx)}"
+    f"__type_{cache_write_layer_type_label(layer_type)}"
+  )
+
+
+def cache_write_category_metadata(category: str) -> dict[str, Any] | None:
+  match = CACHE_WRITE_CATEGORY_RE.match(category)
+  if match is not None:
+    layer_label = match.group("layer")
+    kind = match.group("kind")
+    role = match.group("role")
+    layer_idx = None if layer_label == "unknown" else int(layer_label)
+    return {
+      "kind": kind,
+      "layout": "packed" if kind == "packed" else "split",
+      "role": role,
+      "layer_idx": layer_idx,
+      "layer": layer_label,
+      "layer_type": match.group("layer_type"),
+      "rollup": f"{match.group('base')}_{role}",
+    }
+  prefix = "attention_"
+  suffix = "_cache_write_"
+  if category.startswith(prefix) and suffix in category:
+    kind_and_role = category.removeprefix(prefix).split(suffix, 1)
+    if len(kind_and_role) == 2:
+      kind, role = kind_and_role
+      if kind in CACHE_WRITE_KINDS and role in CACHE_WRITE_ROLES:
+        return {
+          "kind": kind,
+          "layout": "packed" if kind == "packed" else "split",
+          "role": role,
+          "layer_idx": None,
+          "layer": "unknown",
+          "layer_type": "unknown",
+          "rollup": category,
+        }
+  return None
+
+
+def category_rollup(category: str) -> str:
+  metadata = cache_write_category_metadata(category)
+  return category if metadata is None else str(metadata["rollup"])
+
+
+def is_profile_category(category: str) -> bool:
+  return category in PROFILE_CATEGORIES or cache_write_category_metadata(category) is not None
+
+
+def category_count_rollups(category_counts: dict[str, int]) -> dict[str, int]:
+  rollups: dict[str, int] = defaultdict(int)
+  for category, count in category_counts.items():
+    rollups[category_rollup(category)] += int(count)
+  return dict(sorted(rollups.items()))
+
+
+def add_category_timing(
+  groups: dict[str, dict[str, Any]],
+  category: str,
+  *,
+  count_key: str,
+  count: int,
+  elapsed_ms: float,
+  est_ops: int = 0,
+  est_mem: int = 0,
+) -> None:
+  entry = groups.setdefault(category, {count_key: 0, "elapsed_ms": 0.0, "est_ops": 0, "est_mem": 0})
+  entry[count_key] += count
+  entry["elapsed_ms"] += elapsed_ms
+  entry["est_ops"] += est_ops
+  entry["est_mem"] += est_mem
+
+
 def strip_ansi(value: str) -> str:
   return ANSI_RE.sub("", value)
 
 
 def priority_category(categories: set[str]) -> str:
-  for category in PROFILE_CATEGORIES:
-    if category in categories:
-      return category
+  candidates = {category for category in categories if is_profile_category(category)}
+  for profile_category in PROFILE_CATEGORIES:
+    matches = sorted(category for category in candidates if category == profile_category or category_rollup(category) == profile_category)
+    if matches:
+      detailed_matches = [category for category in matches if category != profile_category]
+      return detailed_matches[0] if detailed_matches else profile_category
   return "other"
 
 
@@ -138,11 +263,11 @@ def sidecar_metadata_category(metadata) -> str:
   for item in metadata:
     name = str(getattr(item, "name", ""))
     caller = str(getattr(item, "caller", ""))
-    if name in PROFILE_CATEGORIES:
+    if is_profile_category(name):
       categories.add(name)
     if caller.startswith(("repo_sidecar:", "repo_uop_sidecar:")) and "::" in caller:
       category = caller.rsplit("::", 1)[-1]
-      if category in PROFILE_CATEGORIES:
+      if is_profile_category(category):
         categories.add(category)
   return priority_category(categories)
 
@@ -208,7 +333,7 @@ def classify_kernel(metadata) -> str:
 
 @contextmanager
 def sidecar_scope(category: str):
-  if category not in PROFILE_CATEGORIES:
+  if not is_profile_category(category):
     raise ValueError(f"unknown profile sidecar category {category!r}")
   _SIDECAR_STACK.append(category)
   try:
@@ -322,13 +447,28 @@ def cache_update_sidecar_patch():
     layer_type: str | None = None,
     is_kv_shared_layer: bool = False,
     store_full_length_kv: bool = False,
+    single_position: bool = False,
+    packed_cache: Tensor | None = None,
   ) -> None:
-    del layer_idx, layer_type
     role = cache_write_role(is_kv_shared_layer, store_full_length_kv)
-    with sidecar_scope(f"attention_key_cache_write_{role}"):
-      key_cache[:, :, start:end, :].assign(key).realize()
-    with sidecar_scope(f"attention_value_cache_write_{role}"):
-      value_cache[:, :, start:end, :].assign(value).realize()
+    if packed_cache is not None:
+      with sidecar_scope(cache_write_sidecar_category("packed", role, layer_idx, layer_type)):
+        if single_position:
+          packed_kv = key.squeeze(2).unsqueeze(-1).cat(value.squeeze(2).unsqueeze(-1), dim=-1)
+          packed_cache[:, :, start, :, :].assign(packed_kv).realize()
+        else:
+          packed_cache[:, :, start:end, :, :].assign(key.unsqueeze(-1).cat(value.unsqueeze(-1), dim=-1)).realize()
+      return
+    with sidecar_scope(cache_write_sidecar_category("key", role, layer_idx, layer_type)):
+      if single_position:
+        key_cache[:, :, start, :].assign(key.squeeze(2)).realize()
+      else:
+        key_cache[:, :, start:end, :].assign(key).realize()
+    with sidecar_scope(cache_write_sidecar_category("value", role, layer_idx, layer_type)):
+      if single_position:
+        value_cache[:, :, start, :].assign(value.squeeze(2)).realize()
+      else:
+        value_cache[:, :, start:end, :].assign(value).realize()
 
   gemma_model.realize_cache_update = realize_cache_update_with_sidecar
   try:
@@ -476,6 +616,7 @@ def source_slice_summary(items) -> dict[str, Any]:
       unclassified_items.append(item)
   return {
     "category_counts": dict(sorted(category_counts.items())),
+    "category_counts_rollup": category_count_rollups(category_counts),
     "program_type_counts": dict(sorted(program_type_counts.items())),
     "category_basis_counts": dict(sorted(category_basis_counts.items())),
     "unclassified_source_summary": {
@@ -574,10 +715,13 @@ def attach_source_attribution(rows: list[dict[str, Any]], attribution: dict[str,
     row["source_end"] = item["source_end"]
     row["source_count"] = item["source_count"]
     row["source_category_counts"] = item["category_counts"]
+    row["source_category_counts_rollup"] = item["category_counts_rollup"]
     row["source_category_basis"] = item["category_basis"]
 
 
 def lower_profile_call(call: UOp, ctx: ExecContext, input_uops: tuple[UOp, ...]) -> ExecItem:
+  if resolve_params is None or linear_to_schedule is None or pm_post_sched_cache is None:
+    raise RuntimeError("profile_decode_jit requires a tinygrad checkout with captured-JIT lowering helpers")
   ast = call.src[0]
   if ast.op is Ops.CUSTOM_FUNCTION and ast.arg == "graph":
     inputs = resolve_params(ctx, call)
@@ -635,29 +779,23 @@ def build_zero_cache(model, context_length: int, max_length: int) -> GemmaCache:
   cache = GemmaCache.empty(len(lm.layers), max_length=max_length)
   for idx, layer in enumerate(lm.layers):
     attn = layer.self_attn
-    key = Tensor.zeros(
+    cache.entries[idx] = make_packed_cache_entry(
       1,
       attn.num_key_value_heads,
       max_length,
       attn.head_dim,
       device=model.device,
       dtype=dtype,
-    ).contiguous().realize()
-    value = Tensor.zeros(
-      1,
-      attn.num_key_value_heads,
-      max_length,
-      attn.head_dim,
-      device=model.device,
-      dtype=dtype,
-    ).contiguous().realize()
-    cache.entries[idx] = GemmaCacheEntry(key=key, value=value, length=context_length)
+      active_length=context_length,
+    )
   cache.past_seen_tokens = context_length
   cache.decode_sliding_window = True
   return cache
 
 
 def run_captured_items(captured, token: Tensor, start_var) -> tuple[list[dict[str, Any]], dict[str, int], list[ExecItem]]:
+  if ExecContext is None:
+    raise RuntimeError("profile_decode_jit requires a tinygrad checkout with ExecContext for captured JIT profiling")
   input_uops, var_vals, names, expected_info = _prepare_jit_inputs((token, start_var), {})
   if names != captured.expected_names:
     raise RuntimeError(f"JIT input names changed: {names!r} != {captured.expected_names!r}")
@@ -710,6 +848,7 @@ def summarize_exec_items(items) -> dict[str, Any]:
     "exec_count": len(items),
     "program_type_counts": dict(sorted(by_program_type.items())),
     "category_counts": dict(sorted(by_category.items())),
+    "category_counts_rollup": category_count_rollups(by_category),
     "graph_batch_count": sum(count for name, count in by_program_type.items() if "Graph" in name),
     "compiled_runner_count": by_program_type.get("CompiledRunner", 0),
     "raw_gate_up_runner_count": by_program_type.get("RowwiseInt8DecodeLinearRunner", 0),
@@ -718,14 +857,28 @@ def summarize_exec_items(items) -> dict[str, Any]:
 
 def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
   by_category: dict[str, dict[str, Any]] = {}
+  by_category_rollup: dict[str, dict[str, Any]] = {}
   by_program_type: dict[str, dict[str, Any]] = {}
   for row in rows:
     category = row["category"]
-    entry = by_category.setdefault(category, {"kernel_count": 0, "elapsed_ms": 0.0, "est_ops": 0, "est_mem": 0})
-    entry["kernel_count"] += 1
-    entry["elapsed_ms"] += row["elapsed_ms"]
-    entry["est_ops"] += row["est_ops"]
-    entry["est_mem"] += row["est_mem"]
+    add_category_timing(
+      by_category,
+      category,
+      count_key="kernel_count",
+      count=1,
+      elapsed_ms=row["elapsed_ms"],
+      est_ops=row["est_ops"],
+      est_mem=row["est_mem"],
+    )
+    add_category_timing(
+      by_category_rollup,
+      category_rollup(category),
+      count_key="kernel_count",
+      count=1,
+      elapsed_ms=row["elapsed_ms"],
+      est_ops=row["est_ops"],
+      est_mem=row["est_mem"],
+    )
     program_type = row["program_type"]
     program_entry = by_program_type.setdefault(program_type, {"kernel_count": 0, "elapsed_ms": 0.0})
     program_entry["kernel_count"] += 1
@@ -736,6 +889,9 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
   for entry in by_category.values():
     entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed > 0 else 0.0
     entry["ops_share"] = entry["est_ops"] / total_ops if total_ops else 0.0
+  for entry in by_category_rollup.values():
+    entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed > 0 else 0.0
+    entry["ops_share"] = entry["est_ops"] / total_ops if total_ops else 0.0
   for entry in by_program_type.values():
     entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed > 0 else 0.0
   return {
@@ -744,6 +900,7 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     "est_ops": total_ops,
     "est_mem": total_mem,
     "by_category": dict(sorted(by_category.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+    "by_category_rollup": dict(sorted(by_category_rollup.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
     "by_program_type": dict(sorted(by_program_type.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
     "top_elapsed_kernels": sorted(rows, key=lambda row: row["elapsed_ms"], reverse=True)[:20],
     "top_est_ops_kernels": sorted(rows, key=lambda row: row["est_ops"], reverse=True)[:20],
@@ -752,6 +909,7 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def summarize_source_attribution(attribution: dict[str, Any]) -> dict[str, Any]:
   by_category: dict[str, dict[str, Any]] = {}
+  by_category_rollup: dict[str, dict[str, Any]] = {}
   by_basis: dict[str, dict[str, Any]] = {}
   total_elapsed = sum(float(item["elapsed_ms"]) for item in attribution["items"])
   total_source_count = sum(int(item["source_count"]) for item in attribution["items"])
@@ -764,10 +922,18 @@ def summarize_source_attribution(attribution: dict[str, Any]) -> dict[str, Any]:
     basis_entry["execution_count"] += 1
     basis_entry["elapsed_ms"] += elapsed_ms
     for category, count in item["category_counts"].items():
+      count_int = int(count)
+      category_elapsed = elapsed_ms * (count_int / source_count)
       entry = by_category.setdefault(category, {"source_count": 0, "elapsed_ms": 0.0})
-      entry["source_count"] += int(count)
-      entry["elapsed_ms"] += elapsed_ms * (int(count) / source_count)
+      entry["source_count"] += count_int
+      entry["elapsed_ms"] += category_elapsed
+      rollup = category_rollup(category)
+      rollup_entry = by_category_rollup.setdefault(rollup, {"source_count": 0, "elapsed_ms": 0.0})
+      rollup_entry["source_count"] += count_int
+      rollup_entry["elapsed_ms"] += category_elapsed
   for entry in by_category.values():
+    entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed else 0.0
+  for entry in by_category_rollup.values():
     entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed else 0.0
   for entry in by_basis.values():
     entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed else 0.0
@@ -775,6 +941,7 @@ def summarize_source_attribution(attribution: dict[str, Any]) -> dict[str, Any]:
     "source_count": total_source_count,
     "elapsed_ms": total_elapsed,
     "by_category": dict(sorted(by_category.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+    "by_category_rollup": dict(sorted(by_category_rollup.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
     "by_category_basis": dict(sorted(by_basis.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
   }
 
@@ -795,6 +962,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
       "source_end",
       "source_count",
       "source_category_counts",
+      "source_category_counts_rollup",
       "source_category_basis",
       "metadata",
     ], lineterminator="\n")
@@ -807,6 +975,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "source_end": row.get("source_end", ""),
         "source_count": row.get("source_count", ""),
         "source_category_counts": json.dumps(row.get("source_category_counts", {}), sort_keys=True),
+        "source_category_counts_rollup": json.dumps(row.get("source_category_counts_rollup", {}), sort_keys=True),
         "source_category_basis": row.get("source_category_basis", ""),
         "metadata": json.dumps(row["metadata"], sort_keys=True),
       })
@@ -863,6 +1032,7 @@ def main() -> None:
     "exec_count": source_attribution["original_exec_count"],
     "program_type_counts": original_source_summary["program_type_counts"],
     "category_counts": original_source_summary["category_counts"],
+    "category_counts_rollup": original_source_summary["category_counts_rollup"],
     "category_basis_counts": original_source_summary["category_basis_counts"],
     "unclassified_source_summary": original_source_summary["unclassified_source_summary"],
     "graph_batch_count": 0,
@@ -941,6 +1111,7 @@ def main() -> None:
           "source_end": item["source_end"],
           "category_basis": item["category_basis"],
           "category_counts": item["category_counts"],
+          "category_counts_rollup": item["category_counts_rollup"],
           "category_basis_counts": item["category_basis_counts"],
         }
         for item in sorted(source_attribution["items"], key=lambda item: item["elapsed_ms"], reverse=True)[:5]
@@ -953,6 +1124,14 @@ def main() -> None:
         "elapsed_share": round(value["elapsed_share"], 4),
       }
       for key, value in source_attributed_summary["by_category"].items()
+    },
+    "source_attributed_by_category_rollup": {
+      key: {
+        "source_count": value["source_count"],
+        "elapsed_ms": round(value["elapsed_ms"], 3),
+        "elapsed_share": round(value["elapsed_share"], 4),
+      }
+      for key, value in source_attributed_summary["by_category_rollup"].items()
     },
     "source_attributed_by_basis": {
       key: {
@@ -970,6 +1149,14 @@ def main() -> None:
         "elapsed_share": round(value["elapsed_share"], 4),
       }
       for key, value in payload["summary"]["by_category"].items()
+    },
+    "by_category_rollup": {
+      key: {
+        "kernel_count": value["kernel_count"],
+        "elapsed_ms": round(value["elapsed_ms"], 3),
+        "elapsed_share": round(value["elapsed_share"], 4),
+      }
+      for key, value in payload["summary"]["by_category_rollup"].items()
     },
     "by_program_type": {
       key: {

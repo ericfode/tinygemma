@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "uop-sidecar-source-attributed-timing-029",
+  "current_checkpoint": "source-coherent-packed-cache-jitbatch0-rejected-041",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -380,6 +380,204 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "single-position-rolled-sliding-cache-030",
+      "summary": "Narrowed decode cache writes to single-position slice assignment, added rolled physical storage for sliding-window cache entries while preserving full-length shared-KV sources, and fixed profiler import compatibility with stock tinygrad. The real E2B int8 METAL 128/16 row improved to 19.199621 tok/s and the accepted 1000/20 floor improved from 10.863932 to 11.076822 tok/s with decode_fallback=false.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/profile_decode_jit.py",
+        "tests/test_tinygrad_gemma.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-e2b-int8-128-rolled-cache-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-rolled-cache-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-rolled-cache-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-rolled-cache-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-decode-graph-rolled-cache-current.json",
+        "benchmarks/gemma4-metal-decode-graph-rolled-cache-current.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "graphable-fused-int8-kv-031",
+      "summary": "Added a graphable tinygrad-native fused rowwise-int8 K/V projection for non-shared attention producer layers. The accepted E2B int8 METAL 1000/20 floor improved from 11.076822 to 11.378305 tok/s with decode_fallback=false and stable output hash. A repeat 128/16 short gate measured 19.425499 tok/s; the first short run measured 19.087715, so short-gate noise remains visible. Post-window source-attributed profile improved from 70.717625 ms/token to 66.724416 ms/token with 8 MetalGraph batches and complete attribution, but source counts remain unchanged.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "tests/test_tinygrad_gemma.py",
+        "benchmarks/gemma4-metal-e2b-int8-128-fused-kv-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-fused-kv-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-128-fused-kv-repeat.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-fused-kv-repeat.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-fused-kv-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-fused-kv-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-fused-kv-warmup600-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-fused-kv-warmup600-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-decode-graph-fused-kv-current.json",
+        "benchmarks/gemma4-metal-decode-graph-fused-kv-current.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "shared-sliding-source-roll-032",
+      "summary": "Allowed rolled physical storage for sliding shared-KV source layers while keeping full-attention shared sources absolute. The repeated E2B int8 METAL 1000/20 floor improved from 11.378305 to 11.740118 tok/s (best run 11.762429) with decode_fallback=false and stable output hash; full pytest now passes 63 tests.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "tests/test_tinygrad_gemma.py",
+        "benchmarks/gemma4-metal-e2b-int8-128-shared-source-roll-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-shared-source-roll-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-shared-source-roll-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-shared-source-roll-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-shared-source-roll-repeat.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-shared-source-roll-repeat.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-decode-graph-shared-source-roll-current.json",
+        "benchmarks/gemma4-metal-decode-graph-shared-source-roll-current.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "packed-kv-cache-assignment-033",
+      "summary": "Packed key/value cache storage into a single backing tensor and routed decode cache updates through one packed assignment, reducing the post-window captured source graph from 5239 to 2994 source items and improving the repeated E2B int8 METAL 1000/20 floor from 11.740118 to 18.537605 tok/s with decode_fallback=false and stable output hash.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/profile_decode_jit.py",
+        "tests/test_tinygrad_gemma.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-e2b-int8-128-packed-kv-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-packed-kv-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-128-packed-kv-repeat.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-packed-kv-repeat.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-repeat.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-repeat.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-decode-graph-packed-kv-profiled.json",
+        "benchmarks/gemma4-metal-decode-graph-packed-kv-profiled.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "packed-kv-lastdim-cache-assignment-034",
+      "summary": "Moved packed K/V backing storage from a leading lane to a final lane, preserving packed key/value views while slightly improving the clean E2B int8 METAL 1000/20 floor from 18.537605 to 19.053995 tok/s with decode_fallback=false and stable output hash. Source count remained 2994, so the next target remains direct packed cache-write graph reduction.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/profile_decode_jit.py",
+        "tests/test_tinygrad_gemma.py",
+        "benchmarks/gemma4-metal-e2b-int8-128-packed-kv-lastdim-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-packed-kv-lastdim-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-decode-graph-packed-kv-lastdim-profiled.json",
+        "benchmarks/gemma4-metal-decode-graph-packed-kv-lastdim-profiled.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-lastdim-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-lastdim-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-lastdim-repeat.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-lastdim-repeat.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-lastdim-repeat2.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-packed-kv-lastdim-repeat2.csv.progress.jsonl",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "assign-realize-producer-decoupling-rejected-035",
+      "summary": "Rejected option 2 as a runtime implementation increment after source-level tinygrad research and profile evidence showed high-level assign/realize cannot exclude lazy K/V producer work from cache-write realization; pre-realizing RHS matches the already-rejected prepacked producer path. No throughput row was superseded; accepted runtime floor remains packed-kv-lastdim-cache-assignment-034 at 19.053995 tok/s.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/profile_decode_jit.py",
+        "tests/test_tinygrad_gemma.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-packed-kv-lastdim-profiled.json",
+        "benchmarks/gemma4-metal-decode-graph-packed-kv-lastdim-profiled.csv",
+        "benchmarks/gemma4-metal-decode-graph-prepacked-kv-current.json",
+        "benchmarks/gemma4-metal-decode-graph-prepacked-kv-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-prepacked-kv-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-prepacked-kv-repeat.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-prepacked-kv-repeat2.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "packed-cache-layer-attribution-probe-sweep-036",
+      "summary": "Merged profiler-only packed-cache layer/type attribution and rejected parallel runtime probes by profile/long-floor evidence. Mainline runtime remains the packed-kv-lastdim cache layout; refreshed repeated E2B int8 METAL 1000/20 rows measured 19.424036 and 19.613212 tok/s with stable hash, rollout_jit_count=999, and decode_fallback=false. Parity, active-cache no-op guard, flat-slot layout, and deferred-readback candidates were not accepted.",
+      "artifacts": [
+        "docs/plans/2026-04-25-packed-cache-next-steps.md",
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-attribution-only-restored-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-attribution-only-restored-profile-512.csv",
+        "benchmarks/gemma4-metal-decode-graph-parity-036-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-active-cache-guard-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-flat-slot-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-deferred-readback-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-tinygrad-runtime-profile-512.json",
+        "benchmarks/gemma4-metal-e2b-int8-1000-attribution-only-restored-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-attribution-only-restored-repeat.csv",
+        "benchmarks/gemma4-metal-decode-graph-parity-036-profile-512.csv",
+        "benchmarks/gemma4-metal-decode-graph-active-cache-guard-profile-512.csv",
+        "benchmarks/gemma4-metal-decode-graph-flat-slot-profile-512.csv",
+        "benchmarks/gemma4-metal-decode-graph-deferred-readback-profile-512.csv",
+        "benchmarks/gemma4-metal-decode-graph-tinygrad-runtime-profile-512.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-attribution-only-restored-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-attribution-only-restored-repeat.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-merged-parity-guard-attribution-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-merged-parity-guard-attribution-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-merged-parity-guard-attribution-repeat.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-merged-parity-guard-attribution-repeat.csv.progress.jsonl",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "donor-transfer-sdpa-rejected-039",
+      "summary": "Audited /Users/ericfode/src/gemma4-tinygrad-opt for transferable optimizations. Packed K/V cache, fused int8 gate/up, and fused int8 K/V are already present or stronger in this recipient; donor benchmark rows are full-forward CUDA/T4 hints, not comparable to real E2B int8 METAL autoregressive decode. A temporary donor-style SDPA attention branch produced the same short-output hash but slightly worse measured decode throughput (30.769433 vs 30.808261 tok/s) and a worse source-attributed profile (70.510040 vs 44.466920 ms/token), so it was removed and no runtime floor was superseded.",
+      "artifacts": [
+        "docs/plans/2026-04-25-packed-cache-next-steps.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json",
+        "benchmarks/gemma4-metal-e2b-int8-128-sdpa-off.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-sdpa-off.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-128-sdpa-on.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-sdpa-on.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-decode-graph-sdpa-off-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-sdpa-off-profile-512.csv",
+        "benchmarks/gemma4-metal-decode-graph-sdpa-on-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-sdpa-on-profile-512.csv"
+      ]
+    },
+    {
+      "id": "graph-batch-fusion-boundary-research-040",
+      "summary": "Parsed the latest source-attributed MetalGraph profile and confirmed the 7 graph rows are tinygrad JIT_BATCH_SIZE grouping artifacts rather than semantic fusion boundaries. Recorded synthetic JIT_BATCH_SIZE evidence, identified a source/artifact coherence blocker because live model.py is split-cache while accepted artifacts/tests expect packed-cache runtime APIs, and set the next measured probe to restore packed-cache coherence before running a JIT_BATCH_SIZE=0 profile/throughput gate. No runtime tok/s floor was superseded.",
+      "artifacts": [
+        "docs/plans/2026-04-26-graph-batch-fusion-research.md",
+        "benchmarks/tinygrad-metal-graph-jitbatch-policy-probe.json",
+        "scripts/profile_decode_jit.py",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "source-coherent-packed-cache-jitbatch0-rejected-041",
+      "summary": "Restored live source/artifact coherence for the final-lane packed-cache runtime, removed the profiler split-cache fallback, and rejected JIT_BATCH_SIZE=0 as a default runtime knob. JIT_BATCH_SIZE=0 collapsed the source-coherent profile from 7 MetalGraph batches to 1 and improved the same-state profile from 37.935 to 36.396 ms/token, but the hard E2B int8 METAL 1000/20 row regressed from 18.954322 to 18.685010 tok/s with stable hash, rollout_jit_count=999, and decode_fallback=false. No accepted throughput floor was superseded.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "scripts/profile_decode_jit.py",
+        "tests/test_tinygrad_gemma.py",
+        "tests/test_profile_decode_jit.py",
+        "docs/plans/2026-04-26-graph-batch-fusion-research.md",
+        "benchmarks/gemma4-metal-decode-graph-source-coherent-control-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-source-coherent-control-profile-512.csv",
+        "benchmarks/gemma4-metal-decode-graph-jitbatch0-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-jitbatch0-profile-512.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-source-coherent-control-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-source-coherent-control-current.csv.progress.jsonl",
+        "benchmarks/gemma4-metal-e2b-int8-1000-jitbatch0-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-jitbatch0-current.csv.progress.jsonl",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -387,7 +585,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "cache-write-kernel-fragmentation-reduction",
-  "next_target_plan": "Treat tok/s as the hard metric. The refreshed profiler artifact benchmarks/gemma4-metal-decode-graph-default-current.json reports source_attribution.status=complete over 5239 source items and source_attributed_summary={attention_key_cache_write_local 23.419337 ms, attention_key_cache_write_shared_source 21.428166 ms, attention_value_cache_write_local 23.801497 ms, attention_value_cache_write_shared_source 7.927042 ms, mlp 2.958875 ms}. This makes attention cache-write work 76.576041 ms / 79.534916 ms = 96.28% of the profiled decode-token time, so the next runtime increment should target producer cache-write kernel count/fragmentation or a legal cache layout/store idiom, not MLP. The short beam=0 E2B int8 METAL 128/16 benchmark row measured 17.504447 warmup-excluded tok/s with rollout_jit_count=127 and decode_fallback=false; the accepted long 1000/20 floor remains 10.863932 tok/s until rerun on the same 1000/20 gate.",
-  "updated_at": "2026-04-25T17:36:10-0700"
+  "next_target": "layer13-shared-source-producer-store-subattribution-042",
+  "next_target_plan": "Tok/s remains the hard metric. Source coherence is restored to the final-lane packed-cache runtime surface and the cheap gates pass, but JIT_BATCH_SIZE=0 is rejected as a default runtime knob: it collapses graph batches in the profiler (7 -> 1) and improves same-state profile elapsed (37.935 -> 36.396 ms/token), yet regresses the hard E2B int8 METAL 1000/20 throughput row from 18.954322 to 18.685010 tok/s and remains below the accepted artifact floor of 19.424036 tok/s. Do not pursue graph-batch count as the next optimization target. Next add profiler-only sub-attribution inside attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention to split K/V projection, RMSNorm/RoPE, RHS packing, and actual packed cache store. A subsequent runtime patch is allowed only if the sub-attribution identifies removable/fusible work; acceptance remains repeated 1000/20 lower-row throughput above 19.424036 tok/s, stable hash, rollout_jit_count=999, decode_fallback=false, or a source-count reduction below 2994 with complete attribution.",
+  "updated_at": "2026-04-26T10:37:03-0700"
 }

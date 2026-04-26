@@ -1,0 +1,15 @@
+Auto-continue sentinel for Hermes CLI plugin.
+
+Keep going in this repo unless one of these exact stop markers is true in the final response:
+- WHOLE PROJECT COMPLETE
+- PROJECT COMPLETE
+- ACTUAL QUESTION:
+- BLOCKED:
+- UNRESOLVED BLOCKER:
+
+Repo loop discipline:
+1. Read configs/repo-loop-state.json and state/evolution-log.md.
+2. Execute the next narrow tok/s-oriented increment.
+3. Verify with tests and benchmark/profile gates.
+4. Update configs/repo-loop-state.json and state/evolution-log.md with measured facts.
+5. Continue again unless the whole project is complete or there is a real blocker.
