@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "source-coherent-packed-cache-jitbatch0-rejected-041",
+  "current_checkpoint": "layer13-phase-softcap-elision-rejected-042",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -578,6 +578,23 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "layer13-phase-softcap-elision-rejected-042",
+      "summary": "Added profiler-only layer-13 phase/sub-attribution support and a stock-tinygrad compatibility guard for missing TinyJit.add_linear. The real METAL layer-13 phase profile still failed to preserve child phase categories (885 unclassified shared-source layer-13 items), while structural evidence identified reduce_r-heavy graph mass. A temporary greedy softcap-elision runtime probe was then rejected on the hard E2B int8 METAL metric: 128/16 measured 28.378910 tok/s and repeated 1000/20 rows measured 17.572001 and 17.121386 tok/s, below the current accepted floor; the runtime patch was reverted. No throughput floor was superseded.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-layer13-structural-profile-512.json",
+        "benchmarks/gemma4-metal-decode-layer13-structural-profile-512.csv",
+        "benchmarks/gemma4-metal-decode-graph-layer13-phase-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-layer13-phase-profile-512.csv",
+        "benchmarks/gemma4-metal-e2b-int8-128-greedy-softcap-elision-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-greedy-softcap-elision-current.csv",
+        "benchmarks/gemma4-metal-e2b-int8-1000-greedy-softcap-elision-repeat.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -585,7 +602,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "layer13-shared-source-producer-store-subattribution-042",
-  "next_target_plan": "Tok/s remains the hard metric. Source coherence is restored to the final-lane packed-cache runtime surface and the cheap gates pass, but JIT_BATCH_SIZE=0 is rejected as a default runtime knob: it collapses graph batches in the profiler (7 -> 1) and improves same-state profile elapsed (37.935 -> 36.396 ms/token), yet regresses the hard E2B int8 METAL 1000/20 throughput row from 18.954322 to 18.685010 tok/s and remains below the accepted artifact floor of 19.424036 tok/s. Do not pursue graph-batch count as the next optimization target. Next add profiler-only sub-attribution inside attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention to split K/V projection, RMSNorm/RoPE, RHS packing, and actual packed cache store. A subsequent runtime patch is allowed only if the sub-attribution identifies removable/fusible work; acceptance remains repeated 1000/20 lower-row throughput above 19.424036 tok/s, stable hash, rollout_jit_count=999, decode_fallback=false, or a source-count reduction below 2994 with complete attribution.",
-  "updated_at": "2026-04-26T10:37:03-0700"
+  "next_target": "layer13-reduce-source-attribution-043",
+  "next_target_plan": "Tok/s remains the hard metric. The layer-13 child phase-attribution attempt proved that real TinyJit capture still launders deeper phase metadata: the layer-13 shared-source bucket remains 885 unclassified phase items, and forced phase cutpoints are too expensive for the real profile path. The greedy softcap-elision runtime probe is rejected by repeated long-floor rows (17.572001 and 17.121386 tok/s), so do not optimize logits/softcap next. Next inspect the layer-13 structural CSV/JSON rows and source structure to map the dominant reduce_r-heavy items back to exact producer operations (K/V projection, RMSNorm/RoPE, attention score/value reduction, packing, or store). A runtime patch is allowed only after a source-level reduction candidate predicts fewer required source items or less reduce_r mass; acceptance remains repeated E2B int8 METAL 1000/20 lower-row throughput above the accepted floor with stable hash, rollout_jit_count=999, decode_fallback=false, or a source-count reduction below 2994 with complete attribution.",
+  "updated_at": "2026-04-26T13:54:48-0700"
 }

@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 def load_profile_module():
   module_path = Path(__file__).resolve().parents[1] / "scripts" / "profile_decode_jit.py"
@@ -15,6 +17,26 @@ def load_profile_module():
 
 
 profile = load_profile_module()
+
+
+def test_profile_add_linear_sidecar_patch_noops_when_tinyjit_hook_is_absent(monkeypatch):
+  monkeypatch.delattr(profile.TinyJitClass, "add_linear", raising=False)
+  with profile.add_linear_sidecar_patch():
+    assert not hasattr(profile.TinyJitClass, "add_linear")
+
+
+def test_profile_add_linear_sidecar_patch_preserves_existing_tinyjit_hook(monkeypatch):
+  calls = []
+
+  def fake_add_linear(self, linear, var_vals):
+    calls.append((self, linear, var_vals))
+    return linear
+
+  monkeypatch.setattr(profile.TinyJitClass, "add_linear", fake_add_linear, raising=False)
+  with profile.add_linear_sidecar_patch():
+    result = profile.TinyJitClass.add_linear("jit", "linear", {"x": 1})
+  assert result == "linear"
+  assert calls == [("jit", "linear", {"x": 1})]
 
 
 class FakeProgram:
@@ -69,6 +91,9 @@ class FakeTensor:
 
   def assign(self, value):
     del value
+    events = getattr(self, "events", None)
+    if events is not None:
+      events.append(("assign", profile._SIDECAR_STACK[-1]))
     return self
 
   def squeeze(self, dim=None):
@@ -81,12 +106,18 @@ class FakeTensor:
 
   def cat(self, other, dim=0):
     del other, dim
+    events = getattr(self, "events", None)
+    if events is not None:
+      events.append(("cat", profile._SIDECAR_STACK[-1]))
     return self
 
   def realize(self):
     calls = getattr(self, "calls", None)
     if calls is not None:
       calls.append(profile._SIDECAR_STACK[-1])
+    events = getattr(self, "events", None)
+    if events is not None:
+      events.append(("realize", profile._SIDECAR_STACK[-1]))
     return self
 
 
@@ -140,6 +171,31 @@ def test_profile_cache_write_category_sanitizes_unknown_layer_metadata():
   assert profile.category_rollup(category) == "attention_key_cache_write_shared_consumer"
 
 
+def test_profile_cache_write_phase_category_metadata_is_parseable_without_changing_parent():
+  parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
+  phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_projection")
+
+  assert phase == f"{parent}__phase_kv_projection"
+  assert profile.parent_cache_write_category(phase) == parent
+  metadata = profile.cache_write_category_metadata(phase)
+  assert metadata["phase"] == "kv_projection"
+  assert metadata["parent"] == parent
+  assert metadata["rollup"] == "attention_packed_cache_write_shared_source"
+  assert profile.sidecar_metadata_category([FakeMetadata(phase, f"repo_uop_sidecar:1::{phase}")]) == parent
+  assert profile.sidecar_metadata_category([FakeMetadata(phase, f"repo_uop_sidecar:1::{phase}")], prefer_cache_write_phase=True) == phase
+
+
+def test_profile_cache_write_phase_category_rejects_unknown_phase():
+  with pytest.raises(ValueError):
+    profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="mystery")
+
+
+def test_profile_cache_write_phase_target_is_layer13_shared_source_only():
+  assert profile.cache_write_phase_target("packed", "shared_source", 13, "sliding_attention")
+  assert not profile.cache_write_phase_target("packed", "local", 13, "sliding_attention")
+  assert not profile.cache_write_phase_target("packed", "shared_source", 14, "full_attention")
+
+
 def test_profile_uop_creation_sidecar_patch_restores_and_stamps_cached_uops():
   original = profile.UOpMetaClass.__call__
   marker = "PROFILE_TEST_UOP_SIDECAR_REUSE"
@@ -165,6 +221,48 @@ def test_profile_uop_replace_sidecar_patch_preserves_metadata_across_replace():
   assert profile.UOp.replace is original
   assert replaced is not source
   assert profile.sidecar_metadata_category(replaced.metadata or ()) == "mlp"
+
+
+def test_profile_uop_creation_sidecar_patch_inherits_only_cache_write_phase_metadata_from_sources():
+  parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
+  phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_projection")
+  source = profile.UOp(profile.Ops.CONST, arg="phase-source-creation")
+  derived = None
+  profile.all_metadata[source] = profile.merge_metadata(
+    profile.uop_sidecar_metadata(phase),
+    profile.uop_sidecar_metadata("mlp"),
+  )
+
+  try:
+    with profile.uop_creation_sidecar_patch():
+      with profile.sidecar_scope(parent):
+        derived = profile.UOp(profile.Ops.ADD, src=(source, source))
+
+    assert profile.sidecar_metadata_category(derived.metadata or ()) == parent
+    assert profile.sidecar_metadata_category(derived.metadata or (), prefer_cache_write_phase=True) == phase
+    assert all(str(getattr(item, "name", "")) != "mlp" for item in profile.all_metadata.get(derived, ()))
+  finally:
+    profile.all_metadata.pop(source, None)
+    if derived is not None:
+      profile.all_metadata.pop(derived, None)
+
+
+def test_profile_uop_replace_sidecar_patch_inherits_cache_write_phase_metadata_from_new_sources():
+  phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="store")
+  base = profile.UOp(profile.Ops.ADD, arg="phase-replace-base")
+  source = profile.UOp(profile.Ops.CONST, arg="phase-source-replace")
+  replaced = None
+  profile.all_metadata[source] = profile.uop_sidecar_metadata(phase)
+
+  try:
+    with profile.uop_replace_sidecar_patch():
+      replaced = base.replace(src=(source,))
+
+    assert profile.sidecar_metadata_category(replaced.metadata or (), prefer_cache_write_phase=True) == phase
+  finally:
+    profile.all_metadata.pop(source, None)
+    if replaced is not None:
+      profile.all_metadata.pop(replaced, None)
 
 
 def test_profile_classifies_source_item_from_ast_uop_sidecar_metadata():
@@ -334,6 +432,47 @@ def test_profile_cache_update_sidecar_patch_tracks_packed_cache_scope():
   assert calls == ["attention_packed_cache_write__role_local__layer_12__type_full_attention"]
 
 
+def test_profile_cache_update_sidecar_patch_splits_layer13_packed_cache_phases():
+  original = profile.gemma_model.realize_cache_update
+  calls = []
+  events = []
+  key_cache = FakeTensor()
+  value_cache = FakeTensor()
+  key = FakeTensor()
+  value = FakeTensor()
+  packed_cache = FakeTensor()
+  key.events = events
+  packed_cache.calls = calls
+  packed_cache.events = events
+  parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
+  rhs_pack = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="rhs_pack")
+  store = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="store")
+
+  try:
+    with profile.cache_update_sidecar_patch():
+      profile.gemma_model.realize_cache_update(
+        key_cache,
+        value_cache,
+        key,
+        value,
+        0,
+        1,
+        layer_idx=13,
+        layer_type="sliding_attention",
+        is_kv_shared_layer=False,
+        store_full_length_kv=True,
+        single_position=True,
+        packed_cache=packed_cache,
+      )
+  finally:
+    profile.gemma_model.realize_cache_update = original
+
+  assert ("cat", rhs_pack) in events
+  assert ("assign", store) in events
+  assert calls == [parent]
+  assert events[-1] == ("realize", parent)
+
+
 def test_graph_batch_attribution_maps_batched_display_to_source_ranges():
   first_batch = [
     FakeItem("attention"),
@@ -419,3 +558,47 @@ def test_graph_batch_attribution_marks_unclassified_source_metadata():
     "Ops.LOAD:1,Ops.SINK:1": 1,
   }
   assert attribution["category_basis_counts"] == {"unclassified_source_item_metadata": 1}
+
+
+def test_profile_source_slice_summary_adds_phase_counts_without_changing_category_counts():
+  parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
+  phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="rmsnorm_rope")
+  ast_item = FakeItem(parent, ast=FakeAst(FakeUOp(profile.Ops.ADD, [FakeMetadata(phase, f"repo_uop_sidecar:1::{phase}")])))
+  metadata_item = FakeItem(parent, ast=FakeAst(profile.Ops.ADD))
+  metadata_item.metadata = [FakeMetadata(phase, f"repo_sidecar:1::{phase}")]
+  non_target = FakeItem(profile.cache_write_sidecar_category("packed", "local", 12, "sliding_attention"))
+
+  summary = profile.source_slice_summary([ast_item, metadata_item, non_target])
+
+  assert summary["category_counts"] == {
+    parent: 2,
+    "attention_packed_cache_write__role_local__layer_12__type_sliding_attention": 1,
+  }
+  assert summary["cache_write_phase_category_counts"] == {phase: 2}
+  assert summary["cache_write_phase_unclassified_count"] == 0
+
+
+def test_profile_summarizes_cache_write_phase_attribution_separately():
+  parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
+  kv = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_projection")
+  store = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="store")
+  attribution = {
+    "items": [{
+      "elapsed_ms": 10.0,
+      "source_count": 4,
+      "category_counts": {parent: 4},
+      "category_basis": "repo_sidecar_uop_creation_metadata",
+      "cache_write_phase_category_counts": {kv: 3, store: 1},
+      "cache_write_phase_conflict_count": 1,
+      "cache_write_phase_unclassified_count": 0,
+    }]
+  }
+
+  summary = profile.summarize_cache_write_phase_attribution(attribution)
+
+  assert summary["source_count"] == 4
+  assert summary["conflict_source_count"] == 1
+  assert summary["by_category"][kv]["elapsed_ms"] == 7.5
+  assert summary["by_category"][store]["elapsed_ms"] == 2.5
+  assert summary["by_parent"][parent]["elapsed_ms"] == 10.0
+  assert summary["by_phase"]["kv_projection"]["source_count"] == 3

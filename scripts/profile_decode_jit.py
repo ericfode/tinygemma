@@ -60,10 +60,12 @@ CACHE_WRITE_CATEGORY_RE = re.compile(
   r"^(?P<base>attention_(?P<kind>key|value|packed)_cache_write)"
   r"__role_(?P<role>local|shared_source|shared_consumer)"
   r"__layer_(?P<layer>\d+|unknown)"
-  r"__type_(?P<layer_type>[A-Za-z0-9_]+|unknown)$"
+  r"__type_(?P<layer_type>[A-Za-z0-9_]+?)"
+  r"(?:__phase_(?P<phase>kv_projection|rmsnorm_rope|rhs_pack|store))?$"
 )
 CACHE_WRITE_ROLES = ("shared_source", "shared_consumer", "local")
 CACHE_WRITE_KINDS = ("key", "value", "packed")
+CACHE_WRITE_PHASES = ("kv_projection", "rmsnorm_rope", "rhs_pack", "store")
 
 
 def _source_range(obj) -> tuple[int, int]:
@@ -108,6 +110,8 @@ PROFILE_CATEGORIES = (
   "norm",
 )
 _SIDECAR_STACK: list[str] = []
+_ATTENTION_CONTEXT_STACK: list[dict[str, Any]] = []
+_CACHE_WRITE_PHASE_CUTPOINTS = False
 UOP_SIDECAR_CATEGORY_BASIS = "repo_sidecar_uop_creation_metadata"
 UOP_SIDECAR_IGNORED_OPS = {
   op
@@ -123,6 +127,11 @@ UOP_SIDECAR_IGNORED_OPS = {
     "BUFFER",
     "PARAM",
   )
+  if (op := getattr(Ops, name, None)) is not None
+}
+STORE_EFFECT_OPS = {
+  op
+  for name in ("STORE", "ASSIGN", "AFTER")
   if (op := getattr(Ops, name, None)) is not None
 }
 
@@ -163,17 +172,27 @@ def cache_write_layer_type_label(layer_type: str | None) -> str:
   return label or "unknown"
 
 
-def cache_write_sidecar_category(kind: str, role: str, layer_idx: int | None, layer_type: str | None) -> str:
+def cache_write_sidecar_category(
+  kind: str,
+  role: str,
+  layer_idx: int | None,
+  layer_type: str | None,
+  *,
+  phase: str | None = None,
+) -> str:
   if kind not in CACHE_WRITE_KINDS:
     raise ValueError(f"unknown cache write kind {kind!r}")
   if role not in CACHE_WRITE_ROLES:
     raise ValueError(f"unknown cache write role {role!r}")
-  return (
+  if phase is not None and phase not in CACHE_WRITE_PHASES:
+    raise ValueError(f"unknown cache write phase {phase!r}")
+  category = (
     f"attention_{kind}_cache_write"
     f"__role_{role}"
     f"__layer_{cache_write_layer_label(layer_idx)}"
     f"__type_{cache_write_layer_type_label(layer_type)}"
   )
+  return category if phase is None else f"{category}__phase_{phase}"
 
 
 def cache_write_category_metadata(category: str) -> dict[str, Any] | None:
@@ -183,7 +202,8 @@ def cache_write_category_metadata(category: str) -> dict[str, Any] | None:
     kind = match.group("kind")
     role = match.group("role")
     layer_idx = None if layer_label == "unknown" else int(layer_label)
-    return {
+    phase = match.group("phase")
+    metadata = {
       "kind": kind,
       "layout": "packed" if kind == "packed" else "split",
       "role": role,
@@ -192,6 +212,10 @@ def cache_write_category_metadata(category: str) -> dict[str, Any] | None:
       "layer_type": match.group("layer_type"),
       "rollup": f"{match.group('base')}_{role}",
     }
+    if phase is not None:
+      metadata["phase"] = phase
+      metadata["parent"] = cache_write_sidecar_category(kind, role, layer_idx, match.group("layer_type"))
+    return metadata
   prefix = "attention_"
   suffix = "_cache_write_"
   if category.startswith(prefix) and suffix in category:
@@ -209,6 +233,51 @@ def cache_write_category_metadata(category: str) -> dict[str, Any] | None:
           "rollup": category,
         }
   return None
+
+
+def is_cache_write_phase_category(category: str) -> bool:
+  metadata = cache_write_category_metadata(category)
+  return metadata is not None and "phase" in metadata
+
+
+def parent_cache_write_category(category: str) -> str:
+  metadata = cache_write_category_metadata(category)
+  return category if metadata is None else str(metadata.get("parent", category))
+
+
+def cache_write_phase_name(category: str) -> str | None:
+  metadata = cache_write_category_metadata(category)
+  return None if metadata is None else metadata.get("phase")
+
+
+def cache_write_phase_order(category: str) -> int:
+  phase = cache_write_phase_name(category)
+  return CACHE_WRITE_PHASES.index(phase) if phase in CACHE_WRITE_PHASES else len(CACHE_WRITE_PHASES)
+
+
+def cache_write_phase_target(kind: str, role: str, layer_idx: int | None, layer_type: str | None) -> bool:
+  return kind == "packed" and role == "shared_source" and layer_idx == 13 and layer_type == "sliding_attention"
+
+
+def cache_write_phase_target_category(category: str) -> bool:
+  metadata = cache_write_category_metadata(parent_cache_write_category(category))
+  return metadata is not None and cache_write_phase_target(
+    str(metadata["kind"]),
+    str(metadata["role"]),
+    metadata["layer_idx"],
+    str(metadata["layer_type"]),
+  )
+
+
+@contextmanager
+def cache_write_phase_cutpoint_scope(enabled: bool):
+  global _CACHE_WRITE_PHASE_CUTPOINTS
+  previous = _CACHE_WRITE_PHASE_CUTPOINTS
+  _CACHE_WRITE_PHASE_CUTPOINTS = enabled
+  try:
+    yield
+  finally:
+    _CACHE_WRITE_PHASE_CUTPOINTS = previous
 
 
 def category_rollup(category: str) -> str:
@@ -248,8 +317,14 @@ def strip_ansi(value: str) -> str:
   return ANSI_RE.sub("", value)
 
 
-def priority_category(categories: set[str]) -> str:
+def priority_category(categories: set[str], *, prefer_cache_write_phase: bool = False) -> str:
   candidates = {category for category in categories if is_profile_category(category)}
+  if prefer_cache_write_phase:
+    phase_candidates = {category for category in candidates if is_cache_write_phase_category(category)}
+    if phase_candidates:
+      candidates = phase_candidates
+  else:
+    candidates = {parent_cache_write_category(category) for category in candidates}
   for profile_category in PROFILE_CATEGORIES:
     matches = sorted(category for category in candidates if category == profile_category or category_rollup(category) == profile_category)
     if matches:
@@ -258,7 +333,7 @@ def priority_category(categories: set[str]) -> str:
   return "other"
 
 
-def sidecar_metadata_category(metadata) -> str:
+def sidecar_metadata_category(metadata, *, prefer_cache_write_phase: bool = False) -> str:
   categories: set[str] = set()
   for item in metadata:
     name = str(getattr(item, "name", ""))
@@ -269,7 +344,7 @@ def sidecar_metadata_category(metadata) -> str:
       category = caller.rsplit("::", 1)[-1]
       if is_profile_category(category):
         categories.add(category)
-  return priority_category(categories)
+  return priority_category(categories, prefer_cache_write_phase=prefer_cache_write_phase)
 
 
 def merge_metadata(existing, extra) -> tuple[Metadata, ...]:
@@ -288,7 +363,43 @@ def uop_sidecar_metadata(category: str) -> tuple[Metadata, ...]:
   return (Metadata(name=category, caller=f"repo_uop_sidecar:1::{category}"),)
 
 
-def ast_uop_sidecar_category_counts(ast) -> dict[str, int]:
+def cache_write_phase_sidecar_metadata(metadata) -> tuple[Metadata, ...]:
+  phase_metadata = []
+  for item in metadata or ():
+    name = str(getattr(item, "name", ""))
+    caller = str(getattr(item, "caller", ""))
+    caller_category = caller.rsplit("::", 1)[-1] if "::" in caller else ""
+    if is_cache_write_phase_category(name) or is_cache_write_phase_category(caller_category):
+      phase_metadata.append(item)
+  return tuple(phase_metadata)
+
+
+def uop_cache_write_phase_sidecar_metadata(uop, seen: set[int] | None = None) -> tuple[Metadata, ...]:
+  if uop is None:
+    return ()
+  if seen is None:
+    seen = set()
+  identity = id(uop)
+  if identity in seen:
+    return ()
+  seen.add(identity)
+  metadata = cache_write_phase_sidecar_metadata(
+    merge_metadata(getattr(uop, "metadata", None) or (), all_metadata.get(uop, ()))
+  )
+  for source in getattr(uop, "src", ()) or ():
+    metadata = merge_metadata(metadata, uop_cache_write_phase_sidecar_metadata(source, seen))
+  return metadata
+
+
+def uop_sources_cache_write_phase_sidecar_metadata(uops) -> tuple[Metadata, ...]:
+  metadata: tuple[Metadata, ...] = ()
+  seen: set[int] = set()
+  for uop in uops or ():
+    metadata = merge_metadata(metadata, uop_cache_write_phase_sidecar_metadata(uop, seen))
+  return metadata
+
+
+def ast_uop_sidecar_category_counts(ast, *, prefer_cache_write_phase: bool = False) -> dict[str, int]:
   if ast is None:
     return {}
   counts: dict[str, int] = defaultdict(int)
@@ -299,7 +410,8 @@ def ast_uop_sidecar_category_counts(ast) -> dict[str, int]:
   for uop in uops:
     if getattr(uop, "op", None) in UOP_SIDECAR_IGNORED_OPS:
       continue
-    category = sidecar_metadata_category(getattr(uop, "metadata", None) or ())
+    metadata = merge_metadata(getattr(uop, "metadata", None) or (), all_metadata.get(uop, ()))
+    category = sidecar_metadata_category(metadata, prefer_cache_write_phase=prefer_cache_write_phase)
     if category != "other":
       counts[category] += 1
   return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
@@ -308,6 +420,52 @@ def ast_uop_sidecar_category_counts(ast) -> dict[str, int]:
 def ast_uop_sidecar_category(ast) -> str:
   counts = ast_uop_sidecar_category_counts(ast)
   return priority_category(set(counts)) if counts else "other"
+
+
+def is_store_effect_op(op) -> bool:
+  return op in STORE_EFFECT_OPS or str(op) in {"Ops.STORE", "Ops.ASSIGN", "Ops.AFTER", "STORE", "ASSIGN", "AFTER"}
+
+
+def ast_cache_write_phase_category_counts(ast) -> dict[str, int]:
+  counts = {
+    category: count
+    for category, count in ast_uop_sidecar_category_counts(ast, prefer_cache_write_phase=True).items()
+    if is_cache_write_phase_category(category)
+  }
+  return dict(sorted(counts.items(), key=lambda item: (-item[1], cache_write_phase_order(item[0]), item[0])))
+
+
+def ast_cache_write_phase_category(ast) -> tuple[str | None, bool]:
+  phase_counts = ast_cache_write_phase_category_counts(ast)
+  if not phase_counts:
+    return None, False
+  store_effect_categories: set[str] = set()
+  try:
+    uops = ast.toposort()
+  except Exception:
+    uops = []
+  for uop in uops:
+    if is_store_effect_op(getattr(uop, "op", None)):
+      metadata = merge_metadata(getattr(uop, "metadata", None) or (), all_metadata.get(uop, ()))
+      category = sidecar_metadata_category(metadata, prefer_cache_write_phase=True)
+      if is_cache_write_phase_category(category):
+        store_effect_categories.add(category)
+  candidates = store_effect_categories or set(phase_counts)
+  selected = sorted(candidates, key=lambda category: (-phase_counts.get(category, 0), cache_write_phase_order(category), category))[0]
+  return selected, len(phase_counts) > 1
+
+
+def source_item_cache_write_phase_category(item) -> tuple[str | None, bool]:
+  metadata_phase_category = sidecar_metadata_category(
+    getattr(item, "metadata", None) or (),
+    prefer_cache_write_phase=True,
+  )
+  ast_phase_category, ast_conflict = ast_cache_write_phase_category(getattr(item, "ast", None))
+  if is_cache_write_phase_category(metadata_phase_category):
+    return metadata_phase_category, ast_conflict or (
+      ast_phase_category is not None and ast_phase_category != metadata_phase_category
+    )
+  return ast_phase_category, ast_conflict
 
 
 def source_range_metadata_category(metadata) -> str:
@@ -343,11 +501,27 @@ def sidecar_scope(category: str):
 
 
 def add_sidecar_metadata(linear: UOp, category: str) -> UOp:
-  metadata = (Metadata(name=category, caller=f"repo_sidecar:1::{category}"),)
-  return linear.replace(src=tuple(
-    call.replace(arg=replace(call.arg, metadata=call.arg.metadata or metadata))
-    for call in linear.src
-  ))
+  parent_category = parent_cache_write_category(category)
+  scope_categories = [parent_category]
+  if is_cache_write_phase_category(category):
+    scope_categories.append(category)
+
+  def add_call_metadata(call: UOp) -> UOp:
+    metadata = tuple(call.arg.metadata or ())
+    for scope_category in scope_categories:
+      metadata = merge_metadata(
+        metadata,
+        (Metadata(name=scope_category, caller=f"repo_sidecar:1::{scope_category}"),),
+      )
+    phase_category, _ = ast_cache_write_phase_category(call.src[0])
+    if phase_category is not None:
+      metadata = merge_metadata(
+        metadata,
+        (Metadata(name=phase_category, caller=f"repo_sidecar:1::{phase_category}"),),
+      )
+    return call.replace(arg=replace(call.arg, metadata=metadata))
+
+  return linear.replace(src=tuple(add_call_metadata(call) for call in linear.src))
 
 
 @contextmanager
@@ -356,8 +530,14 @@ def uop_creation_sidecar_patch():
 
   def call_with_uop_sidecar(cls, *args, **kwargs):
     uop = original_call(cls, *args, **kwargs)
+    current_metadata = all_metadata.get(uop, ())
+    inherited_phase_metadata = uop_sources_cache_write_phase_sidecar_metadata(getattr(uop, "src", ()))
+    if inherited_phase_metadata:
+      current_metadata = merge_metadata(current_metadata, inherited_phase_metadata)
     if _SIDECAR_STACK:
-      all_metadata[uop] = merge_metadata(all_metadata.get(uop, ()), uop_sidecar_metadata(_SIDECAR_STACK[-1]))
+      current_metadata = merge_metadata(current_metadata, uop_sidecar_metadata(_SIDECAR_STACK[-1]))
+    if current_metadata:
+      all_metadata[uop] = current_metadata
     return uop
 
   UOpMetaClass.__call__ = call_with_uop_sidecar
@@ -377,6 +557,9 @@ def uop_replace_sidecar_patch():
     current_metadata = all_metadata.get(new_uop, ())
     if previous_metadata:
       current_metadata = merge_metadata(current_metadata, previous_metadata)
+    inherited_phase_metadata = uop_sources_cache_write_phase_sidecar_metadata(getattr(new_uop, "src", ()))
+    if inherited_phase_metadata:
+      current_metadata = merge_metadata(current_metadata, inherited_phase_metadata)
     if _SIDECAR_STACK:
       current_metadata = merge_metadata(current_metadata, uop_sidecar_metadata(_SIDECAR_STACK[-1]))
     if current_metadata:
@@ -452,7 +635,38 @@ def cache_update_sidecar_patch():
   ) -> None:
     role = cache_write_role(is_kv_shared_layer, store_full_length_kv)
     if packed_cache is not None:
-      with sidecar_scope(cache_write_sidecar_category("packed", role, layer_idx, layer_type)):
+      parent_category = cache_write_sidecar_category("packed", role, layer_idx, layer_type)
+      if cache_write_phase_target("packed", role, layer_idx, layer_type):
+        rmsnorm_rope_category = cache_write_sidecar_category("packed", role, layer_idx, layer_type, phase="rmsnorm_rope")
+        rhs_pack_category = cache_write_sidecar_category("packed", role, layer_idx, layer_type, phase="rhs_pack")
+        store_category = cache_write_sidecar_category("packed", role, layer_idx, layer_type, phase="store")
+        with sidecar_scope(parent_category):
+          if _CACHE_WRITE_PHASE_CUTPOINTS:
+            with sidecar_scope(rmsnorm_rope_category):
+              key = key.realize()
+              value = value.realize()
+          if single_position:
+            with sidecar_scope(rhs_pack_category):
+              packed_kv = key.squeeze(2).unsqueeze(-1).cat(value.squeeze(2).unsqueeze(-1), dim=-1)
+              if _CACHE_WRITE_PHASE_CUTPOINTS:
+                packed_kv = packed_kv.realize()
+            with sidecar_scope(store_category):
+              assigned = packed_cache[:, :, start, :, :].assign(packed_kv)
+              if _CACHE_WRITE_PHASE_CUTPOINTS:
+                assigned.realize()
+          else:
+            with sidecar_scope(rhs_pack_category):
+              packed_kv = key.unsqueeze(-1).cat(value.unsqueeze(-1), dim=-1)
+              if _CACHE_WRITE_PHASE_CUTPOINTS:
+                packed_kv = packed_kv.realize()
+            with sidecar_scope(store_category):
+              assigned = packed_cache[:, :, start:end, :, :].assign(packed_kv)
+              if _CACHE_WRITE_PHASE_CUTPOINTS:
+                assigned.realize()
+          if not _CACHE_WRITE_PHASE_CUTPOINTS:
+            assigned.realize()
+        return
+      with sidecar_scope(parent_category):
         if single_position:
           packed_kv = key.squeeze(2).unsqueeze(-1).cat(value.squeeze(2).unsqueeze(-1), dim=-1)
           packed_cache[:, :, start, :, :].assign(packed_kv).realize()
@@ -479,7 +693,10 @@ def cache_update_sidecar_patch():
 
 @contextmanager
 def add_linear_sidecar_patch():
-  original_add_linear = TinyJitClass.add_linear
+  original_add_linear = getattr(TinyJitClass, "add_linear", None)
+  if original_add_linear is None:
+    yield
+    return
 
   def add_linear_with_sidecar(self, linear: UOp, var_vals: dict[str, int]):
     if _SIDECAR_STACK:
@@ -509,24 +726,130 @@ def method_sidecar_patch(owner: type, name: str, category: str):
     setattr(owner, name, original)
 
 
+def current_attention_context() -> dict[str, Any] | None:
+  return _ATTENTION_CONTEXT_STACK[-1] if _ATTENTION_CONTEXT_STACK else None
+
+
+def attention_phase_category(attn: GemmaAttention, phase: str) -> str | None:
+  role = cache_write_role(attn.is_kv_shared_layer, attn.store_full_length_kv)
+  if not cache_write_phase_target("packed", role, attn.layer_idx, attn.layer_type):
+    return None
+  return cache_write_sidecar_category("packed", role, attn.layer_idx, attn.layer_type, phase=phase)
+
+
 @contextmanager
-def gemma_profile_sidecars():
+def attention_sidecar_patch():
+  original = GemmaAttention.__call__
+
+  @wraps(original)
+  def wrapped(self, *args, **kwargs):
+    context = {"attention": self, "after_kv_project": False}
+    _ATTENTION_CONTEXT_STACK.append(context)
+    try:
+      with sidecar_scope("attention"):
+        return original(self, *args, **kwargs)
+    finally:
+      _ATTENTION_CONTEXT_STACK.pop()
+
+  GemmaAttention.__call__ = wrapped
+  try:
+    yield
+  finally:
+    GemmaAttention.__call__ = original
+
+
+@contextmanager
+def kv_projection_phase_sidecar_patch():
+  original = GemmaAttention._project_kv
+
+  @wraps(original)
+  def wrapped(self, hidden_states, hidden_shape):
+    category = attention_phase_category(self, "kv_projection")
+    if category is None:
+      result = original(self, hidden_states, hidden_shape)
+    else:
+      with sidecar_scope(category):
+        result = original(self, hidden_states, hidden_shape)
+        if _CACHE_WRITE_PHASE_CUTPOINTS:
+          result = tuple(tensor.realize() for tensor in result)
+    context = current_attention_context()
+    if context is not None and context.get("attention") is self:
+      context["after_kv_project"] = True
+    return result
+
+  GemmaAttention._project_kv = wrapped
+  try:
+    yield
+  finally:
+    GemmaAttention._project_kv = original
+
+
+@contextmanager
+def rmsnorm_phase_sidecar_patch():
+  original = RMSNorm.__call__
+
+  @wraps(original)
+  def wrapped(self, *args, **kwargs):
+    category = "norm"
+    context = current_attention_context()
+    if context is not None and context.get("after_kv_project"):
+      attn = context["attention"]
+      phase_category = attention_phase_category(attn, "rmsnorm_rope")
+      if phase_category is not None and (self is getattr(attn, "k_norm", None) or self is getattr(attn, "v_norm", None)):
+        category = phase_category
+    with sidecar_scope(category):
+      return original(self, *args, **kwargs)
+
+  RMSNorm.__call__ = wrapped
+  try:
+    yield
+  finally:
+    RMSNorm.__call__ = original
+
+
+@contextmanager
+def rope_phase_sidecar_patch():
+  original = gemma_model.apply_rotary_pos_emb
+
+  @wraps(original)
+  def wrapped(*args, **kwargs):
+    category = None
+    context = current_attention_context()
+    if context is not None and context.get("after_kv_project"):
+      category = attention_phase_category(context["attention"], "rmsnorm_rope")
+    if category is None:
+      return original(*args, **kwargs)
+    with sidecar_scope(category):
+      return original(*args, **kwargs)
+
+  gemma_model.apply_rotary_pos_emb = wrapped
+  try:
+    yield
+  finally:
+    gemma_model.apply_rotary_pos_emb = original
+
+
+@contextmanager
+def gemma_profile_sidecars(*, cache_write_phase_cutpoints: bool = False):
   patches: list[tuple[type, str, str]] = [
     (TextScaledEmbedding, "__call__", "embedding_per_layer"),
     (GemmaModel, "project_per_layer_inputs", "embedding_per_layer"),
-    (RMSNorm, "__call__", "norm"),
-    (GemmaAttention, "__call__", "attention"),
     (GemmaMLP, "__call__", "mlp"),
     (GemmaDecoderLayer, "__call__", "decoder_residual"),
     (GemmaForConditionalGeneration, "logits", "logits_argmax"),
     (GemmaForConditionalGeneration, "sample_next", "logits_argmax"),
   ]
   with ExitStack() as stack:
+    stack.enter_context(cache_write_phase_cutpoint_scope(cache_write_phase_cutpoints))
     stack.enter_context(uop_creation_sidecar_patch())
     stack.enter_context(uop_replace_sidecar_patch())
     stack.enter_context(add_linear_sidecar_patch())
     stack.enter_context(tensor_realize_sidecar_patch())
     stack.enter_context(cache_update_sidecar_patch())
+    stack.enter_context(attention_sidecar_patch())
+    stack.enter_context(kv_projection_phase_sidecar_patch())
+    stack.enter_context(rmsnorm_phase_sidecar_patch())
+    stack.enter_context(rope_phase_sidecar_patch())
     for owner, name, category in patches:
       stack.enter_context(method_sidecar_patch(owner, name, category))
     yield
@@ -604,19 +927,33 @@ def graph_source_count(row: dict[str, Any]) -> int | None:
 
 def source_slice_summary(items) -> dict[str, Any]:
   category_counts: dict[str, int] = defaultdict(int)
+  cache_write_phase_category_counts: dict[str, int] = defaultdict(int)
   program_type_counts: dict[str, int] = defaultdict(int)
   category_basis_counts: dict[str, int] = defaultdict(int)
   unclassified_items = []
+  cache_write_phase_conflict_count = 0
+  cache_write_phase_unclassified_count = 0
   for item in items:
     category = source_category(item)
     program_type_counts[source_item_program_type(item)] += 1
     category_counts[category] += 1
     category_basis_counts[source_item_category_basis(item)] += 1
+    if cache_write_phase_target_category(category):
+      phase_category, phase_conflict = source_item_cache_write_phase_category(item)
+      if phase_category is None:
+        cache_write_phase_unclassified_count += 1
+      else:
+        cache_write_phase_category_counts[phase_category] += 1
+        if phase_conflict:
+          cache_write_phase_conflict_count += 1
     if category == "other":
       unclassified_items.append(item)
   return {
     "category_counts": dict(sorted(category_counts.items())),
     "category_counts_rollup": category_count_rollups(category_counts),
+    "cache_write_phase_category_counts": dict(sorted(cache_write_phase_category_counts.items())),
+    "cache_write_phase_conflict_count": cache_write_phase_conflict_count,
+    "cache_write_phase_unclassified_count": cache_write_phase_unclassified_count,
     "program_type_counts": dict(sorted(program_type_counts.items())),
     "category_basis_counts": dict(sorted(category_basis_counts.items())),
     "unclassified_source_summary": {
@@ -716,6 +1053,9 @@ def attach_source_attribution(rows: list[dict[str, Any]], attribution: dict[str,
     row["source_count"] = item["source_count"]
     row["source_category_counts"] = item["category_counts"]
     row["source_category_counts_rollup"] = item["category_counts_rollup"]
+    row["cache_write_phase_category_counts"] = item["cache_write_phase_category_counts"]
+    row["cache_write_phase_conflict_count"] = item["cache_write_phase_conflict_count"]
+    row["cache_write_phase_unclassified_count"] = item["cache_write_phase_unclassified_count"]
     row["source_category_basis"] = item["category_basis"]
 
 
@@ -946,6 +1286,51 @@ def summarize_source_attribution(attribution: dict[str, Any]) -> dict[str, Any]:
   }
 
 
+def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict[str, Any]:
+  by_category: dict[str, dict[str, Any]] = {}
+  by_parent: dict[str, dict[str, Any]] = {}
+  by_phase: dict[str, dict[str, Any]] = {}
+  total_elapsed = sum(float(item["elapsed_ms"]) for item in attribution["items"])
+  phase_source_count = 0
+  conflict_source_count = 0
+  unclassified_source_count = 0
+  for item in attribution["items"]:
+    source_count = max(1, int(item["source_count"]))
+    elapsed_ms = float(item["elapsed_ms"])
+    phase_counts = item.get("cache_write_phase_category_counts", {})
+    phase_item_count = sum(int(count) for count in phase_counts.values())
+    phase_source_count += phase_item_count
+    conflict_source_count += int(item.get("cache_write_phase_conflict_count", 0))
+    unclassified_source_count += int(item.get("cache_write_phase_unclassified_count", 0))
+    for category, count in phase_counts.items():
+      count_int = int(count)
+      category_elapsed = elapsed_ms * (count_int / source_count)
+      entry = by_category.setdefault(category, {"source_count": 0, "elapsed_ms": 0.0})
+      entry["source_count"] += count_int
+      entry["elapsed_ms"] += category_elapsed
+      parent = parent_cache_write_category(category)
+      parent_entry = by_parent.setdefault(parent, {"source_count": 0, "elapsed_ms": 0.0})
+      parent_entry["source_count"] += count_int
+      parent_entry["elapsed_ms"] += category_elapsed
+      phase = cache_write_phase_name(category) or "unknown"
+      phase_entry = by_phase.setdefault(phase, {"source_count": 0, "elapsed_ms": 0.0})
+      phase_entry["source_count"] += count_int
+      phase_entry["elapsed_ms"] += category_elapsed
+  for groups in (by_category, by_parent, by_phase):
+    for entry in groups.values():
+      entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed else 0.0
+  return {
+    "source_count": phase_source_count,
+    "elapsed_ms": sum(entry["elapsed_ms"] for entry in by_category.values()),
+    "total_elapsed_ms": total_elapsed,
+    "conflict_source_count": conflict_source_count,
+    "unclassified_source_count": unclassified_source_count,
+    "by_category": dict(sorted(by_category.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+    "by_parent": dict(sorted(by_parent.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+    "by_phase": dict(sorted(by_phase.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+  }
+
+
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
   with path.open("w", newline="") as handle:
@@ -963,6 +1348,9 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
       "source_count",
       "source_category_counts",
       "source_category_counts_rollup",
+      "cache_write_phase_category_counts",
+      "cache_write_phase_conflict_count",
+      "cache_write_phase_unclassified_count",
       "source_category_basis",
       "metadata",
     ], lineterminator="\n")
@@ -976,6 +1364,9 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "source_count": row.get("source_count", ""),
         "source_category_counts": json.dumps(row.get("source_category_counts", {}), sort_keys=True),
         "source_category_counts_rollup": json.dumps(row.get("source_category_counts_rollup", {}), sort_keys=True),
+        "cache_write_phase_category_counts": json.dumps(row.get("cache_write_phase_category_counts", {}), sort_keys=True),
+        "cache_write_phase_conflict_count": row.get("cache_write_phase_conflict_count", ""),
+        "cache_write_phase_unclassified_count": row.get("cache_write_phase_unclassified_count", ""),
         "source_category_basis": row.get("source_category_basis", ""),
         "metadata": json.dumps(row["metadata"], sort_keys=True),
       })
@@ -989,6 +1380,11 @@ def main() -> None:
   parser.add_argument("--profile-start", type=int, help="Decode position to profile. Defaults to context length plus 3.")
   parser.add_argument("--jit-mode", type=int, default=2, choices=[1, 2], help="tinygrad JIT mode. JIT=1 applies Metal graph batching; JIT=2 profiles ungraphed items.")
   parser.add_argument("--metal-int8-gate-up", choices=["default", "raw"], default="default", help="Use the default tinygrad fused int8 gate/up path or opt into the raw Metal gate/up Runner.")
+  parser.add_argument(
+    "--layer13-phase-cutpoints",
+    action="store_true",
+    help="Profiler-only diagnostic: force realization cutpoints around layer-13 shared-source packed-cache K/V projection, normalized/rotated K/V, RHS packing, and store phases.",
+  )
   parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
   parser.add_argument("--csv-out", type=Path)
   args = parser.parse_args()
@@ -1008,7 +1404,7 @@ def main() -> None:
   cache = build_zero_cache(model, args.context_length, max_length)
   token = Tensor([[2]], dtype="int32", device=model.device).realize()
 
-  with gemma_profile_sidecars():
+  with gemma_profile_sidecars(cache_write_phase_cutpoints=args.layer13_phase_cutpoints):
     with Context(JIT=args.jit_mode, BEAM=0, TRACEMETA=2):
       rollout_jit = TinyJit(lambda token, start_pos: model._rollout_next_token(token, start_pos, cache, 0.0, decode_sliding_window=True))
       for offset in range(3):
@@ -1033,6 +1429,9 @@ def main() -> None:
     "program_type_counts": original_source_summary["program_type_counts"],
     "category_counts": original_source_summary["category_counts"],
     "category_counts_rollup": original_source_summary["category_counts_rollup"],
+    "cache_write_phase_category_counts": original_source_summary["cache_write_phase_category_counts"],
+    "cache_write_phase_conflict_count": original_source_summary["cache_write_phase_conflict_count"],
+    "cache_write_phase_unclassified_count": original_source_summary["cache_write_phase_unclassified_count"],
     "category_basis_counts": original_source_summary["category_basis_counts"],
     "unclassified_source_summary": original_source_summary["unclassified_source_summary"],
     "graph_batch_count": 0,
@@ -1051,6 +1450,7 @@ def main() -> None:
   }
   post_graph_summary = summarize_exec_items(execution_items)
   source_attributed_summary = summarize_source_attribution(source_attribution)
+  source_attributed_cache_write_phase_summary = summarize_cache_write_phase_attribution(source_attribution)
   csv_out = args.csv_out or args.out.with_suffix(".csv")
   write_csv(csv_out, rows)
   payload = {
@@ -1081,6 +1481,7 @@ def main() -> None:
     "post_graph_execution": post_graph_summary,
     "source_attribution": source_attribution,
     "source_attributed_summary": source_attributed_summary,
+    "source_attributed_cache_write_phase_summary": source_attributed_cache_write_phase_summary,
     "summary": summarize_rows(rows),
     "csv": str(csv_out),
   }
