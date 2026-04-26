@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "shared-kv-cache-write-elision-rejected-027",
+  "current_checkpoint": "unclassified-final-tail-structural-attribution-028",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -354,6 +354,18 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "unclassified-final-tail-structural-attribution-028",
+      "summary": "Added structural summaries for unclassified decode graph source items. The refreshed default JIT=1 E2B int8 METAL artifact keeps complete 8-row MetalGraph attribution over all 5239 source items and shows the remaining 719 unclassified source items are all Ops.SINK roots in the final graph batch, headed by repeated r_16_96 and logits/norm-shaped display signatures. This is profiler instrumentation only; no throughput row was superseded.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-default-current.json",
+        "benchmarks/gemma4-metal-decode-graph-default-current.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -361,7 +373,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "unclassified-final-tail-attribution",
-  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. Shared-KV cache-write elision is rejected: the real graph profile shows zero shared-consumer cache writes, with classified cache writes split as local key/value producers at 1696 each and shared-source key/value producers at 564 each. The remaining graph attribution gap is 719 unclassified source items in the final graph range. The next target is to classify that final tail by adding narrow sidecar scopes around logits/sample, residual/norm, and post-attention return realization without changing model runtime behavior, then decide the next throughput patch from concrete graph-source evidence.",
-  "updated_at": "2026-04-25T16:27:49-0700"
+  "next_target": "final-tail-norm-logits-sidecar-attribution",
+  "next_target_plan": "Current accepted throughput proof remains E2B int8 METAL beam=0 max_new_tokens=1000 decode_warmup_tokens=20 at 10.863932 tok/s over 980 tokens with rollout_jit_count=999 and decode_fallback=false. The current graph profiler artifact keeps complete source attribution and now identifies the remaining 719 unclassified source items as Ops.SINK roots in the final <batched 1175> graph range, with top display signatures including r_16_96=176, E_16_32_3=70, and E_16_32_3n1=35. The next target is to add narrow profiler-only sidecar scopes around final language-model norm, logits/softcap, and sample_next realization boundaries to classify the final tail before attempting any runtime patch.",
+  "updated_at": "2026-04-25T17:19:52-0700"
 }

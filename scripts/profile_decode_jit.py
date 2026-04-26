@@ -323,6 +323,37 @@ def source_item_category_basis(item) -> str:
   return "unclassified_source_item_metadata"
 
 
+def count_map(values, *, limit: int = 20) -> dict[str, int]:
+  counts: dict[str, int] = defaultdict(int)
+  for value in values:
+    counts[str(value)] += 1
+  return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit])
+
+
+def source_item_program_type(item) -> str:
+  return type(item.prg).__name__ if item.prg is not None else ""
+
+
+def source_item_display_name(item) -> str:
+  return "" if item.prg is None else strip_ansi(getattr(item.prg, "display_name", ""))
+
+
+def source_item_ast_root(item) -> str:
+  ast = getattr(item, "ast", None)
+  return "" if ast is None else str(getattr(ast, "op", ""))
+
+
+def source_item_op_signature(item, *, limit: int = 8) -> str:
+  ast = getattr(item, "ast", None)
+  if ast is None:
+    return ""
+  try:
+    op_counts = count_map((getattr(uop, "op", "") for uop in ast.toposort()), limit=limit)
+  except Exception as exc:
+    return f"error:{type(exc).__name__}"
+  return ",".join(f"{op}:{count}" for op, count in op_counts.items())
+
+
 def graph_source_count(row: dict[str, Any]) -> int | None:
   if "Graph" not in row["program_type"]:
     return 1
@@ -334,14 +365,25 @@ def source_slice_summary(items) -> dict[str, Any]:
   category_counts: dict[str, int] = defaultdict(int)
   program_type_counts: dict[str, int] = defaultdict(int)
   category_basis_counts: dict[str, int] = defaultdict(int)
+  unclassified_items = []
   for item in items:
-    program_type_counts[type(item.prg).__name__ if item.prg is not None else ""] += 1
-    category_counts[source_category(item)] += 1
+    category = source_category(item)
+    program_type_counts[source_item_program_type(item)] += 1
+    category_counts[category] += 1
     category_basis_counts[source_item_category_basis(item)] += 1
+    if category == "other":
+      unclassified_items.append(item)
   return {
     "category_counts": dict(sorted(category_counts.items())),
     "program_type_counts": dict(sorted(program_type_counts.items())),
     "category_basis_counts": dict(sorted(category_basis_counts.items())),
+    "unclassified_source_summary": {
+      "count": len(unclassified_items),
+      "program_type_counts": count_map(source_item_program_type(item) for item in unclassified_items),
+      "display_name_counts": count_map(source_item_display_name(item) for item in unclassified_items),
+      "ast_root_counts": count_map(source_item_ast_root(item) for item in unclassified_items),
+      "op_signature_counts": count_map(source_item_op_signature(item) for item in unclassified_items),
+    },
   }
 
 
@@ -686,6 +728,7 @@ def main() -> None:
     "program_type_counts": original_source_summary["program_type_counts"],
     "category_counts": original_source_summary["category_counts"],
     "category_basis_counts": original_source_summary["category_basis_counts"],
+    "unclassified_source_summary": original_source_summary["unclassified_source_summary"],
     "graph_batch_count": 0,
     "compiled_runner_count": sum(
       1

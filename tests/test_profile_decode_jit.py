@@ -18,7 +18,8 @@ profile = load_profile_module()
 
 
 class FakeProgram:
-  pass
+  def __init__(self, display_name="fake_program"):
+    self.display_name = display_name
 
 
 class FakeGraphProgram:
@@ -26,11 +27,21 @@ class FakeGraphProgram:
     self.jit_cache = source_items
 
 
+class FakeAst:
+  def __init__(self, *ops):
+    self.uops = [op if isinstance(op, FakeUOp) else FakeUOp(op) for op in ops]
+    self.op = self.uops[0].op if self.uops else ""
+
+  def toposort(self):
+    return self.uops
+
+
 class FakeItem:
-  def __init__(self, category: str, prg=None):
+  def __init__(self, category: str, prg=None, ast=None):
     self.category = category
     self.prg = FakeProgram() if prg is None else prg
     self.metadata = []
+    self.ast = ast
 
 
 class FakeMetadata:
@@ -217,11 +228,21 @@ def test_graph_batch_attribution_detects_batch_count_mismatch():
 
 def test_graph_batch_attribution_marks_unclassified_source_metadata():
   attribution = profile.attribute_execution_source_ranges(
-    [FakeItem("graph_batch", FakeGraphProgram([FakeItem("other"), FakeItem("other")]))],
+    [FakeItem("graph_batch", FakeGraphProgram([
+      FakeItem("other", FakeProgram("copy"), FakeAst("Ops.COPY", "Ops.LOAD")),
+      FakeItem("other", FakeProgram("sink"), FakeAst("Ops.SINK", "Ops.LOAD")),
+    ]))],
     [{"ordinal": 0, "program_type": "MetalGraph", "display_name": "<batched 2>", "elapsed_ms": 1.0}],
   )
 
   assert attribution["status"] == "complete"
   assert attribution["items"][0]["category_counts"] == {"other": 2}
   assert attribution["items"][0]["category_basis"] == "unclassified_source_item_metadata"
+  assert attribution["items"][0]["unclassified_source_summary"]["count"] == 2
+  assert attribution["items"][0]["unclassified_source_summary"]["display_name_counts"] == {"copy": 1, "sink": 1}
+  assert attribution["items"][0]["unclassified_source_summary"]["ast_root_counts"] == {"Ops.COPY": 1, "Ops.SINK": 1}
+  assert attribution["items"][0]["unclassified_source_summary"]["op_signature_counts"] == {
+    "Ops.COPY:1,Ops.LOAD:1": 1,
+    "Ops.LOAD:1,Ops.SINK:1": 1,
+  }
   assert attribution["category_basis_counts"] == {"unclassified_source_item_metadata": 1}

@@ -25,7 +25,60 @@
     "program_type_counts": {
       "CompiledRunner": 5239
     },
-    "raw_gate_up_runner_count": 0
+    "raw_gate_up_runner_count": 0,
+    "unclassified_source_summary": {
+      "ast_root_counts": {
+        "Ops.SINK": 719
+      },
+      "count": 719,
+      "display_name_counts": {
+        "E_(gemma_start_pos_window+1)_2_4": 7,
+        "E_16_2_16_4": 28,
+        "E_16_32_3": 70,
+        "E_16_32_3n1": 35,
+        "E_8_2_16_4_4": 7,
+        "r_128_32_3_384_4": 15,
+        "r_1536_16_128": 28,
+        "r_1536_16_16n1": 35,
+        "r_1536_16_256": 7,
+        "r_1536_16_384": 15,
+        "r_1536_16_768": 20,
+        "r_16_96": 176,
+        "r_2048_16_96": 28,
+        "r_256_32_3_384_4": 20,
+        "r_2_32_4_2_4_64": 28,
+        "r_2_4_(gemma_start_pos_window+1)": 7,
+        "r_4_32_4_2_4_32": 28,
+        "r_8_16_16": 28,
+        "r_8_16_32": 28,
+        "r_8_16_32n1": 28
+      },
+      "op_signature_counts": {
+        "Ops.ADD:4,Ops.CONST:4,Ops.MUL:4,Ops.INDEX:3,Ops.PARAM:3,Ops.RANGE:3,Ops.DEFINE_VAR:1,Ops.END:1": 14,
+        "Ops.ADD:5,Ops.CONST:4,Ops.MUL:4,Ops.INDEX:3,Ops.PARAM:3,Ops.RANGE:3,Ops.DEFINE_VAR:1,Ops.END:1": 28,
+        "Ops.CONST:2,Ops.INDEX:2,Ops.PARAM:2,Ops.RANGE:2,Ops.ADD:1,Ops.END:1,Ops.MUL:1,Ops.REDUCE:1": 29,
+        "Ops.CONST:3,Ops.ADD:2,Ops.INDEX:2,Ops.PARAM:2,Ops.RANGE:2,Ops.DEFINE_VAR:1,Ops.END:1,Ops.MUL:1": 7,
+        "Ops.CONST:4,Ops.INDEX:2,Ops.MUL:2,Ops.PARAM:2,Ops.ADD:1,Ops.RANGE:1,Ops.RECIPROCAL:1,Ops.REDUCE:1": 176,
+        "Ops.CONST:4,Ops.INDEX:3,Ops.MUL:3,Ops.PARAM:3,Ops.ADD:2,Ops.RANGE:2,Ops.END:1,Ops.EXP2:1": 28,
+        "Ops.CONST:4,Ops.MUL:3,Ops.ADD:2,Ops.INDEX:2,Ops.PARAM:2,Ops.RANGE:2,Ops.END:1,Ops.RECIPROCAL:1": 36,
+        "Ops.CONST:5,Ops.ADD:3,Ops.INDEX:3,Ops.MUL:3,Ops.PARAM:3,Ops.RANGE:2,Ops.DEFINE_VAR:1,Ops.END:1": 7,
+        "Ops.CONST:5,Ops.INDEX:4,Ops.MUL:4,Ops.PARAM:4,Ops.ADD:3,Ops.RANGE:2,Ops.DEFINE_VAR:1,Ops.END:1": 7,
+        "Ops.CONST:7,Ops.ADD:4,Ops.INDEX:3,Ops.MUL:3,Ops.PARAM:3,Ops.RANGE:3,Ops.WHERE:2,Ops.CAST:1": 2,
+        "Ops.INDEX:4,Ops.PARAM:4,Ops.MUL:3,Ops.CONST:2,Ops.RANGE:2,Ops.ADD:1,Ops.CAST:1,Ops.END:1": 70,
+        "Ops.INDEX:5,Ops.PARAM:5,Ops.CONST:2,Ops.MUL:2,Ops.ADD:1,Ops.CAST:1,Ops.END:1,Ops.RANGE:1": 70,
+        "Ops.INDEX:6,Ops.MUL:6,Ops.PARAM:6,Ops.CONST:4,Ops.RANGE:3,Ops.ADD:2,Ops.CAST:2,Ops.END:1": 35,
+        "Ops.INDEX:6,Ops.PARAM:6,Ops.MUL:3,Ops.CAST:2,Ops.CONST:2,Ops.ADD:1,Ops.END:1,Ops.RANGE:1": 35,
+        "Ops.INDEX:6,Ops.PARAM:6,Ops.MUL:5,Ops.CONST:3,Ops.CAST:2,Ops.RANGE:2,Ops.ADD:1,Ops.END:1": 35,
+        "Ops.MUL:17,Ops.CONST:14,Ops.ADD:13,Ops.INDEX:8,Ops.WHERE:8,Ops.CAST:7,Ops.PARAM:4,Ops.EXP2:2": 28,
+        "Ops.MUL:19,Ops.CONST:15,Ops.ADD:14,Ops.WHERE:14,Ops.INDEX:10,Ops.CAST:8,Ops.PARAM:4,Ops.CMPLT:2": 7,
+        "Ops.MUL:7,Ops.ADD:6,Ops.CONST:6,Ops.INDEX:5,Ops.PARAM:5,Ops.RANGE:3,Ops.DEFINE_VAR:1,Ops.END:1": 28,
+        "Ops.MUL:9,Ops.CONST:5,Ops.INDEX:5,Ops.ADD:4,Ops.PARAM:4,Ops.RANGE:2,Ops.CAST:1,Ops.END:1": 35,
+        "Ops.MUL:9,Ops.CONST:6,Ops.INDEX:5,Ops.PARAM:5,Ops.ADD:4,Ops.RANGE:2,Ops.CAST:1,Ops.END:1": 32
+      },
+      "program_type_counts": {
+        "CompiledRunner": 719
+      }
+    }
   },
   "post_graph_execution": {
     "category_counts": {
@@ -74,7 +127,7 @@
           "attention_value_cache_write_local": 6
         },
         "display_name": "<batched 32>",
-        "elapsed_ms": 0.7197083905339241,
+        "elapsed_ms": 1.3607083819806576,
         "expected_source_count": 32,
         "ordinal": 0,
         "program_type": "MetalGraph",
@@ -83,7 +136,14 @@
         },
         "source_count": 32,
         "source_end": 31,
-        "source_start": 0
+        "source_start": 0,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {}
+        }
       },
       {
         "category_basis": "repo_sidecar_realize_scope_metadata",
@@ -95,7 +155,7 @@
           "attention_value_cache_write_local": 29
         },
         "display_name": "<batched 64>",
-        "elapsed_ms": 3.879499970935285,
+        "elapsed_ms": 2.1727499552071095,
         "expected_source_count": 64,
         "ordinal": 1,
         "program_type": "MetalGraph",
@@ -104,7 +164,14 @@
         },
         "source_count": 64,
         "source_end": 95,
-        "source_start": 32
+        "source_start": 32,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {}
+        }
       },
       {
         "category_basis": "repo_sidecar_realize_scope_metadata",
@@ -116,7 +183,7 @@
           "attention_value_cache_write_local": 50
         },
         "display_name": "<batched 128>",
-        "elapsed_ms": 3.423416637815535,
+        "elapsed_ms": 4.097124910913408,
         "expected_source_count": 128,
         "ordinal": 2,
         "program_type": "MetalGraph",
@@ -125,7 +192,14 @@
         },
         "source_count": 128,
         "source_end": 223,
-        "source_start": 96
+        "source_start": 96,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {}
+        }
       },
       {
         "category_basis": "repo_sidecar_realize_scope_metadata",
@@ -137,7 +211,7 @@
           "attention_value_cache_write_local": 150
         },
         "display_name": "<batched 256>",
-        "elapsed_ms": 4.856624989770353,
+        "elapsed_ms": 5.1894166972488165,
         "expected_source_count": 256,
         "ordinal": 3,
         "program_type": "MetalGraph",
@@ -146,7 +220,14 @@
         },
         "source_count": 256,
         "source_end": 479,
-        "source_start": 224
+        "source_start": 224,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {}
+        }
       },
       {
         "category_basis": "repo_sidecar_realize_scope_metadata",
@@ -158,7 +239,7 @@
           "attention_value_cache_write_local": 252
         },
         "display_name": "<batched 512>",
-        "elapsed_ms": 9.580166661180556,
+        "elapsed_ms": 8.5273333825171,
         "expected_source_count": 512,
         "ordinal": 4,
         "program_type": "MetalGraph",
@@ -167,7 +248,14 @@
         },
         "source_count": 512,
         "source_end": 991,
-        "source_start": 480
+        "source_start": 480,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {}
+        }
       },
       {
         "category_basis": "repo_sidecar_realize_scope_metadata",
@@ -179,7 +267,7 @@
           "attention_value_cache_write_local": 513
         },
         "display_name": "<batched 1024>",
-        "elapsed_ms": 11.711166705936193,
+        "elapsed_ms": 11.669833329506218,
         "expected_source_count": 1024,
         "ordinal": 5,
         "program_type": "MetalGraph",
@@ -188,7 +276,14 @@
         },
         "source_count": 1024,
         "source_end": 2015,
-        "source_start": 992
+        "source_start": 992,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {}
+        }
       },
       {
         "category_basis": "repo_sidecar_realize_scope_metadata",
@@ -202,7 +297,7 @@
           "attention_value_cache_write_shared_source": 272
         },
         "display_name": "<batched 2048>",
-        "elapsed_ms": 25.056749931536615,
+        "elapsed_ms": 25.30954172834754,
         "expected_source_count": 2048,
         "ordinal": 6,
         "program_type": "MetalGraph",
@@ -211,7 +306,14 @@
         },
         "source_count": 2048,
         "source_end": 4063,
-        "source_start": 2016
+        "source_start": 2016,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {}
+        }
       },
       {
         "category_basis": "repo_sidecar_realize_scope_metadata",
@@ -225,7 +327,7 @@
           "other": 719
         },
         "display_name": "<batched 1175>",
-        "elapsed_ms": 19.84395831823349,
+        "elapsed_ms": 20.121749956160784,
         "expected_source_count": 1175,
         "ordinal": 7,
         "program_type": "MetalGraph",
@@ -234,7 +336,60 @@
         },
         "source_count": 1175,
         "source_end": 5238,
-        "source_start": 4064
+        "source_start": 4064,
+        "unclassified_source_summary": {
+          "ast_root_counts": {
+            "Ops.SINK": 719
+          },
+          "count": 719,
+          "display_name_counts": {
+            "E_(gemma_start_pos_window+1)_2_4": 7,
+            "E_16_2_16_4": 28,
+            "E_16_32_3": 70,
+            "E_16_32_3n1": 35,
+            "E_8_2_16_4_4": 7,
+            "r_128_32_3_384_4": 15,
+            "r_1536_16_128": 28,
+            "r_1536_16_16n1": 35,
+            "r_1536_16_256": 7,
+            "r_1536_16_384": 15,
+            "r_1536_16_768": 20,
+            "r_16_96": 176,
+            "r_2048_16_96": 28,
+            "r_256_32_3_384_4": 20,
+            "r_2_32_4_2_4_64": 28,
+            "r_2_4_(gemma_start_pos_window+1)": 7,
+            "r_4_32_4_2_4_32": 28,
+            "r_8_16_16": 28,
+            "r_8_16_32": 28,
+            "r_8_16_32n1": 28
+          },
+          "op_signature_counts": {
+            "Ops.ADD:4,Ops.CONST:4,Ops.MUL:4,Ops.INDEX:3,Ops.PARAM:3,Ops.RANGE:3,Ops.DEFINE_VAR:1,Ops.END:1": 14,
+            "Ops.ADD:5,Ops.CONST:4,Ops.MUL:4,Ops.INDEX:3,Ops.PARAM:3,Ops.RANGE:3,Ops.DEFINE_VAR:1,Ops.END:1": 28,
+            "Ops.CONST:2,Ops.INDEX:2,Ops.PARAM:2,Ops.RANGE:2,Ops.ADD:1,Ops.END:1,Ops.MUL:1,Ops.REDUCE:1": 29,
+            "Ops.CONST:3,Ops.ADD:2,Ops.INDEX:2,Ops.PARAM:2,Ops.RANGE:2,Ops.DEFINE_VAR:1,Ops.END:1,Ops.MUL:1": 7,
+            "Ops.CONST:4,Ops.INDEX:2,Ops.MUL:2,Ops.PARAM:2,Ops.ADD:1,Ops.RANGE:1,Ops.RECIPROCAL:1,Ops.REDUCE:1": 176,
+            "Ops.CONST:4,Ops.INDEX:3,Ops.MUL:3,Ops.PARAM:3,Ops.ADD:2,Ops.RANGE:2,Ops.END:1,Ops.EXP2:1": 28,
+            "Ops.CONST:4,Ops.MUL:3,Ops.ADD:2,Ops.INDEX:2,Ops.PARAM:2,Ops.RANGE:2,Ops.END:1,Ops.RECIPROCAL:1": 36,
+            "Ops.CONST:5,Ops.ADD:3,Ops.INDEX:3,Ops.MUL:3,Ops.PARAM:3,Ops.RANGE:2,Ops.DEFINE_VAR:1,Ops.END:1": 7,
+            "Ops.CONST:5,Ops.INDEX:4,Ops.MUL:4,Ops.PARAM:4,Ops.ADD:3,Ops.RANGE:2,Ops.DEFINE_VAR:1,Ops.END:1": 7,
+            "Ops.CONST:7,Ops.ADD:4,Ops.INDEX:3,Ops.MUL:3,Ops.PARAM:3,Ops.RANGE:3,Ops.WHERE:2,Ops.CAST:1": 2,
+            "Ops.INDEX:4,Ops.PARAM:4,Ops.MUL:3,Ops.CONST:2,Ops.RANGE:2,Ops.ADD:1,Ops.CAST:1,Ops.END:1": 70,
+            "Ops.INDEX:5,Ops.PARAM:5,Ops.CONST:2,Ops.MUL:2,Ops.ADD:1,Ops.CAST:1,Ops.END:1,Ops.RANGE:1": 70,
+            "Ops.INDEX:6,Ops.MUL:6,Ops.PARAM:6,Ops.CONST:4,Ops.RANGE:3,Ops.ADD:2,Ops.CAST:2,Ops.END:1": 35,
+            "Ops.INDEX:6,Ops.PARAM:6,Ops.MUL:3,Ops.CAST:2,Ops.CONST:2,Ops.ADD:1,Ops.END:1,Ops.RANGE:1": 35,
+            "Ops.INDEX:6,Ops.PARAM:6,Ops.MUL:5,Ops.CONST:3,Ops.CAST:2,Ops.RANGE:2,Ops.ADD:1,Ops.END:1": 35,
+            "Ops.MUL:17,Ops.CONST:14,Ops.ADD:13,Ops.INDEX:8,Ops.WHERE:8,Ops.CAST:7,Ops.PARAM:4,Ops.EXP2:2": 28,
+            "Ops.MUL:19,Ops.CONST:15,Ops.ADD:14,Ops.WHERE:14,Ops.INDEX:10,Ops.CAST:8,Ops.PARAM:4,Ops.CMPLT:2": 7,
+            "Ops.MUL:7,Ops.ADD:6,Ops.CONST:6,Ops.INDEX:5,Ops.PARAM:5,Ops.RANGE:3,Ops.DEFINE_VAR:1,Ops.END:1": 28,
+            "Ops.MUL:9,Ops.CONST:5,Ops.INDEX:5,Ops.ADD:4,Ops.PARAM:4,Ops.RANGE:2,Ops.CAST:1,Ops.END:1": 35,
+            "Ops.MUL:9,Ops.CONST:6,Ops.INDEX:5,Ops.PARAM:5,Ops.ADD:4,Ops.RANGE:2,Ops.CAST:1,Ops.END:1": 32
+          },
+          "program_type_counts": {
+            "CompiledRunner": 719
+          }
+        }
       }
     ],
     "original_exec_count": 5239,
@@ -246,7 +401,7 @@
   "summary": {
     "by_category": {
       "graph_batch": {
-        "elapsed_ms": 79.07129160594195,
+        "elapsed_ms": 78.44845834188163,
         "elapsed_share": 1.0,
         "est_mem": 0,
         "est_ops": 0,
@@ -256,12 +411,12 @@
     },
     "by_program_type": {
       "MetalGraph": {
-        "elapsed_ms": 79.07129160594195,
+        "elapsed_ms": 78.44845834188163,
         "elapsed_share": 1.0,
         "kernel_count": 8
       }
     },
-    "elapsed_ms": 79.07129160594195,
+    "elapsed_ms": 78.44845834188163,
     "est_mem": 0,
     "est_ops": 0,
     "kernel_count": 8,
@@ -270,7 +425,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 2048>",
-        "elapsed_ms": 25.056749931536615,
+        "elapsed_ms": 25.30954172834754,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -312,7 +467,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1175>",
-        "elapsed_ms": 19.84395831823349,
+        "elapsed_ms": 20.121749956160784,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -343,7 +498,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1024>",
-        "elapsed_ms": 11.711166705936193,
+        "elapsed_ms": 11.669833329506218,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -373,7 +528,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 512>",
-        "elapsed_ms": 9.580166661180556,
+        "elapsed_ms": 8.5273333825171,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -403,7 +558,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 256>",
-        "elapsed_ms": 4.856624989770353,
+        "elapsed_ms": 5.1894166972488165,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -432,38 +587,8 @@
       {
         "category": "graph_batch",
         "device": "METAL",
-        "display_name": "<batched 64>",
-        "elapsed_ms": 3.879499970935285,
-        "est_mem": 0,
-        "est_ops": 0,
-        "metadata": [
-          {
-            "caller": "repo_sidecar:1::attention_key_cache_write_local",
-            "count": "35",
-            "name": "attention_key_cache_write_local"
-          },
-          {
-            "caller": "repo_sidecar:1::attention_value_cache_write_local",
-            "count": "29",
-            "name": "attention_value_cache_write_local"
-          }
-        ],
-        "ordinal": 1,
-        "program_type": "MetalGraph",
-        "source_category_basis": "repo_sidecar_realize_scope_metadata",
-        "source_category_counts": {
-          "attention_key_cache_write_local": 35,
-          "attention_value_cache_write_local": 29
-        },
-        "source_count": 64,
-        "source_end": 95,
-        "source_start": 32
-      },
-      {
-        "category": "graph_batch",
-        "device": "METAL",
         "display_name": "<batched 128>",
-        "elapsed_ms": 3.423416637815535,
+        "elapsed_ms": 4.097124910913408,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -492,8 +617,38 @@
       {
         "category": "graph_batch",
         "device": "METAL",
+        "display_name": "<batched 64>",
+        "elapsed_ms": 2.1727499552071095,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_key_cache_write_local",
+            "count": "35",
+            "name": "attention_key_cache_write_local"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_value_cache_write_local",
+            "count": "29",
+            "name": "attention_value_cache_write_local"
+          }
+        ],
+        "ordinal": 1,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_key_cache_write_local": 35,
+          "attention_value_cache_write_local": 29
+        },
+        "source_count": 64,
+        "source_end": 95,
+        "source_start": 32
+      },
+      {
+        "category": "graph_batch",
+        "device": "METAL",
         "display_name": "<batched 32>",
-        "elapsed_ms": 0.7197083905339241,
+        "elapsed_ms": 1.3607083819806576,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -525,7 +680,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 32>",
-        "elapsed_ms": 0.7197083905339241,
+        "elapsed_ms": 1.3607083819806576,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -555,7 +710,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 64>",
-        "elapsed_ms": 3.879499970935285,
+        "elapsed_ms": 2.1727499552071095,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -585,7 +740,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 128>",
-        "elapsed_ms": 3.423416637815535,
+        "elapsed_ms": 4.097124910913408,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -615,7 +770,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 256>",
-        "elapsed_ms": 4.856624989770353,
+        "elapsed_ms": 5.1894166972488165,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -645,7 +800,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 512>",
-        "elapsed_ms": 9.580166661180556,
+        "elapsed_ms": 8.5273333825171,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -675,7 +830,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1024>",
-        "elapsed_ms": 11.711166705936193,
+        "elapsed_ms": 11.669833329506218,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -705,7 +860,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 2048>",
-        "elapsed_ms": 25.056749931536615,
+        "elapsed_ms": 25.30954172834754,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [
@@ -747,7 +902,7 @@
         "category": "graph_batch",
         "device": "METAL",
         "display_name": "<batched 1175>",
-        "elapsed_ms": 19.84395831823349,
+        "elapsed_ms": 20.121749956160784,
         "est_mem": 0,
         "est_ops": 0,
         "metadata": [

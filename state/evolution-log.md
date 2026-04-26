@@ -1,5 +1,43 @@
 # Evolution Log
 
+## 2026-04-25 - Unclassified Final-Tail Structural Attribution
+
+- Hypothesis: the 719 unclassified final-tail source items are structurally
+  identifiable from lowered source item display names, UOp roots, and operation
+  signatures even when tinygrad metadata is empty. Invalidation criterion:
+  source attribution becomes incomplete, focused profiler tests fail, or the
+  unclassified summaries remain empty/non-distinguishing in the real METAL
+  artifact.
+- Implemented profiler-only structural summaries in
+  `scripts/profile_decode_jit.py` for unclassified source items:
+  `program_type_counts`, `display_name_counts`, `ast_root_counts`, and
+  `op_signature_counts`. Added focused coverage in
+  `tests/test_profile_decode_jit.py`.
+- Artifact: `benchmarks/gemma4-metal-decode-graph-default-current.json` and
+  `benchmarks/gemma4-metal-decode-graph-default-current.csv`.
+- Result: accepted as profiler instrumentation. The refreshed default E2B int8
+  `METAL` JIT=1 graph profile still has 8 `MetalGraph` rows and complete
+  attribution over all 5239 source items:
+  `source_attribution.status=complete`, `original_exec_count=5239`,
+  `attributed_source_count=5239`, `unparsed_graph_batches=0`, and
+  `unattributed_tail_count=0`.
+- The remaining 719 unclassified source items are all `Ops.SINK` roots in the
+  final `<batched 1175>` graph range. Top display signatures in the accepted
+  artifact include `r_16_96=176`, `E_16_32_3=70`, `E_16_32_3n1=35`,
+  `r_1536_16_16n1=35`, and several final-logits/norm-shaped reduce/index
+  signatures.
+- No Gemma throughput row was superseded. Current accepted E2B int8 `METAL`,
+  `beam=0`, `1000/20` floor remains `10.863932` tok/s with
+  `rollout_jit_count=999` and `decode_fallback=false`.
+- Verification on 2026-04-25:
+  `.venv/bin/python -m pytest -q tests/test_profile_decode_jit.py` passed with
+  `11 passed, 2 warnings`; `.venv/bin/python -m py_compile
+  scripts/profile_decode_jit.py` passed; and the real E2B int8 `METAL`
+  profiler command refreshed the JSON/CSV artifacts.
+- Next target: add profiler-only sidecar scopes around final language-model
+  norm, logits/softcap, and `sample_next` realization boundaries to classify the
+  final tail before attempting another runtime patch.
+
 ## 2026-04-25 - Shared-KV Cache-Write Elision Rejected
 
 - Hypothesis: some cache-write source items come from shared-KV consumer
