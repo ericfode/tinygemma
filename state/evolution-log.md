@@ -1,5 +1,13 @@
 # Evolution Log
 
+## 2026-04-27 070 - Final working-tree and gate summary recorded
+
+- Status: accepted summary increment.
+- Git: `main` is ahead of `origin/main` by 41 commits; many benchmark/profile artifacts and `uv.lock` remain untracked.
+- Evo: frontier remains `exp_0005` at `28.6153`; status reported `experiments=13 committed=2 discarded=11 active=0`.
+- Verification: paired helper + profiler tests passed (`39 passed, 2 warnings`); repo-loop JSON validation and `git diff --check` passed.
+- Decision boundary: pushing commits and handling untracked artifacts require user choice.
+
 ## 2026-04-27 069 - Paired helper README command validated
 
 - Status: accepted documentation-only increment.
