@@ -1,5 +1,13 @@
 # Evolution Log
 
+## 2026-04-27 060 - Frontier saturation and RMSNorm cache review accepted
+
+- Status: accepted negative review; no runtime code changed.
+- Frontier: best remains `exp_0005` at `28.6153`; run has 13 experiments, 2 committed, 11 discarded.
+- RMSNorm finding: inference scale caching was already tested as `exp_0009` and rejected (`26.1647` default score, long row around `17.1434`, failed floor). Corrected phase attribution does not reopen it: exact shared-source-layer13 `rmsnorm_rope` is only 4 sources / ~0.054 ms.
+- Saturation finding: K/V projection variants, cache layout/write variants, attention/logit variants, RMSNorm cache, raw Metal runner, and `JIT_BATCH_SIZE=0` defaulting are all rejected/exhausted under current evidence.
+- Decision: pause runtime children until benchmark/infrastructure improves; next target is paired same-session baseline-vs-candidate benchmarking and saturation ledger support.
+
 ## 2026-04-27 059 - Decode-only attention output view elision rejected
 
 - Status: rejected evo experiment; no runtime code merged.

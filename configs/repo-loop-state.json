@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "decode-only-attention-output-view-elision-rejected-059",
+  "current_checkpoint": "frontier-saturation-runtime-probing-paused-060",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "frontier-saturation-and-rmsnorm-cache-review-060",
+  "next_target": "paired-baseline-candidate-benchmark-helper-061",
   "next_target_plan": "Return to graphable Tensor/tinygrad program surfaces after pruning the raw custom Runner branch. Refresh evo scratchpad/frontier evidence and the profiler-backed hot-path summary, then pick one narrow model.py or profiler-supported graphable increment. Do not re-open raw metal_int8 custom Runner integration unless tinygrad exposes a first-class graphable custom-call or CompiledRunner-compatible surface.",
-  "updated_at": "2026-04-27T02:29:57-0700",
+  "updated_at": "2026-04-27T02:38:47-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -842,6 +842,21 @@
         "evo run exp_0012: score 28.4939, parent exp_0005 28.6153, gate_failed=e2b_int8_metal_hash1000_current_floor"
       ],
       "decision": "Discard exp_0012 and do not skip transpose/permute before decode attention-output reshape under this benchmark."
+    },
+    {
+      "id": "frontier-saturation-and-rmsnorm-cache-review-060",
+      "completed_at": "2026-04-27T02:38:47-0700",
+      "status": "accepted-negative-review",
+      "summary": "Reviewed evo frontier saturation and RMSNorm inference scale caching; concluded no evidence-backed non-repeated runtime model.py child is currently justified.",
+      "artifacts": [
+        "docs/plans/2026-04-27-frontier-saturation-and-rmsnorm-cache-review.md"
+      ],
+      "verification": [
+        "Parallel read-only reviewers independently found no fresh runtime child worth spending",
+        "RMSNorm cache already rejected as exp_0009: default 26.1647 vs parent 28.6153 and long gate around 17.1434 below floor",
+        "Corrected exact phase attribution shows shared-source-layer13 hot mass is kv_projection; rmsnorm_rope is only 4 sources / ~0.054 ms"
+      ],
+      "decision": "Pivot from runtime probing to paired baseline-vs-candidate benchmark infrastructure and saturation ledgering."
     }
   ]
 }
