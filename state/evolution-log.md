@@ -1,5 +1,13 @@
 # Evolution Log
 
+## 2026-04-27 058 - Shared-source layer13 runtime hypothesis exhausted
+
+- Status: accepted negative decision; no runtime code changed.
+- Evidence: corrected exact-target comparison shows `shared-source-layer13` is the dominant cache-write phase bucket at 888 source items / ~14.503 ms, with `kv_projection` at 882 / ~14.422 ms.
+- Rejection ledger: raw Metal runners, K/V projection reshape/split variants, QKV fusion, prepacked/repeated K/V, producer materialization, windowed shared-source allocation, store tweaks, and RHS-pack tweaks are already rejected or structurally too small.
+- Decision: do not start a new shared-source-layer13 runtime evo child without a genuinely new graphable transformation; the hot bucket is real, but the known levers are exhausted.
+- Next target: orthogonal `decode-only-attention-output-view-elision-evo-probe-059`, tested as an evo child against `exp_0005`, not committed directly to main.
+
 ## 2026-04-27 057 - Neighbor exact phase targets compared
 
 - Status: accepted profiling decision; no runtime code changed.
