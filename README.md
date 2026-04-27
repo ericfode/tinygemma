@@ -156,7 +156,7 @@ python scripts/inventory_untracked_artifacts.py \
   --output docs/plans/$(date +%F)-untracked-artifact-inventory.md
 ```
 
-The inventory helper is read-only: it reports untracked paths, sizes, categories, tracked-doc references, and suggested dispositions. Its main table is reference-ranked: artifacts cited by tracked docs/state/config appear before uncited generated files, and higher reference counts sort first. Use that ranking to review likely evidence-to-keep candidates deliberately; it is not a license to auto-commit them. It does not delete artifacts, edit ignore files, stage files, or decide which benchmark evidence should travel with the repo. A small tool that knows it is not a broom is a civilized thing.
+The inventory helper is read-only: it reports untracked paths, sizes, categories, tracked-doc references, and suggested dispositions. Its main table is reference-ranked: artifacts cited by tracked docs/state/config appear before uncited generated files, and higher reference counts sort first. Use that ranking to review likely evidence-to-keep candidates deliberately; it is not a license to auto-commit them. For downstream scripts, add `--format json`; stdout remains machine-readable JSON and the human `inventoried N untracked path(s)` summary stays on stderr. It does not delete artifacts, edit ignore files, stage files, or decide which benchmark evidence should travel with the repo. A small tool that knows it is not a broom is a civilized thing.
 
 The full beam/format matrix is intentionally resumable because the large checkpoints and higher beams can take a long time on local Metal:
 

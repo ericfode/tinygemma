@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-json-output-078",
+  "current_checkpoint": "artifact-inventory-json-output-doc-079",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-json-output-doc-079",
+  "next_target": "artifact-inventory-category-summary-json-080",
   "next_target_plan": [
-    "Document --format json in README so downstream review scripts can rely on it without reading plan archaeology.",
-    "Run artifact inventory tests, a JSON smoke, and diff checks.",
-    "Keep generated artifacts untouched."
+    "Add category/suffix count summaries to the JSON payload so downstream review scripts do not need to recompute markdown-only summary data.",
+    "Add tests verifying JSON summary fields match rows.",
+    "Keep helper read-only and generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:30:23-0700",
+  "updated_at": "2026-04-27T03:31:58-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1178,6 +1178,22 @@
         "git diff --check: passed"
       ],
       "decision": "Accepted machine-readable helper output; no generated benchmark/profile artifacts were deleted, staged, ignored, or committed."
+    },
+    {
+      "id": "artifact-inventory-json-output-doc-079",
+      "completed_at": "2026-04-27T03:31:58-0700",
+      "status": "accepted-docs",
+      "summary": "Documented --format json for the artifact inventory helper in README.",
+      "artifacts": [
+        "README.md",
+        "docs/plans/2026-04-27-artifact-inventory-json-output-doc.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 5 passed",
+        "real-repo --format json smoke parsed with python3 -m json.tool",
+        "git diff --check: passed"
+      ],
+      "decision": "Documentation-only; no generated benchmark/profile artifacts were deleted, staged, ignored, or committed."
     }
   ]
 }

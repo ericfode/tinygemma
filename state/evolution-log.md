@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 079 - Artifact inventory JSON output documented
+
+- Status: accepted docs increment.
+- Change: README now mentions `scripts/inventory_untracked_artifacts.py --format json`, with machine-readable stdout and the human summary kept on stderr.
+- Verification: artifact inventory tests passed; real-repo JSON smoke parsed with `python3 -m json.tool`; `git diff --check` passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 078 - Artifact inventory JSON output
 
 - Status: accepted infrastructure improvement.
