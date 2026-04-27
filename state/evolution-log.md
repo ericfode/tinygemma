@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 069 - Paired helper README command validated
+
+- Status: accepted documentation-only increment.
+- Inspection: `exp_0005` worktree exists; `exp_0013` does not exist in this workspace.
+- Change: README now explicitly says to replace `exp_0013` with the candidate experiment worktree.
+- Verification: paired helper tests passed (`4 passed`); `git diff --check` passed.
+
 ## 2026-04-27 068 - Repo-loop state compaction reviewed
 
 - Status: accepted documentation-only increment.
