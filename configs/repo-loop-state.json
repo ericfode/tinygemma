@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-reference-ranking-doc-076",
+  "current_checkpoint": "artifact-inventory-reference-exactness-077",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-reference-exactness-077",
+  "next_target": "artifact-inventory-json-output-078",
   "next_target_plan": [
-    "Reduce false-positive artifact references by matching path/name tokens with safer boundaries instead of raw substring checks.",
-    "Add tests proving artifact.csv does not match my-artifact.csv.backup-like text or unrelated longer tokens, while exact path/name references still match.",
-    "Keep helper read-only and generated artifacts untouched."
+    "Add an optional machine-readable JSON output mode for the artifact inventory helper so future cleanup/review tooling can consume exact rows without parsing markdown.",
+    "Use strict JSON serialization and keep stderr summary separate.",
+    "Add temp-git-repo tests; keep helper read-only and generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:24:44-0700",
+  "updated_at": "2026-04-27T03:27:20-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1138,6 +1138,26 @@
         "git diff --check: passed"
       ],
       "decision": "Documentation-only; reference ranking is a review aid, not auto-commit permission."
+    },
+    {
+      "id": "artifact-inventory-reference-exactness-077",
+      "completed_at": "2026-04-27T03:27:20-0700",
+      "status": "accepted-infrastructure",
+      "summary": "Tightened artifact inventory reference detection to exact path/basename tokens and expanded nested untracked directories.",
+      "artifacts": [
+        "scripts/inventory_untracked_artifacts.py",
+        "tests/test_artifact_inventory.py",
+        "docs/plans/2026-04-27-artifact-inventory-reference-exactness.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 4 passed",
+        "helper/profiler/paired-helper slice: 43 passed, 2 warnings",
+        "real-repo helper smoke inventoried 56 untracked path(s) and kept top ranked evidence stable",
+        "scripts/inventory_untracked_artifacts.py py_compile: passed",
+        "configs/repo-loop-state.json parsed successfully",
+        "git diff --check: passed"
+      ],
+      "decision": "Accepted helper precision improvement; no generated benchmark/profile artifacts were deleted, staged, ignored, or committed."
     }
   ]
 }

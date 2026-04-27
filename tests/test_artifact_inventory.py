@@ -97,3 +97,36 @@ def test_inventory_untracked_artifacts_ranks_referenced_artifacts_first(tmp_path
   assert [line.split("`", 2)[1] for line in inventory_lines] == ["hot.json", "warm.csv", "cold.csv"]
   assert "## Reference-ranked candidates" in proc.stdout
   assert "| `hot.json` | `2` | docs/a.md<br>docs/b.md |" in proc.stdout
+
+
+def test_inventory_untracked_artifacts_uses_exact_reference_tokens(tmp_path: Path):
+  repo = tmp_path / "repo"
+  repo.mkdir()
+  run_git(repo, "init")
+  (repo / "benchmarks").mkdir()
+  (repo / "docs").mkdir()
+  (repo / "docs" / "false.md").write_text("Do not count my-artifact.csv or artifact.csv.backup\n")
+  (repo / "docs" / "exact_name.md").write_text("Count `artifact.csv` as an exact filename\n")
+  (repo / "docs" / "exact_path.md").write_text("Count benchmarks/path-only.json as an exact path\n")
+  run_git(repo, "add", "docs/false.md", "docs/exact_name.md", "docs/exact_path.md")
+
+  (repo / "artifact.csv").write_text("score\n1\n")
+  (repo / "benchmarks" / "path-only.json").write_text('{"score": 2}\n')
+  (repo / "lonely.csv").write_text("score\n0\n")
+
+  proc = subprocess.run(
+    [sys.executable, str(SCRIPT), "--timestamp", "2026-04-27T03:40:00-0700"],
+    cwd=repo,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+
+  assert proc.returncode == 0, proc.stderr
+  artifact_line = next(line for line in proc.stdout.splitlines() if line.startswith("| `artifact.csv`"))
+  path_line = next(line for line in proc.stdout.splitlines() if line.startswith("| `benchmarks/path-only.json`"))
+  lonely_line = next(line for line in proc.stdout.splitlines() if line.startswith("| `lonely.csv`"))
+  assert "| `1` | docs/exact_name.md |" in artifact_line
+  assert "false.md" not in artifact_line
+  assert "| `1` | docs/exact_path.md |" in path_line
+  assert "| `0` | — |" in lonely_line

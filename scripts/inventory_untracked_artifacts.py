@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -19,7 +20,7 @@ def git_lines(args: list[str], *, cwd: Path) -> list[str]:
 
 def git_untracked_paths(*, cwd: Path) -> list[str]:
   proc = subprocess.run(
-    ["git", "status", "--porcelain", "-z"],
+    ["git", "status", "--porcelain", "--untracked-files=all", "-z"],
     cwd=cwd,
     check=True,
     stdout=subprocess.PIPE,
@@ -48,11 +49,17 @@ def tracked_reference_texts(*, cwd: Path) -> list[tuple[str, str]]:
   return texts
 
 
+def reference_token_present(token: str, text: str) -> bool:
+  escaped = re.escape(token)
+  return re.search(rf"(?<![A-Za-z0-9_./-]){escaped}(?![A-Za-z0-9_./-])", text) is not None
+
+
 def referenced_locations(rel: str, haystacks: list[tuple[str, str]]) -> list[str]:
   name = Path(rel).name
+  tokens = tuple(dict.fromkeys((rel, name)))
   found: list[str] = []
   for text_rel, text in haystacks:
-    if rel in text or name in text:
+    if any(reference_token_present(token, text) for token in tokens):
       found.append(text_rel)
   return found
 

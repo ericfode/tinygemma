@@ -1,5 +1,13 @@
 # Evolution Log
 
+## 2026-04-27 077 - Artifact inventory reference exactness
+
+- Status: accepted infrastructure precision improvement.
+- Change: artifact inventory now expands nested untracked directories with `--untracked-files=all` and detects references through exact path/basename tokens instead of raw substring matches.
+- Regression coverage proves `artifact.csv` does not match `my-artifact.csv` or `artifact.csv.backup`, while exact filename/path references still count.
+- Verification: artifact inventory tests passed; helper/profiler/paired-helper slice passed with 43 tests and 2 warnings; real-repo smoke inventoried 56 untracked paths; py_compile, repo-loop JSON, and diff checks passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 076 - Artifact inventory reference ranking documented
 
 - Status: accepted docs increment.
