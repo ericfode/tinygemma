@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 081 - Artifact inventory JSON summary documented
+
+- Status: accepted docs increment.
+- Change: README now documents artifact inventory JSON summary fields: `untracked_count`, `total_size`, `referenced_count`, `counts_by_category`, `counts_by_suffix`, and ranked `rows` with `reference_count`.
+- Verification: artifact inventory tests passed; real-repo JSON smoke parsed with `python3 -m json.tool`; `git diff --check` passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 080 - Artifact inventory JSON summary counts
 
 - Status: accepted infrastructure improvement.

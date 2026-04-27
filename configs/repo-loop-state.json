@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-category-summary-json-080",
+  "current_checkpoint": "artifact-inventory-json-summary-doc-081",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-json-summary-doc-081",
+  "next_target": "artifact-inventory-only-filter-082",
   "next_target_plan": [
-    "Document JSON summary fields in README so downstream scripts can rely on counts_by_category/counts_by_suffix.",
-    "Run artifact inventory tests plus a JSON smoke and diff checks.",
-    "Keep generated artifacts untouched."
+    "Add an --only-category filter to inventory_untracked_artifacts.py for focused review of generated artifact classes without shell scraping.",
+    "Use strict TDD in a temporary git repo and verify JSON/markdown behavior.",
+    "Keep helper read-only and generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:34:27-0700",
+  "updated_at": "2026-04-27T03:36:22-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1214,6 +1214,22 @@
         "git diff --check: passed"
       ],
       "decision": "Accepted machine-readable summary counts; generated benchmark/profile artifacts remain untracked and untouched."
+    },
+    {
+      "id": "artifact-inventory-json-summary-doc-081",
+      "completed_at": "2026-04-27T03:36:22-0700",
+      "status": "accepted-docs",
+      "summary": "Documented artifact inventory JSON summary fields in README.",
+      "artifacts": [
+        "README.md",
+        "docs/plans/2026-04-27-artifact-inventory-json-summary-doc.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 6 passed",
+        "real-repo --format json smoke parsed with python3 -m json.tool",
+        "git diff --check: passed"
+      ],
+      "decision": "Documentation-only; generated benchmark/profile artifacts remain untracked and untouched."
     }
   ]
 }
