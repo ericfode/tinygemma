@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 082 - Artifact inventory category filter
+
+- Status: accepted infrastructure improvement.
+- Change: `scripts/inventory_untracked_artifacts.py` now supports repeatable `--only-category <category>` filters for both markdown and JSON output; summary counts describe the filtered rows.
+- Verification: artifact inventory tests passed; helper/profiler/paired-helper slice passed with 46 tests and 2 warnings; real-repo filtered JSON smoke returned 14 benchmark progress logs with no category leakage; py_compile, repo-loop JSON, and diff checks passed.
+- Decision: generated benchmark/profile artifacts remain untracked and untouched.
+
 ## 2026-04-27 081 - Artifact inventory JSON summary documented
 
 - Status: accepted docs increment.

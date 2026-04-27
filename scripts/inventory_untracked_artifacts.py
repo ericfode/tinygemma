@@ -194,11 +194,20 @@ def main(argv: list[str] | None = None) -> int:
   parser = argparse.ArgumentParser(description="Inventory untracked repo artifacts without mutating git state.")
   parser.add_argument("--output", type=Path, help="Write inventory to this path. Defaults to stdout.")
   parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format. Defaults to markdown.")
+  parser.add_argument(
+    "--only-category",
+    action="append",
+    default=[],
+    help="Restrict the inventory to one artifact category. May be repeated.",
+  )
   parser.add_argument("--timestamp", default=default_timestamp())
   args = parser.parse_args(argv)
 
   cwd = Path.cwd()
   rows = collect_inventory(cwd=cwd)
+  if args.only_category:
+    wanted = set(args.only_category)
+    rows = [row for row in rows if row["category"] in wanted]
   if args.format == "json":
     text = json.dumps(render_json_payload(rows, timestamp=args.timestamp), indent=2, sort_keys=True, allow_nan=False) + "\n"
   else:

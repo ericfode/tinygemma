@@ -189,3 +189,57 @@ def test_inventory_untracked_artifacts_json_output_includes_summary_counts(tmp_p
     "paired-helper-smoke": 1,
   }
   assert payload["counts_by_suffix"] == {".csv": 1, ".json": 1, ".jsonl": 1}
+
+
+def test_inventory_untracked_artifacts_filters_by_category_in_json_and_markdown(tmp_path: Path):
+  repo = tmp_path / "repo"
+  repo.mkdir()
+  run_git(repo, "init")
+  (repo / "tracked.md").write_text("tracked\n")
+  run_git(repo, "add", "tracked.md")
+  (repo / "artifact.csv").write_text("score\n1\n")
+  (repo / "paired-smoke.json").write_text('{"score": 1}\n')
+  (repo / "run.progress.jsonl").write_text('{"step": 1}\n')
+
+  json_proc = subprocess.run(
+    [
+      sys.executable,
+      str(SCRIPT),
+      "--format",
+      "json",
+      "--only-category",
+      "benchmark-progress-log",
+      "--timestamp",
+      "2026-04-27T04:30:00-0700",
+    ],
+    cwd=repo,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+  md_proc = subprocess.run(
+    [
+      sys.executable,
+      str(SCRIPT),
+      "--only-category",
+      "benchmark-progress-log",
+      "--timestamp",
+      "2026-04-27T04:30:00-0700",
+    ],
+    cwd=repo,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+
+  assert json_proc.returncode == 0, json_proc.stderr
+  payload = json.loads(json_proc.stdout)
+  assert payload["untracked_count"] == 1
+  assert payload["counts_by_category"] == {"benchmark-progress-log": 1}
+  assert [row["path"] for row in payload["rows"]] == ["run.progress.jsonl"]
+  assert "inventoried 1 untracked path(s)" in json_proc.stderr
+  assert md_proc.returncode == 0, md_proc.stderr
+  assert "Untracked paths: `1`" in md_proc.stdout
+  assert "`run.progress.jsonl`" in md_proc.stdout
+  assert "`artifact.csv`" not in md_proc.stdout
+  assert "`paired-smoke.json`" not in md_proc.stdout

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-json-summary-doc-081",
+  "current_checkpoint": "artifact-inventory-only-filter-082",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-only-filter-082",
+  "next_target": "artifact-inventory-only-filter-doc-083",
   "next_target_plan": [
-    "Add an --only-category filter to inventory_untracked_artifacts.py for focused review of generated artifact classes without shell scraping.",
-    "Use strict TDD in a temporary git repo and verify JSON/markdown behavior.",
-    "Keep helper read-only and generated artifacts untouched."
+    "Document --only-category in README with a concise example for progress-log review.",
+    "Run artifact inventory tests plus a filtered JSON smoke and diff checks.",
+    "Keep generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:36:22-0700",
+  "updated_at": "2026-04-27T03:38:46-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1230,6 +1230,26 @@
         "git diff --check: passed"
       ],
       "decision": "Documentation-only; generated benchmark/profile artifacts remain untracked and untouched."
+    },
+    {
+      "id": "artifact-inventory-only-filter-082",
+      "completed_at": "2026-04-27T03:38:46-0700",
+      "status": "accepted-infrastructure",
+      "summary": "Added repeatable --only-category filtering to the read-only artifact inventory helper.",
+      "artifacts": [
+        "scripts/inventory_untracked_artifacts.py",
+        "tests/test_artifact_inventory.py",
+        "docs/plans/2026-04-27-artifact-inventory-category-filter.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 7 passed",
+        "helper/profiler/paired-helper slice: 46 passed, 2 warnings",
+        "real-repo JSON smoke with --only-category benchmark-progress-log returned 14 rows and counts_by_category={benchmark-progress-log: 14}",
+        "scripts/inventory_untracked_artifacts.py py_compile: passed",
+        "configs/repo-loop-state.json parsed successfully",
+        "git diff --check: passed"
+      ],
+      "decision": "Accepted focused filtering for review tooling; generated benchmark/profile artifacts remain untracked and untouched."
     }
   ]
 }
