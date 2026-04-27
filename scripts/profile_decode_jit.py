@@ -9,7 +9,7 @@ import time
 from collections import defaultdict
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Callable
 
@@ -195,6 +195,7 @@ def cache_write_sidecar_category(
   return category if phase is None else f"{category}__phase_{phase}"
 
 
+@lru_cache(maxsize=None)
 def cache_write_category_metadata(category: str) -> dict[str, Any] | None:
   match = CACHE_WRITE_CATEGORY_RE.match(category)
   if match is not None:
@@ -235,21 +236,25 @@ def cache_write_category_metadata(category: str) -> dict[str, Any] | None:
   return None
 
 
+@lru_cache(maxsize=None)
 def is_cache_write_phase_category(category: str) -> bool:
   metadata = cache_write_category_metadata(category)
   return metadata is not None and "phase" in metadata
 
 
+@lru_cache(maxsize=None)
 def parent_cache_write_category(category: str) -> str:
   metadata = cache_write_category_metadata(category)
   return category if metadata is None else str(metadata.get("parent", category))
 
 
+@lru_cache(maxsize=None)
 def cache_write_phase_name(category: str) -> str | None:
   metadata = cache_write_category_metadata(category)
   return None if metadata is None else metadata.get("phase")
 
 
+@lru_cache(maxsize=None)
 def cache_write_phase_order(category: str) -> int:
   phase = cache_write_phase_name(category)
   return CACHE_WRITE_PHASES.index(phase) if phase in CACHE_WRITE_PHASES else len(CACHE_WRITE_PHASES)
@@ -280,11 +285,13 @@ def cache_write_phase_cutpoint_scope(enabled: bool):
     _CACHE_WRITE_PHASE_CUTPOINTS = previous
 
 
+@lru_cache(maxsize=None)
 def category_rollup(category: str) -> str:
   metadata = cache_write_category_metadata(category)
   return category if metadata is None else str(metadata["rollup"])
 
 
+@lru_cache(maxsize=None)
 def is_profile_category(category: str) -> bool:
   return category in PROFILE_CATEGORIES or cache_write_category_metadata(category) is not None
 
@@ -391,11 +398,18 @@ def uop_cache_write_phase_sidecar_metadata(uop, seen: set[int] | None = None) ->
   return metadata
 
 
-def uop_sources_cache_write_phase_sidecar_metadata(uops) -> tuple[Metadata, ...]:
+def direct_uop_cache_write_phase_sidecar_metadata(uop) -> tuple[Metadata, ...]:
+  if uop is None:
+    return ()
+  return cache_write_phase_sidecar_metadata(
+    merge_metadata(getattr(uop, "metadata", None) or (), all_metadata.get(uop, ()))
+  )
+
+
+def direct_uop_sources_cache_write_phase_sidecar_metadata(uops) -> tuple[Metadata, ...]:
   metadata: tuple[Metadata, ...] = ()
-  seen: set[int] = set()
   for uop in uops or ():
-    metadata = merge_metadata(metadata, uop_cache_write_phase_sidecar_metadata(uop, seen))
+    metadata = merge_metadata(metadata, direct_uop_cache_write_phase_sidecar_metadata(uop))
   return metadata
 
 
@@ -513,12 +527,6 @@ def add_sidecar_metadata(linear: UOp, category: str) -> UOp:
         metadata,
         (Metadata(name=scope_category, caller=f"repo_sidecar:1::{scope_category}"),),
       )
-    phase_category, _ = ast_cache_write_phase_category(call.src[0])
-    if phase_category is not None:
-      metadata = merge_metadata(
-        metadata,
-        (Metadata(name=phase_category, caller=f"repo_sidecar:1::{phase_category}"),),
-      )
     return call.replace(arg=replace(call.arg, metadata=metadata))
 
   return linear.replace(src=tuple(add_call_metadata(call) for call in linear.src))
@@ -531,7 +539,7 @@ def uop_creation_sidecar_patch():
   def call_with_uop_sidecar(cls, *args, **kwargs):
     uop = original_call(cls, *args, **kwargs)
     current_metadata = all_metadata.get(uop, ())
-    inherited_phase_metadata = uop_sources_cache_write_phase_sidecar_metadata(getattr(uop, "src", ()))
+    inherited_phase_metadata = direct_uop_sources_cache_write_phase_sidecar_metadata(getattr(uop, "src", ()))
     if inherited_phase_metadata:
       current_metadata = merge_metadata(current_metadata, inherited_phase_metadata)
     if _SIDECAR_STACK:
@@ -557,7 +565,7 @@ def uop_replace_sidecar_patch():
     current_metadata = all_metadata.get(new_uop, ())
     if previous_metadata:
       current_metadata = merge_metadata(current_metadata, previous_metadata)
-    inherited_phase_metadata = uop_sources_cache_write_phase_sidecar_metadata(getattr(new_uop, "src", ()))
+    inherited_phase_metadata = direct_uop_sources_cache_write_phase_sidecar_metadata(getattr(new_uop, "src", ()))
     if inherited_phase_metadata:
       current_metadata = merge_metadata(current_metadata, inherited_phase_metadata)
     if _SIDECAR_STACK:

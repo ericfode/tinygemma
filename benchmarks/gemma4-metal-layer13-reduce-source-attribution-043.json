@@ -1,0 +1,797 @@
+{
+  "counts": {
+    "phase_category_counts": {
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 863,
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 9
+    },
+    "phase_classified_source_rows": 872,
+    "phase_conflict_source_rows": 37,
+    "phase_name_counts": {
+      "kv_projection": 863,
+      "store": 9
+    },
+    "phase_unclassified_source_rows": 13,
+    "reduce_r_category_basis_counts": {
+      "repo_sidecar_realize_scope_metadata": 216,
+      "repo_sidecar_uop_creation_metadata": 464
+    },
+    "reduce_r_category_field_counts": {
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 216,
+      "other": 464
+    },
+    "reduce_r_graph_batch_counts": {
+      "graph_5:992-2015": 216,
+      "graph_6:2016-2993": 464
+    },
+    "target_parent_category_basis_counts": {
+      "repo_sidecar_realize_scope_metadata": 273,
+      "repo_sidecar_uop_creation_metadata": 612
+    },
+    "target_parent_category_field_counts": {
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 273,
+      "other": 612
+    },
+    "target_parent_non_reduce_rows": 205,
+    "target_parent_reduce_r_rows": 680,
+    "target_parent_source_rows": 885,
+    "total_source_rows": 2994
+  },
+  "graph_batches": [
+    {
+      "cache_write_phase_category_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 258,
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 2
+      },
+      "cache_write_phase_conflict_count": 9,
+      "cache_write_phase_unclassified_count": 13,
+      "category_basis": "repo_sidecar_realize_scope_metadata",
+      "display_name": "<batched 1024>",
+      "elapsed_ms": 12.373875011689961,
+      "ordinal": 5,
+      "source_count": 1024,
+      "source_end": 2015,
+      "source_start": 992,
+      "target_rollup_source_count": 307,
+      "target_source_count": 273
+    },
+    {
+      "cache_write_phase_category_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 605,
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 7
+      },
+      "cache_write_phase_conflict_count": 28,
+      "cache_write_phase_unclassified_count": 0,
+      "category_basis": "repo_sidecar_realize_scope_metadata",
+      "display_name": "<batched 978>",
+      "elapsed_ms": 16.108916723169386,
+      "ordinal": 6,
+      "source_count": 978,
+      "source_end": 2993,
+      "source_start": 2016,
+      "target_rollup_source_count": 871,
+      "target_source_count": 612
+    }
+  ],
+  "hard_metric": "tokens_per_second",
+  "inputs": {
+    "phase_json": "benchmarks/gemma4-metal-decode-graph-layer13-phase-propagation-profile-512.json",
+    "structural_csv": "benchmarks/gemma4-metal-decode-layer13-structural-profile-512.csv"
+  },
+  "producer_operation_map": [
+    {
+      "operation": "fused rowwise-int8 K/V projection or separate K/V linears",
+      "phase": "kv_projection",
+      "source_refs": [
+        "tinygrad_gemma/model.py:509-520",
+        "tinygrad_gemma/model.py:512",
+        "tinygrad_gemma/model.py:516-517",
+        "tinygrad_gemma/model.py:561"
+      ],
+      "status": "dominant_child_phase_proven_by_phase_propagation_profile:863_source_rows",
+      "why_it_can_emit_reduce_r": "hidden_states.matmul(weight.transpose(), dtype='float') and linear projections lower to reduce kernels."
+    },
+    {
+      "operation": "K RMSNorm, K RoPE, and V RMSNorm after K/V projection",
+      "phase": "rmsnorm_rope",
+      "source_refs": [
+        "tinygrad_gemma/model.py:91-105",
+        "tinygrad_gemma/model.py:327-333",
+        "tinygrad_gemma/model.py:562-564"
+      ],
+      "status": "not_observed_in_phase_propagation_profile",
+      "why_it_can_emit_reduce_r": "RMSNorm uses mean(-1, keepdim=True), which is a reduction; RoPE is mostly elementwise/slice/cat and is not expected to dominate reduce_r mass by itself."
+    },
+    {
+      "operation": "pack K and V into the final cache lane before assignment",
+      "phase": "rhs_pack",
+      "source_refs": [
+        "tinygrad_gemma/model.py:298",
+        "tinygrad_gemma/model.py:301",
+        "scripts/profile_decode_jit.py:649-663"
+      ],
+      "status": "not_observed_in_phase_propagation_profile",
+      "why_it_can_emit_reduce_r": "Packing is squeeze/unsqueeze/cat/view work, so it should not be the primary origin of large reduce_r kernels unless fused with upstream producers."
+    },
+    {
+      "operation": "packed cache slice assignment and dependency-closed realize",
+      "phase": "store",
+      "source_refs": [
+        "tinygrad_gemma/model.py:280-301",
+        "tinygrad_gemma/model.py:586-599",
+        "tinygrad_gemma/model.py:605-618",
+        "scripts/profile_decode_jit.py:653-667"
+      ],
+      "status": "minor_child_phase_proven_by_phase_propagation_profile:9_source_rows",
+      "why_it_can_emit_reduce_r": "The store realization itself is not a mathematical reduction, but assign(...).realize() pulls the lazy K/V producer graph into the cache-write parent scope."
+    }
+  ],
+  "recoverability": {
+    "child_phase": "partly_recovered: 872/885 target parent rows carry child phase metadata (kv_projection=863, store=9); 13 remain unclassified and 37 rows report phase conflicts.",
+    "next_profiler_target": "Treat layer-13 shared-source K/V projection as the dominant reduce_r producer before writing runtime code; a candidate should reduce that projection/source mass or prove an equivalent fused path, not optimize RHS packing or the store tail.",
+    "parent_scope": "exact: source_category_counts maps all 885 layer-13 shared-source rows, including 680 reduce_r rows, to the target category.",
+    "root_cause": "direct cache-write phase propagation through UOp creation/replace preserves most child phase tags without forced realization cutpoints; the remaining conflicts/unclassified rows mark places where lowered source items merge multiple phase-tagged paths or drop phase metadata."
+  },
+  "runtime_patch_status": "none_in_this_artifact",
+  "source_artifact_status": "phase_propagation_profile_classifies_layer13_shared_source_child_phase",
+  "target_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+  "top_reduce_display_groups": [
+    {
+      "category_basis_counts": {
+        "repo_sidecar_uop_creation_metadata": 1
+      },
+      "category_field_counts": {
+        "other": 1
+      },
+      "display_name": "r_2048_32_4_384_4",
+      "elapsed_ms": 3.4054999705404043,
+      "example_ordinals": [
+        2989
+      ],
+      "source_count": 1
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_uop_creation_metadata": 20
+      },
+      "category_field_counts": {
+        "other": 20
+      },
+      "display_name": "r_256_32_3_384_4",
+      "elapsed_ms": 2.085625077597797,
+      "example_ordinals": [
+        2596,
+        2616,
+        2636,
+        2656,
+        2677,
+        2697,
+        2717,
+        2737
+      ],
+      "source_count": 20
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 13,
+        "repo_sidecar_uop_creation_metadata": 15
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 13,
+        "other": 15
+      },
+      "display_name": "r_128_32_3_384_4",
+      "elapsed_ms": 1.67666666675359,
+      "example_ordinals": [
+        1727,
+        1747,
+        1767,
+        1787,
+        1808,
+        1828,
+        1848,
+        1868
+      ],
+      "source_count": 28
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 66,
+        "repo_sidecar_uop_creation_metadata": 176
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 66,
+        "other": 176
+      },
+      "display_name": "r_16_96",
+      "elapsed_ms": 1.478125574067235,
+      "example_ordinals": [
+        1712,
+        1724,
+        1726,
+        1729,
+        1733,
+        1735,
+        1744,
+        1746
+      ],
+      "source_count": 242
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 2,
+        "repo_sidecar_uop_creation_metadata": 7
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 2,
+        "other": 7
+      },
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 1.105750328861177,
+      "example_ordinals": [
+        1803,
+        1904,
+        2369,
+        2470,
+        2571,
+        2672,
+        2773,
+        2874
+      ],
+      "source_count": 9
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 11,
+        "repo_sidecar_uop_creation_metadata": 28
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 11,
+        "other": 28
+      },
+      "display_name": "r_2048_16_96",
+      "elapsed_ms": 0.9630410932004452,
+      "example_ordinals": [
+        1714,
+        1736,
+        1756,
+        1776,
+        1817,
+        1837,
+        1857,
+        1877
+      ],
+      "source_count": 39
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 13
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 13
+      },
+      "display_name": "r_1536_16_384",
+      "elapsed_ms": 0.7077916525304317,
+      "example_ordinals": [
+        1728,
+        1748,
+        1768,
+        1788,
+        1809,
+        1829,
+        1849,
+        1869
+      ],
+      "source_count": 13
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 2,
+        "repo_sidecar_uop_creation_metadata": 7
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 2,
+        "other": 7
+      },
+      "display_name": "r_2_4_(gemma_start_pos_window+1)n1",
+      "elapsed_ms": 0.6660000653937459,
+      "example_ordinals": [
+        1801,
+        1902,
+        2367,
+        2468,
+        2569,
+        2670,
+        2771,
+        2872
+      ],
+      "source_count": 9
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 2,
+        "repo_sidecar_uop_creation_metadata": 7
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 2,
+        "other": 7
+      },
+      "display_name": "r_32_32_4_384_4",
+      "elapsed_ms": 0.6443331949412823,
+      "example_ordinals": [
+        1796,
+        1897,
+        2362,
+        2463,
+        2564,
+        2665,
+        2766,
+        2867
+      ],
+      "source_count": 9
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 2,
+        "repo_sidecar_uop_creation_metadata": 7
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 2,
+        "other": 7
+      },
+      "display_name": "r_2_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.614666729234159,
+      "example_ordinals": [
+        1800,
+        1901,
+        2366,
+        2467,
+        2568,
+        2669,
+        2770,
+        2871
+      ],
+      "source_count": 9
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 11,
+        "repo_sidecar_uop_creation_metadata": 28
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 11,
+        "other": 28
+      },
+      "display_name": "r_2_32_4_2_4_64",
+      "elapsed_ms": 0.5745001835748553,
+      "example_ordinals": [
+        1722,
+        1742,
+        1762,
+        1782,
+        1823,
+        1843,
+        1863,
+        1883
+      ],
+      "source_count": 39
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 11,
+        "repo_sidecar_uop_creation_metadata": 28
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 11,
+        "other": 28
+      },
+      "display_name": "r_4_32_4_2_4_32",
+      "elapsed_ms": 0.44308346696197987,
+      "example_ordinals": [
+        1719,
+        1739,
+        1759,
+        1779,
+        1820,
+        1840,
+        1860,
+        1880
+      ],
+      "source_count": 39
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 13
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 13
+      },
+      "display_name": "r_1536_16_16n1",
+      "elapsed_ms": 0.3065831260755658,
+      "example_ordinals": [
+        1732,
+        1752,
+        1772,
+        1792,
+        1813,
+        1833,
+        1853,
+        1873
+      ],
+      "source_count": 13
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 11
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 11
+      },
+      "display_name": "r_1536_16_128",
+      "elapsed_ms": 0.2513749059289694,
+      "example_ordinals": [
+        1723,
+        1743,
+        1763,
+        1783,
+        1824,
+        1844,
+        1864,
+        1884
+      ],
+      "source_count": 11
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 11,
+        "repo_sidecar_uop_creation_metadata": 28
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 11,
+        "other": 28
+      },
+      "display_name": "r_8_16_32n1",
+      "elapsed_ms": 0.18087495118379593,
+      "example_ordinals": [
+        1721,
+        1741,
+        1761,
+        1781,
+        1822,
+        1842,
+        1862,
+        1882
+      ],
+      "source_count": 39
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 1,
+        "repo_sidecar_uop_creation_metadata": 1
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 1,
+        "other": 1
+      },
+      "display_name": "r_256_16_96n4",
+      "elapsed_ms": 0.15912496019154787,
+      "example_ordinals": [
+        1812,
+        2378
+      ],
+      "source_count": 2
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 2,
+        "repo_sidecar_uop_creation_metadata": 7
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 2,
+        "other": 7
+      },
+      "display_name": "r_8_16_32n2",
+      "elapsed_ms": 0.15062501188367605,
+      "example_ordinals": [
+        1797,
+        1898,
+        2363,
+        2464,
+        2565,
+        2666,
+        2767,
+        2868
+      ],
+      "source_count": 9
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 11,
+        "repo_sidecar_uop_creation_metadata": 28
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 11,
+        "other": 28
+      },
+      "display_name": "r_8_16_32",
+      "elapsed_ms": 0.12345844879746437,
+      "example_ordinals": [
+        1720,
+        1740,
+        1760,
+        1780,
+        1821,
+        1841,
+        1861,
+        1881
+      ],
+      "source_count": 39
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 2,
+        "repo_sidecar_uop_creation_metadata": 7
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 2,
+        "other": 7
+      },
+      "display_name": "r_8_(gemma_start_pos_window+1)_16_32",
+      "elapsed_ms": 0.11962489224970341,
+      "example_ordinals": [
+        1799,
+        1900,
+        2365,
+        2466,
+        2567,
+        2668,
+        2769,
+        2870
+      ],
+      "source_count": 9
+    },
+    {
+      "category_basis_counts": {
+        "repo_sidecar_realize_scope_metadata": 1,
+        "repo_sidecar_uop_creation_metadata": 1
+      },
+      "category_field_counts": {
+        "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 1,
+        "other": 1
+      },
+      "display_name": "r_70_32_4_384_4",
+      "elapsed_ms": 0.11795817408710718,
+      "example_ordinals": [
+        1713,
+        2279
+      ],
+      "source_count": 2
+    }
+  ],
+  "top_reduce_rows": [
+    {
+      "category_field": "other",
+      "display_name": "r_2048_32_4_384_4",
+      "elapsed_ms": 3.4054999705404043,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2989,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_2048_16_96",
+      "elapsed_ms": 0.22637494839727879,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2342,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "display_name": "r_2048_16_96",
+      "elapsed_ms": 0.22475002333521843,
+      "graph_batch": "graph_5:992-2015",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 1938,
+      "source_category_basis": "repo_sidecar_realize_scope_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.21508336067199707,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2470,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "display_name": "r_1536_16_384",
+      "elapsed_ms": 0.19395840354263783,
+      "graph_batch": "graph_5:992-2015",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 1849,
+      "source_category_basis": "repo_sidecar_realize_scope_metadata"
+    },
+    {
+      "category_field": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "display_name": "r_1536_16_16n1",
+      "elapsed_ms": 0.191875034943223,
+      "graph_batch": "graph_5:992-2015",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 1752,
+      "source_category_basis": "repo_sidecar_realize_scope_metadata"
+    },
+    {
+      "category_field": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "display_name": "r_16_96",
+      "elapsed_ms": 0.1695833634585142,
+      "graph_batch": "graph_5:992-2015",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 1885,
+      "source_category_basis": "repo_sidecar_realize_scope_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_256_32_3_384_4",
+      "elapsed_ms": 0.16137491911649704,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2838,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_256_32_3_384_4",
+      "elapsed_ms": 0.15741668175905943,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2798,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "display_name": "r_1536_16_128",
+      "elapsed_ms": 0.15666673425585032,
+      "graph_batch": "graph_5:992-2015",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 1884,
+      "source_category_basis": "repo_sidecar_realize_scope_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_256_16_96n4",
+      "elapsed_ms": 0.15424995217472315,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2378,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_256_32_3_384_4",
+      "elapsed_ms": 0.14966668095439672,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2939,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_256_32_3_384_4",
+      "elapsed_ms": 0.13112497981637716,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2616,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.12350000906735659,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2975,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_32_32_4_384_4",
+      "elapsed_ms": 0.12241664808243513,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2564,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "display_name": "r_8_16_32n2",
+      "elapsed_ms": 0.12149999383836985,
+      "graph_batch": "graph_5:992-2015",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 1797,
+      "source_category_basis": "repo_sidecar_realize_scope_metadata"
+    },
+    {
+      "category_field": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "display_name": "r_256_16_96n1",
+      "elapsed_ms": 0.11112506035715342,
+      "graph_batch": "graph_5:992-2015",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 1751,
+      "source_category_basis": "repo_sidecar_realize_scope_metadata"
+    },
+    {
+      "category_field": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.10970840230584145,
+      "graph_batch": "graph_5:992-2015",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 1803,
+      "source_category_basis": "repo_sidecar_realize_scope_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.10970840230584145,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2369,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.10962504893541336,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2672,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.10958337225019932,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2571,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.10954169556498528,
+      "graph_batch": "graph_5:992-2015",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 1904,
+      "source_category_basis": "repo_sidecar_realize_scope_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.10950001887977123,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2773,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_8_2_16_4_4_(gemma_start_pos_window+1)",
+      "elapsed_ms": 0.10950001887977123,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2874,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    },
+    {
+      "category_field": "other",
+      "display_name": "r_16_96",
+      "elapsed_ms": 0.10754168033599854,
+      "graph_batch": "graph_6:2016-2993",
+      "mapped_parent_category": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+      "ordinal": 2341,
+      "source_category_basis": "repo_sidecar_uop_creation_metadata"
+    }
+  ]
+}

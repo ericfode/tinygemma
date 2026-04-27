@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "layer13-phase-softcap-elision-rejected-042",
+  "current_checkpoint": "layer13-reduce-source-attribution-043",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -595,6 +595,21 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "layer13-reduce-source-attribution-043",
+      "summary": "Reduced profiler phase-attribution overhead by caching cache-write category parsing, avoiding recursive source-edge phase scans in hot UOp creation/replace and add_linear paths, then refreshed the real METAL layer-13 phase-propagation profile. The profile preserved complete attribution over 2994 source items and recovered child phase metadata for 872/885 layer-13 shared-source rows: kv_projection=863, store=9, with 13 unclassified and 37 conflicts. The resulting analysis maps the reduce_r-heavy layer-13 parent scope to K/V projection rather than RHS packing or the cache store tail; no runtime throughput floor was superseded.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "scripts/analyze_layer13_reduce_sources.py",
+        "docs/plans/2026-04-26-layer13-reduce-source-attribution.md",
+        "benchmarks/gemma4-metal-decode-graph-layer13-phase-propagation-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-layer13-phase-propagation-profile-512.csv",
+        "benchmarks/gemma4-metal-layer13-reduce-source-attribution-043.json",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -602,7 +617,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "layer13-reduce-source-attribution-043",
-  "next_target_plan": "Tok/s remains the hard metric. The layer-13 child phase-attribution attempt proved that real TinyJit capture still launders deeper phase metadata: the layer-13 shared-source bucket remains 885 unclassified phase items, and forced phase cutpoints are too expensive for the real profile path. The greedy softcap-elision runtime probe is rejected by repeated long-floor rows (17.572001 and 17.121386 tok/s), so do not optimize logits/softcap next. Next inspect the layer-13 structural CSV/JSON rows and source structure to map the dominant reduce_r-heavy items back to exact producer operations (K/V projection, RMSNorm/RoPE, attention score/value reduction, packing, or store). A runtime patch is allowed only after a source-level reduction candidate predicts fewer required source items or less reduce_r mass; acceptance remains repeated E2B int8 METAL 1000/20 lower-row throughput above the accepted floor with stable hash, rollout_jit_count=999, decode_fallback=false, or a source-count reduction below 2994 with complete attribution.",
-  "updated_at": "2026-04-26T13:54:48-0700"
+  "next_target": "layer13-kv-projection-source-reduction-044",
+  "next_target_plan": "Use the new phase-propagation evidence before writing runtime code: layer-13 shared-source K/V projection accounts for 863 of 885 target parent rows, while store accounts for only 9 and RHS pack/RMSNorm-RoPE are not observed as child phases in the propagation profile. Inspect GemmaAttention._project_kv and runtime rowwise-int8 fused K/V projection for a source-count or reduce_r-mass reduction candidate specific to layer 13/shared-source sliding producer. A candidate must preserve stable output hash, rollout_jit_count=999, decode_fallback=false, and either reduce complete-attribution source count below 2994 or earn repeated E2B int8 METAL 1000/20 throughput above the accepted floor; do not spend a hard gate on RHS packing/store-only tweaks.",
+  "updated_at": "2026-04-26T20:39:05-0700"
 }

@@ -73,9 +73,10 @@ class FakeMetadata:
 
 
 class FakeUOp:
-  def __init__(self, op, metadata=None):
+  def __init__(self, op, metadata=None, src=()):
     self.op = op
     self.metadata = metadata or []
+    self.src = tuple(src)
 
 
 class FakeTensor:
@@ -263,6 +264,24 @@ def test_profile_uop_replace_sidecar_patch_inherits_cache_write_phase_metadata_f
     profile.all_metadata.pop(source, None)
     if replaced is not None:
       profile.all_metadata.pop(replaced, None)
+
+
+def test_profile_ast_cache_write_phase_counts_use_direct_toposort_metadata():
+  phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_projection")
+  leaf = FakeUOp(
+    profile.Ops.ADD,
+    [FakeMetadata(phase, f"repo_uop_sidecar:1::{phase}")],
+  )
+  root = FakeUOp(profile.Ops.ADD, src=(leaf,))
+
+  # The hot summary path intentionally does not recursively rescan source edges;
+  # real UOp creation/replace propagation has already made phase metadata direct.
+  assert profile.ast_cache_write_phase_category_counts(FakeAst(root)) == {}
+  assert profile.ast_cache_write_phase_category(FakeAst(root)) == (None, False)
+
+  ast = FakeAst(root, leaf)
+  assert profile.ast_cache_write_phase_category_counts(ast) == {phase: 1}
+  assert profile.ast_cache_write_phase_category(ast) == (phase, False)
 
 
 def test_profile_classifies_source_item_from_ast_uop_sidecar_metadata():
