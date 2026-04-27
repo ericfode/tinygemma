@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 083 - Artifact inventory category filter documented
+
+- Status: accepted docs increment.
+- Change: README now documents repeatable `--only-category <category>`, including a focused progress-log JSON example.
+- Verification: artifact inventory tests passed; real-repo filtered JSON smoke parsed with `python3 -m json.tool`; `git diff --check` passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 082 - Artifact inventory category filter
 
 - Status: accepted infrastructure improvement.

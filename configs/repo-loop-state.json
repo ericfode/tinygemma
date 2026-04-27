@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-only-filter-082",
+  "current_checkpoint": "artifact-inventory-only-filter-doc-083",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-only-filter-doc-083",
+  "next_target": "artifact-inventory-list-categories-084",
   "next_target_plan": [
-    "Document --only-category in README with a concise example for progress-log review.",
-    "Run artifact inventory tests plus a filtered JSON smoke and diff checks.",
-    "Keep generated artifacts untouched."
+    "Add --list-categories so users and scripts can discover valid artifact categories without reading source code.",
+    "Use strict TDD and keep stdout machine-friendly.",
+    "Keep helper read-only and generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:38:46-0700",
+  "updated_at": "2026-04-27T03:40:19-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1250,6 +1250,22 @@
         "git diff --check: passed"
       ],
       "decision": "Accepted focused filtering for review tooling; generated benchmark/profile artifacts remain untracked and untouched."
+    },
+    {
+      "id": "artifact-inventory-only-filter-doc-083",
+      "completed_at": "2026-04-27T03:40:19-0700",
+      "status": "accepted-docs",
+      "summary": "Documented repeatable --only-category filtering for the artifact inventory helper in README.",
+      "artifacts": [
+        "README.md",
+        "docs/plans/2026-04-27-artifact-inventory-category-filter-doc.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 7 passed",
+        "real-repo --format json --only-category benchmark-progress-log smoke parsed with python3 -m json.tool",
+        "git diff --check: passed"
+      ],
+      "decision": "Documentation-only; generated benchmark/profile artifacts remain untracked and untouched."
     }
   ]
 }
