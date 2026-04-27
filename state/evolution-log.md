@@ -1,5 +1,14 @@
 # Evolution Log
 
+## 2026-04-26 - Evo Layer-13 K/V Probe Sweep / Unit-Scaling Rejected
+
+- Objective: verify the `exp_0006` model.py probe under the evo harness after recalibrating the benchmark floor. The current evo frontier is `exp_0005`, a no-code calibration child of `exp_0000`, with default `128/20` score `28.6153`; the inherited long gate is now `e2b_int8_metal_hash1000_current_floor` at `--min-score 18.0` plus stable long output hash `aa4944455473e236807f6c711a77a969caf73680ea5ea9725648294e5fd23cfa`.
+- Calibration correction: unchanged `exp_0000` measured `18.181815 tok/s` on the hard `1000/20` row and `28.705971 tok/s` on the default `128/20` row in the current machine state, so the older absolute `19.424036` hard floor was stale. `exp_0005` committed as the current no-code comparison point and passed the recalibrated long gate with `18.090845 tok/s`.
+- Rejected model.py probes: `exp_0003` separate K/V on sliding shared-source producers improved the stale short score to `28.6264` but measured only `18.177621 tok/s` on the long row; `exp_0004` fused K/V lane-reshape split measured `28.4425` short and `18.147725 tok/s` long; `exp_0006` skipped the attention scaling multiply when `self.scaling == 1.0`, passed behavior gates and the current long floor (`18.133788 tok/s`), but regressed the calibrated default score to `28.4567` versus parent `28.6153`.
+- Decision: reject `exp_0006` and keep `exp_0005` as the honest current frontier. Do not treat sub-`28.6153` short rows as improvements, and treat the older `19.424036` long floor as environment-stale unless a fresh paired baseline returns to it.
+- Next candidate shortlist from the read-only council: first try a one-token fused-int8 K/V decode-rank flattening probe if continuing the layer-13 K/V line; otherwise the safer orthogonal model.py probe is decode-only attention-output view elision for `query_len == 1`. RMSNorm inference scale caching remains a broader non-K/V candidate, but should earn a short/hash gate before spending the long row.
+- Verification receipts: `evo get exp_0006` reports status `discarded`, score `28.4567`, `gate_result=true`, and discard reason `passed behavior and current long floor, but default score regressed to 28.4567 below calibrated parent exp_0005 score 28.6153; reject unit-scaling guard as no throughput win`. `evo status` reports `experiments=7`, `committed=2`, `discarded=5`, `failed=0`, and best `exp_0005` score `28.6153`.
+
 ## 2026-04-26 - Layer 13 reduce_r Source Attribution / Phase Propagation
 
 - Objective: finish `layer13-reduce-source-attribution-043` by mapping the layer-13 `reduce_r`-heavy parent cache-write source rows to child producer operations before spending another runtime patch. The hard metric remains repeated real E2B int8 `METAL`, `beam=0`, `1000/20`, stable hash, `rollout_jit_count=999`, and `decode_fallback=false`.

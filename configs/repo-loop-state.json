@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "layer13-reduce-source-attribution-043",
+  "current_checkpoint": "evo-layer13-kv-probes-rejected-044",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -610,6 +610,15 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "evo-layer13-kv-probes-rejected-044",
+      "summary": "Initialized and calibrated evo for model.py performance probes, then rejected K/V-projection/view and unit-scaling candidates that failed to beat the calibrated frontier. exp_0005 is the no-code current comparison point at 28.6153 tok/s on the default 128/20 score and passed the recalibrated 1000/20 hash floor at 18.090845 tok/s. exp_0006 passed behavior gates and the current long floor but regressed the calibrated default score to 28.4567, so it was discarded.",
+      "artifacts": [
+        ".evo/project.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -617,7 +626,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "layer13-kv-projection-source-reduction-044",
-  "next_target_plan": "Use the new phase-propagation evidence before writing runtime code: layer-13 shared-source K/V projection accounts for 863 of 885 target parent rows, while store accounts for only 9 and RHS pack/RMSNorm-RoPE are not observed as child phases in the propagation profile. Inspect GemmaAttention._project_kv and runtime rowwise-int8 fused K/V projection for a source-count or reduce_r-mass reduction candidate specific to layer 13/shared-source sliding producer. A candidate must preserve stable output hash, rollout_jit_count=999, decode_fallback=false, and either reduce complete-attribution source count below 2994 or earn repeated E2B int8 METAL 1000/20 throughput above the accepted floor; do not spend a hard gate on RHS packing/store-only tweaks.",
-  "updated_at": "2026-04-26T20:39:05-0700"
+  "next_target": "layer13-fused-kv-decode-rank-flattening-045",
+  "next_target_plan": "Continue from evo frontier exp_0005, not the stale exp_0000 score. The next narrow model.py probe should test one-token fused-int8 K/V decode-rank flattening inside GemmaAttention._project_kv: flatten (batch, 1, hidden) to 2D for the fused rowwise-int8 matmul, then reshape back before the existing chunk path. This is non-overlapping with rejected dequantized/transposed/separate/lane-reshape K/V probes and the rejected unit-scaling guard. Focused tests should cover fused-vs-separate K/V and cache/full-forward equivalence before evo run; acceptance requires beating exp_0005 default score 28.6153 while passing the current E2B int8 METAL 1000/20 hash floor (min-score 18.0), rollout_jit_count=999, and decode_fallback=false. If it fails, try decode-only attention-output view elision for query_len == 1 as the safer orthogonal model.py probe.",
+  "updated_at": "2026-04-26T22:48:16-0700"
 }
