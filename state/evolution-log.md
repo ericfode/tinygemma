@@ -1,5 +1,11 @@
 # Evolution Log
 
+## 2026-04-27 067 - Paired helper contract docs refreshed
+
+- Status: accepted documentation-only increment.
+- Change: README now states the paired helper requires child benchmark stdout JSON with a finite numeric `score`; `NaN` and infinities are rejected.
+- Verification: paired helper tests passed (`4 passed`); `git diff --check` passed.
+
 ## 2026-04-27 066 - Paired helper JSON contract tightened
 
 - Status: accepted infrastructure hardening.

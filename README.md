@@ -147,7 +147,7 @@ python scripts/paired_e2b_decode_benchmark.py \
   --min-score 5.0
 ```
 
-The helper writes both child benchmark payloads plus absolute/relative score deltas. Add `--min-delta <float>` before `--` to make the helper exit nonzero after writing the JSON artifact when the candidate delta is below a required floor. Treat very short paired runs as smoke tests; throughput claims still require durable benchmark artifacts under `benchmarks/` and the longer evo gates.
+The helper writes both child benchmark payloads plus absolute/relative score deltas. The child benchmark stdout must be JSON containing a finite numeric `score`; `NaN` and infinities are rejected rather than recorded. Add `--min-delta <float>` before `--` to make the helper exit nonzero after writing the JSON artifact when the candidate delta is below a required floor. Treat very short paired runs as smoke tests; throughput claims still require durable benchmark artifacts under `benchmarks/` and the longer evo gates.
 
 The full beam/format matrix is intentionally resumable because the large checkpoints and higher beams can take a long time on local Metal:
 
