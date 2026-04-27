@@ -1262,14 +1262,6 @@ def test_metal_rowwise_int8_decode_linear_rejects_non_metal():
     metal_rowwise_int8_decode_linear(x, qweight, scale)
 
 
-def test_gemma_mlp_raw_metal_gate_up_path_is_disabled_until_graphable():
-  mlp = GemmaMLP(make_config(), 0)
-  mlp._force_metal_fused_int8_gate_up = True
-  fake_metal_decode_row = type("FakeTensor", (), {"device": "METAL", "shape": (1, 1, 4)})()
-
-  assert mlp._can_use_metal_fused_int8_gate_up(fake_metal_decode_row) is False
-
-
 def test_quantized_multimodal_checkpoint_reloads_and_runs(tmp_path: Path):
   config = make_conditional_config()
   input_ids = [2, config.image_token_id, 5] + [config.audio_token_id] * 5 + [7]

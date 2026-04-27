@@ -386,11 +386,6 @@ class GemmaMLP:
       _FUSED_INT8_GATE_UP[key] = fused
     return fused
 
-  def _can_use_metal_fused_int8_gate_up(self, x: Tensor) -> bool:
-    # The raw Metal custom Runner is replay-safe but graph-breaking. Keep this
-    # disabled until there is a graphable tinygrad-native replacement.
-    return False
-
   def __call__(self, x: Tensor) -> Tensor:
     if self._can_use_fused_gate_up():
       gate, up = x.linear(self._fused_gate_up_weight().transpose()).chunk(2, dim=-1)

@@ -122,19 +122,6 @@ class FakeTensor:
     return self
 
 
-def test_profile_raw_gate_up_mode_is_abandoned():
-  try:
-    profile.validate_metal_int8_gate_up_mode("raw")
-  except SystemExit as exc:
-    assert "abandoned" in str(exc)
-  else:
-    raise AssertionError("raw gate/up profiling mode should be rejected")
-
-
-def test_profile_default_gate_up_mode_is_allowed():
-  profile.validate_metal_int8_gate_up_mode("default")
-
-
 def test_profile_classifies_repo_sidecar_metadata():
   metadata = [
     FakeMetadata("norm", "repo_sidecar:1::norm"),

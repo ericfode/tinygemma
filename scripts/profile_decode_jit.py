@@ -1114,13 +1114,6 @@ def language_model(model):
   return getattr(model.model, "language_model", model.model)
 
 
-def validate_metal_int8_gate_up_mode(mode: str) -> None:
-  if mode == "raw":
-    raise SystemExit(
-      "--metal-int8-gate-up raw is abandoned: the custom Runner breaks MetalGraph batching and is not a graphable decode optimization path"
-    )
-
-
 def build_zero_cache(model, context_length: int, max_length: int) -> GemmaCache:
   lm = language_model(model)
   dtype = lm.embed_tokens.weight.dtype
@@ -1387,7 +1380,6 @@ def main() -> None:
   parser.add_argument("--context-length", type=int, default=700)
   parser.add_argument("--profile-start", type=int, help="Decode position to profile. Defaults to context length plus 3.")
   parser.add_argument("--jit-mode", type=int, default=2, choices=[1, 2], help="tinygrad JIT mode. JIT=1 applies Metal graph batching; JIT=2 profiles ungraphed items.")
-  parser.add_argument("--metal-int8-gate-up", choices=["default", "raw"], default="default", help="Use the default tinygrad fused int8 gate/up path or opt into the raw Metal gate/up Runner.")
   parser.add_argument(
     "--layer13-phase-cutpoints",
     action="store_true",
@@ -1396,7 +1388,6 @@ def main() -> None:
   parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
   parser.add_argument("--csv-out", type=Path)
   args = parser.parse_args()
-  validate_metal_int8_gate_up_mode(args.metal_int8_gate_up)
 
   resolved_device = prepare_device(args.device)
   model = load_pretrained(args.model_dir, device=resolved_device)
@@ -1471,7 +1462,7 @@ def main() -> None:
     "max_length": max_length,
     "jit_mode": args.jit_mode,
     "jit_interpretation": "JIT=1 graph-batched execution" if args.jit_mode == 1 else "JIT=2 ungraphed per-kernel timing",
-    "metal_int8_gate_up": args.metal_int8_gate_up,
+    "metal_int8_gate_up": "default",
     "tensor_dtype": str(lm.embed_tokens.weight.dtype),
     "text_config": {
       "num_hidden_layers": lm.config.num_hidden_layers,
@@ -1501,7 +1492,7 @@ def main() -> None:
     "kernel_count": payload["summary"]["kernel_count"],
     "elapsed_ms": round(payload["summary"]["elapsed_ms"], 3),
     "jit_mode": args.jit_mode,
-    "metal_int8_gate_up": args.metal_int8_gate_up,
+    "metal_int8_gate_up": "default",
     "original_capture": payload["original_capture"],
     "post_graph_execution": payload["post_graph_execution"],
     "source_attribution": {

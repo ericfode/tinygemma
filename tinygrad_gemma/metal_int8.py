@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+"""Prototype-only raw Metal rowwise-int8 decode-linear runner.
+
+This module is kept for compatibility canaries and research scripts. It is not
+wired into Gemma decode because a custom Runner is not a first-class MetalGraph
+item: current tinygrad graph batching expects compiled tinygrad programs. The
+runtime path should therefore keep using graphable Tensor matmul/fused-int8 code
+unless tinygrad gains a real graphable custom-call surface.
+"""
+
 import math
 from functools import lru_cache
 

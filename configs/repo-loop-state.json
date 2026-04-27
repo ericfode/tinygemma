@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "evo-active-shared-kv-view-reuse-rejected-048",
+  "current_checkpoint": "metal-int8-first-class-raw-bridge-graphability-rejected-052",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "metal-int8-first-class-raw-bridge-graphability-052",
-  "next_target_plan": "After 051 proved a process-local research tinygrad custom-function bridge can replay the raw rowwise-int8 METAL runner when UOps are preserved until resolve_params, decide whether there is an honest first-class integration path that is graphable enough to avoid the known MetalGraph fragmentation regression. Do not enable project-local global monkeypatching in the model hot path. Inspect tinygrad graph/custom-function support, prototype only if the bridge can be made first-class or tightly scoped, and prune the raw-runner branch if it remains graph-breaking or production-fragile.",
-  "updated_at": "2026-04-27T00:51:47-0700",
+  "next_target": "evo-frontier-profiler-backed-graphable-surface-053",
+  "next_target_plan": "Return to graphable Tensor/tinygrad program surfaces after pruning the raw custom Runner branch. Refresh evo scratchpad/frontier evidence and the profiler-backed hot-path summary, then pick one narrow model.py or profiler-supported graphable increment. Do not re-open raw metal_int8 custom Runner integration unless tinygrad exposes a first-class graphable custom-call or CompiledRunner-compatible surface.",
+  "updated_at": "2026-04-27T01:01:21-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -694,6 +694,20 @@
       "artifacts": [
         "scripts/prototype_research_raw_metal_capture_bridge.py",
         "docs/plans/2026-04-27-metal-int8-research-capture-bridge-spike.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-int8-first-class-raw-bridge-graphability-rejected-052",
+      "summary": "Rejected production integration of the raw rowwise-int8 METAL custom Runner as a first-class graphable decode path. Research tinygrad GraphRunner.supports_exec_item admits only Ops.SINK/Ops.PROGRAM single-device calls, and MetalGraph construction assumes CompiledRunner-backed pipeline_state and launch_dims. The 051 pm_exec/_call_outs_ins bridge remains prototype-only because it requires process-local monkeypatching and is not a MetalGraph batching surface. Pruned the dead GemmaMLP raw-gate/up hook and removed the profile_decode_jit --metal-int8-gate-up selector while preserving the historical default metadata field. No throughput floor is superseded.",
+      "artifacts": [
+        "tinygrad_gemma/model.py",
+        "tinygrad_gemma/metal_int8.py",
+        "scripts/profile_decode_jit.py",
+        "tests/test_tinygrad_gemma.py",
+        "tests/test_profile_decode_jit.py",
+        "docs/plans/2026-04-27-metal-int8-first-class-raw-bridge-graphability.md",
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]

@@ -1,5 +1,15 @@
 # Evolution Log
 
+## 2026-04-27 - Metal Int8 First-Class Raw Bridge Graphability Rejected
+
+- Objective: execute `metal-int8-first-class-raw-bridge-graphability-052` after 051 proved that a process-local research tinygrad bridge can replay the dormant raw rowwise-int8 METAL runner only when UOps are preserved through `resolve_params(ctx, call)`. This increment decides whether that bridge can honestly become a production, graphable decode optimization.
+- Graphability finding: the research tinygrad `GraphRunner.supports_exec_item` accepts only `Ops.SINK` or `Ops.PROGRAM` single-device calls, and `MetalGraph.supports_exec_item` delegates to it. `MetalGraph.__init__` then casts each scheduled item to `CompiledRunner` and reads `prg._prg.pipeline_state` plus `prg.p.launch_dims(...)`. A project-local `RowwiseInt8DecodeLinearRunner` is a host-call runner around raw Metal library bytes, not a first-class compiled tinygrad program.
+- Decision: reject production integration of the raw custom Runner. The 051 `pm_exec` / `_call_outs_ins` bridge remains a useful prototype and compatibility canary, but it depends on process-local monkeypatching and would not preserve MetalGraph batching without a real tinygrad runtime extension. The raw-runner branch is therefore pruned rather than promoted.
+- Cleanup: removed the dead `GemmaMLP._can_use_metal_fused_int8_gate_up(...)` method and its test; removed the `scripts/profile_decode_jit.py --metal-int8-gate-up` selector so the profiler no longer advertises a raw path; kept new profile payloads schema-compatible by recording `metal_int8_gate_up="default"`; marked `tinygrad_gemma/metal_int8.py` as prototype-only in the module docstring.
+- Plan artifact: `docs/plans/2026-04-27-metal-int8-first-class-raw-bridge-graphability.md` records the rejection evidence, invalidation criteria for revisiting, and the next graphable target.
+- Verification: focused tests passed with `74 passed, 2 warnings`; `.venv/bin/python -m py_compile tinygrad_gemma/metal_int8.py scripts/profile_decode_jit.py` passed; profile help no longer contains `--metal-int8-gate-up`; full `.venv/bin/python -m pytest -q` passed with `79 passed, 2 warnings`; `.venv/bin/tinygrad-gemma --help >/dev/null` passed; `.venv/bin/python scripts/smoke_metal.py` reported `default_device=METAL`, `rollout_jit_count=3`, and `decode_fallback=False`; `git diff --check` and JSON validation passed.
+- Throughput status: no real-checkpoint throughput floor is superseded. The evo frontier remains `exp_0005` at `28.6153` tok/s. The next target is `evo-frontier-profiler-backed-graphable-surface-053`: refresh frontier/profile evidence and choose the next narrow graphable Tensor/tinygrad-program surface.
+
 ## 2026-04-27 - Metal Int8 Research Capture Bridge Spike Accepted
 
 - Objective: execute `metal-int8-research-capture-bridge-spike-051` after 050 proved that the dormant raw rowwise-int8 METAL runner must fail closed under add-linear-only research tinygrad capture. This increment is a prototype-only feasibility result; it does not enable the bridge in `GemmaMLP`, `RowwiseInt8Linear`, or the active E2B benchmark path.
