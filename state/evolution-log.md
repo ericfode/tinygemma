@@ -1780,3 +1780,29 @@ Artifacts:
 - `.evo/project.md` (local ignored evo state)
 - `configs/repo-loop-state.json`
 - `state/evolution-log.md`
+
+## 2026-04-27 08:44:50 PDT - exp0082-round098-boundary-search-stop-and-pivot
+
+Cross-cut the intra-layer/side-branch worker round. The frontier stayed at `exp_0082` (`66.3476`), and the final planned `model.py` boundary-class probes all produced clean performance regressions.
+
+Verification:
+- `evo status`: `experiments=91`, `committed=25`, `evaluated=0`, `discarded=66`, `failed=0`, `active=0`, `best=66.3476`.
+- `evo frontier`: rank-1 frontier remains `exp_0082` at `66.3476`.
+- Worker outcomes:
+  - `exp_0087`: `exp_0079 + layer1` side branch, score `56.7466` versus parent `63.9473`, discarded.
+  - `exp_0088`: layer-8 post-attention/pre-MLP decode boundary on `exp_0082`, score `51.9819`, discarded.
+  - `exp_0089`: layer-11 post-attention/pre-MLP decode boundary on `exp_0082`, score `64.9409`, discarded.
+  - `exp_0090`: layer-13 post-attention/pre-MLP decode boundary on `exp_0082`, score `63.7468`, discarded.
+- Each worker reported focused `tests/test_profile_decode_jit.py` passing (`32 passed`), inherited evo gates passing, stable short hash `1c39dd289bb7363f0f600ae1087ad39926e9733447df72bf03955c92d06066b0`, `rollout_jit_count=127`, and `decode_fallback=false`.
+
+Decision:
+- Stop the current `model.py` boundary-placement search. Two consecutive no-improvement rounds after `exp_0082` exhausted both additive layer-output cutpoints and one-shot intra-layer post-attention/pre-MLP seams.
+- Keep `exp_0082` as the frontier.
+- Next work should pivot to measurement-first profiler instrumentation or a separate profile/source-count evo run before additional performance children.
+- Do not spawn another `exp_0082` throughput child that merely adds/removes/shifts realization cutpoints without new profile evidence.
+
+Artifacts:
+- `docs/plans/2026-04-27-exp0082-round098-boundary-search-stop-and-pivot.md`
+- `.evo/project.md` (local ignored evo state)
+- `configs/repo-loop-state.json`
+- `state/evolution-log.md`

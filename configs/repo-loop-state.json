@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "exp0082-round097-stall-and-next-briefs",
+  "current_checkpoint": "exp0082-round098-boundary-search-stop-and-pivot",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -744,6 +744,24 @@
         "three read-only strategy scans completed and agreed to avoid repeating additive exp_0082 layer-output cutpoints at 5/7/10/13"
       ],
       "decision": "Continue from exp_0082 with new candidate class: intra-layer post-attention/pre-MLP boundaries at layers 13/11/8 and one exp_0079+layer1 side branch. Pivot away from model.py boundary search if these regress."
+    },
+    {
+      "id": "exp0082-round098-boundary-search-stop-and-pivot",
+      "completed_at": "2026-04-27T08:44:50-0700",
+      "status": "accepted-evo-stop-current-search",
+      "summary": "Cross-cut exp_0087..exp_0090 as clean regressions and stopped the current model.py boundary-placement search; exp_0082 remains the frontier and next work should pivot to measurement-first profiler instrumentation or a separate profile/source-count evo run.",
+      "artifacts": [
+        "docs/plans/2026-04-27-exp0082-round098-boundary-search-stop-and-pivot.md",
+        ".evo/project.md (local ignored evo state)",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ],
+      "verification": [
+        "evo status/frontier inspected after workers; best remains exp_0082 score=66.3476 with no active/evaluated/failed nodes",
+        "workers exp_0087, exp_0088, exp_0089, exp_0090 all discarded as clean performance regressions",
+        "worker summaries reported tests/test_profile_decode_jit.py: 32 passed, inherited gates passed, stable output hash, rollout_jit_count=127, decode_fallback=false"
+      ],
+      "decision": "Stop the current model.py realization-boundary throughput search. Pivot to measurement-first profiler instrumentation or a separate profile/source-count evo run before more performance children."
     }
   ],
   "gates": [
@@ -751,14 +769,14 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "exp0082-intralayer-boundary-and-sidebranch-round-098",
+  "next_target": "measurement-first-profile-instrumentation-after-boundary-search",
   "next_target_plan": [
-    "Run four narrow evo workers: layer13 intra-layer post-attention/pre-MLP boundary from exp_0082; layer11 intra-layer boundary from exp_0082; layer8 intra-layer boundary from exp_0082; exp_0079 plus only layer1 partial side-branch composition.",
-    "Discard any child on gate failure or short-score regression; do not broaden a successful intra-layer boundary without another review.",
-    "Do not repeat additive exp_0082 layer-output cuts at 5, 7, 10, or 13; avoid layer14 after-cut, K/V internals, cache geometry, raw Metal runners, final-hidden narrowing, and bookkeeping rewrites.",
-    "If these probes regress, stop the current model.py layer-boundary search and pivot to measurement-first instrumentation or a separate profile/source-count evo run."
+    "Stop current model.py boundary-placement throughput search; keep exp_0082 as frontier at 66.3476.",
+    "Build measurement-first profiler instrumentation that splits the layer-13 kv_projection attribution bucket into matmul, scale/cast, chunk/split, reshape, and any remaining norm/RoPE subphases without changing runtime behavior.",
+    "Alternatively initialize a separate profile/source-count evo run with a lower-is-better profile metric and a Goodhart gate preserving E2B hash/JIT/fallback invariants.",
+    "Do not spawn more exp_0082 throughput children that merely add/remove/shift realization cutpoints without new profiler evidence."
   ],
-  "updated_at": "2026-04-27T08:32:20-0700",
+  "updated_at": "2026-04-27T08:44:50-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
