@@ -1,5 +1,13 @@
 # Evolution Log
 
+## 2026-04-27 076 - Artifact inventory reference ranking documented
+
+- Status: accepted docs increment.
+- Change: README now explains that `scripts/inventory_untracked_artifacts.py` renders a reference-ranked table, with docs/state/config-cited artifacts ahead of uncited generated files and higher reference counts first.
+- The docs explicitly frame ranking as a review aid, not auto-commit permission.
+- Verification: artifact inventory tests passed; `git diff --check` passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 075 - Artifact inventory reference ranking
 
 - Status: accepted infrastructure improvement.
