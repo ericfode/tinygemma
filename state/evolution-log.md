@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 064 - Post-frontier handoff recorded
+
+- Status: accepted documentation-only increment.
+- Evo state: best remains `exp_0005` at `28.6153`; status reported `experiments=13 committed=2 discarded=11 active=0`.
+- Handoff: `docs/plans/2026-04-27-post-frontier-handoff.md` records rejected runtime children, raw-runner pruning, profiler improvements, corrected phase evidence, and next direction.
+- Decision: runtime frontier is saturated for explored K/V projection/cache-write surfaces; continue with benchmark/infrastructure gating.
+
 ## 2026-04-27 063 - Paired helper usage documented
 
 - Status: accepted documentation-only increment.
