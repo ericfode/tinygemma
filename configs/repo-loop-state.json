@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-only-filter-doc-083",
+  "current_checkpoint": "artifact-inventory-list-categories-084",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-list-categories-084",
+  "next_target": "artifact-inventory-list-categories-doc-085",
   "next_target_plan": [
-    "Add --list-categories so users and scripts can discover valid artifact categories without reading source code.",
-    "Use strict TDD and keep stdout machine-friendly.",
-    "Keep helper read-only and generated artifacts untouched."
+    "Document --list-categories in README near --only-category.",
+    "Run artifact inventory tests plus --list-categories smoke and diff checks.",
+    "Keep generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:40:19-0700",
+  "updated_at": "2026-04-27T03:42:21-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1266,6 +1266,26 @@
         "git diff --check: passed"
       ],
       "decision": "Documentation-only; generated benchmark/profile artifacts remain untracked and untouched."
+    },
+    {
+      "id": "artifact-inventory-list-categories-084",
+      "completed_at": "2026-04-27T03:42:21-0700",
+      "status": "accepted-infrastructure",
+      "summary": "Added --list-categories to the read-only artifact inventory helper.",
+      "artifacts": [
+        "scripts/inventory_untracked_artifacts.py",
+        "tests/test_artifact_inventory.py",
+        "docs/plans/2026-04-27-artifact-inventory-category-listing.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 8 passed",
+        "helper/profiler/paired-helper slice: 47 passed, 2 warnings",
+        "real CLI smoke listed 6 sorted categories without requiring inventory collection",
+        "scripts/inventory_untracked_artifacts.py py_compile: passed",
+        "configs/repo-loop-state.json parsed successfully",
+        "git diff --check: passed"
+      ],
+      "decision": "Accepted category discovery; generated benchmark/profile artifacts remain untracked and untouched."
     }
   ]
 }

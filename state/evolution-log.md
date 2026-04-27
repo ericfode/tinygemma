@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 084 - Artifact inventory category listing
+
+- Status: accepted infrastructure improvement.
+- Change: `scripts/inventory_untracked_artifacts.py --list-categories` now prints the known artifact categories without requiring a git repo or inventory collection.
+- Verification: artifact inventory tests passed; helper/profiler/paired-helper slice passed with 47 tests and 2 warnings; real CLI smoke listed 6 sorted categories; py_compile, repo-loop JSON, and diff checks passed.
+- Decision: generated benchmark/profile artifacts remain untracked and untouched.
+
 ## 2026-04-27 083 - Artifact inventory category filter documented
 
 - Status: accepted docs increment.

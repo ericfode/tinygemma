@@ -243,3 +243,23 @@ def test_inventory_untracked_artifacts_filters_by_category_in_json_and_markdown(
   assert "`run.progress.jsonl`" in md_proc.stdout
   assert "`artifact.csv`" not in md_proc.stdout
   assert "`paired-smoke.json`" not in md_proc.stdout
+
+
+def test_inventory_untracked_artifacts_lists_known_categories_without_git_repo(tmp_path: Path):
+  proc = subprocess.run(
+    [sys.executable, str(SCRIPT), "--list-categories"],
+    cwd=tmp_path,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+
+  assert proc.returncode == 0, proc.stderr
+  categories = proc.stdout.splitlines()
+  assert categories == sorted(categories)
+  assert "benchmark-progress-log" in categories
+  assert "benchmark-result-artifact" in categories
+  assert "decode-profiler-artifact" in categories
+  assert "dependency-lockfile" in categories
+  assert "inventoried" not in proc.stdout
+  assert proc.stderr == ""

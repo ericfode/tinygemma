@@ -12,6 +12,14 @@ from pathlib import Path
 from typing import Any
 
 TEXT_REFERENCE_SUFFIXES = {".md", ".json", ".toml", ".txt", ".rst"}
+ARTIFACT_CATEGORIES = (
+  "benchmark-progress-log",
+  "benchmark-result-artifact",
+  "decode-profiler-artifact",
+  "dependency-lockfile",
+  "other-untracked",
+  "paired-helper-smoke",
+)
 
 
 def git_lines(args: list[str], *, cwd: Path) -> list[str]:
@@ -200,8 +208,13 @@ def main(argv: list[str] | None = None) -> int:
     default=[],
     help="Restrict the inventory to one artifact category. May be repeated.",
   )
+  parser.add_argument("--list-categories", action="store_true", help="Print known artifact categories and exit.")
   parser.add_argument("--timestamp", default=default_timestamp())
   args = parser.parse_args(argv)
+
+  if args.list_categories:
+    print("\n".join(sorted(ARTIFACT_CATEGORIES)))
+    return 0
 
   cwd = Path.cwd()
   rows = collect_inventory(cwd=cwd)
