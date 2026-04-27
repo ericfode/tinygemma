@@ -1,5 +1,16 @@
 # Evolution Log
 
+## 2026-04-27 100 - Head-first KV reshape scope review
+
+- Status: accepted evo frontier plus negative scope review; runtime change remains in evo, not merged to main.
+- Accepted child: `exp_0091` from `exp_0082` changed the one-token decode K/V projection layout for the sliding shared-source cache-write producer to return `(batch, kv_heads, query_len, head_dim)` directly, avoiding the legacy post-projection transpose before cache write. `evo run exp_0091` committed at `72.8749` tok/s versus `exp_0082` at `66.3476` (`+6.5273`, `+9.84%`), with `_init_gate`, `metal_smoke`, `cli_help`, and `e2b_int8_metal_hash16` all passing.
+- Main support work: commit `6d4bb0f` updated `scripts/profile_decode_jit.py` so the profiler-only fused-int8 KV sidecar forwards `head_first_single_token` and preserves wrapper `*args`/`**kwargs`; `tests/test_profile_decode_jit.py` pins that head-first sidecar behavior. This is instrumentation/test support only.
+- Follow-up profile: `benchmarks/gemma4-metal-decode-graph-exp0091-head-first-kv-layer13-kv-subphase-profile-512.json` and `.csv` were generated from the accepted frontier. Comparable post-graph elapsed estimate dropped from `15.5166 ms` to `14.1998 ms`; layer-13 `kv_head_reshape` attribution remains structurally large at `377` sources / `~5.967 ms`, with `store` at `228` / `~3.588 ms`.
+- Rejected widening `exp_0092`: extending head-first K/V projection to full-attention shared-source producers scored `72.6278` (`-0.2471` vs `exp_0091`) with all gates passing. Decision: do not apply the layout to full-attention shared producers.
+- Rejected widening `exp_0093`: using head-first K/V projection for all sliding decode producers scored `72.7641` (`-0.1108` vs `exp_0091`) with all gates passing. RED coverage first failed for local sliding producers, then the relevant suite passed (`75 passed, 1 skipped, 2 warnings`) before evo measurement. Decision: do not broaden beyond the accepted layer-13 sliding shared-source producer.
+- Artifact: `docs/plans/2026-04-27-exp0091-head-first-kv-scope-review.md` records the frontier, negative children, exact scores, and next direction.
+- Next: keep `exp_0091` as the frontier. Avoid more head-first scope-broadening children; refine profiler attribution inside remaining `kv_head_reshape`/`store` surfaces or test only a different narrowly justified layer-13 producer/cache-write graph change.
+
 ## 2026-04-27 099 - Measurement pivot layer-13 KV subphase profiling
 
 - Status: accepted measurement-first profiler instrumentation increment.

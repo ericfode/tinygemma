@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "exp0082-measurement-pivot-layer13-kv-subphase-profile-099",
+  "current_checkpoint": "exp0091-head-first-kv-reshape-scope-review-100",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -786,6 +786,29 @@
         "git diff --check clean"
       ],
       "decision": "Use the new artifact before further throughput children. Layer-13 shared-source cache-write attribution now splits into kv_projection group 408 sources / ~7.077 ms, store 228 sources / ~3.951 ms, rmsnorm_rope 18 sources / ~0.305 ms, rhs_pack 1 source / ~0.011 ms. Inside kv_projection, kv_head_reshape dominates at 377 sources / ~6.555 ms; kv_scale_cast is 29 sources / ~0.499 ms; fused_int8_matmul itself is only 2 sources / ~0.022 ms. Next runtime work should target reshape/source-count/layout effects, not the fused int8 matmul kernel directly."
+    },
+    {
+      "id": "exp0091-head-first-kv-reshape-scope-review-100",
+      "status": "accepted-evo-runtime-frontier-negative-scope-review",
+      "completed_at": "2026-04-27T10:34:30-0700",
+      "summary": "Executed the next non-boundary layer-13 KV reshape surface increment: accepted exp_0091's narrow head-first single-token K/V projection for the sliding shared-source cache-write producer, then rejected broader full-attention and all-sliding scope widenings as clean score regressions.",
+      "artifacts": [
+        "docs/plans/2026-04-27-exp0091-head-first-kv-scope-review.md",
+        "benchmarks/gemma4-metal-decode-graph-exp0091-head-first-kv-layer13-kv-subphase-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-exp0091-head-first-kv-layer13-kv-subphase-profile-512.csv",
+        ".evo/project.md (local ignored evo state)",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ],
+      "verification": [
+        "evo status inspected: best=exp_0091 score=72.8749, committed, no active/evaluated/failed nodes after discarding exp_0093",
+        "exp_0091 inherited gates passed: _init_gate, metal_smoke, cli_help, e2b_int8_metal_hash16",
+        "exp_0091 profile artifacts generated from the accepted frontier; comparable post-graph elapsed estimate dropped from 15.5166 ms to 14.1998 ms",
+        "exp_0092 measured 72.6278 vs exp_0091 72.8749 with gates passing, then was annotated/discarded as full-attention scope regression",
+        "exp_0093 red/green coverage passed before measurement: local sliding head-first projection test plus tests/test_tinygrad_gemma.py and tests/test_profile_decode_jit.py (75 passed, 1 skipped, 2 warnings)",
+        "exp_0093 measured 72.7641 vs exp_0091 72.8749 with gates passing, then was annotated/discarded as all-sliding scope regression"
+      ],
+      "decision": "Keep exp_0091 as the frontier. Do not broaden the head-first K/V projection layout beyond the accepted sliding shared-source producer under the current 128/20 short-floor metric. Next work should refine attribution inside the remaining kv_head_reshape/store surfaces or test a different narrow layer-13 producer/cache-write graph change rather than more layout-scope widening."
     }
   ],
   "gates": [
@@ -793,14 +816,14 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "measurement-first-profile-instrumentation-after-boundary-search",
+  "next_target": "exp0091-layer13-kv-reshape-store-attribution-or-narrow-graph-change",
   "next_target_plan": [
-    "Stop current model.py boundary-placement throughput search; keep exp_0082 as frontier at 66.3476.",
-    "Build measurement-first profiler instrumentation that splits the layer-13 kv_projection attribution bucket into matmul, scale/cast, chunk/split, reshape, and any remaining norm/RoPE subphases without changing runtime behavior.",
-    "Alternatively initialize a separate profile/source-count evo run with a lower-is-better profile metric and a Goodhart gate preserving E2B hash/JIT/fallback invariants.",
-    "Do not spawn more exp_0082 throughput children that merely add/remove/shift realization cutpoints without new profiler evidence."
+    "Do not repeat exp_0092/exp_0093-style head-first KV scope broadening; both preserved correctness and regressed score.",
+    "If doing instrumentation, split remaining exp_0091 layer-13 kv_head_reshape/store attribution into view-root, transpose/reshape, assignment, and actual producer/store costs without changing runtime behavior.",
+    "If doing runtime, only test a narrowly justified layer-13 shared-source producer/cache-write graph change with focused red coverage and inherited E2B hash/JIT/fallback gates.",
+    "Treat exp_0091 score 72.8749 as the short-floor frontier; retain candidates only if they beat or materially match it with graph/source-count evidence."
   ],
-  "updated_at": "2026-04-27T08:44:50-0700",
+  "updated_at": "2026-04-27T10:34:30-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1540,6 +1563,6 @@
     }
   ],
   "active_increment": null,
-  "next": "Plan the next non-boundary runtime/profile increment from the layer-13 kv_subphase evidence; avoid more realization-boundary throughput children until a concrete non-rejected surface is identified.",
-  "last_updated": "2026-04-27T09:19:26-0700"
+  "next": "Keep exp_0091 as the frontier; avoid more head-first KV scope-broadening children. Next increment should refine profiler attribution inside remaining kv_head_reshape/store surfaces or test a different narrow layer-13 producer/cache-write graph change.",
+  "last_updated": "2026-04-27T10:34:30-0700"
 }
