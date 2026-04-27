@@ -45,3 +45,26 @@ def test_inventory_untracked_artifacts_reports_references_without_mutating_repo(
   assert "?? artifact.csv" in status
   assert "?? orphan.progress.jsonl" in status
   assert "?? uv.lock" in status
+
+
+def test_inventory_untracked_artifacts_stdout_mode_is_pure_markdown(tmp_path: Path):
+  repo = tmp_path / "repo"
+  repo.mkdir()
+  run_git(repo, "init")
+  (repo / "tracked.md").write_text("tracked\n")
+  run_git(repo, "add", "tracked.md")
+  (repo / "artifact.csv").write_text("score\n1\n")
+
+  proc = subprocess.run(
+    [sys.executable, str(SCRIPT), "--timestamp", "2026-04-27T03:21:00-0700"],
+    cwd=repo,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+
+  assert proc.returncode == 0, proc.stderr
+  assert proc.stdout.startswith("# Untracked Artifact Inventory\n")
+  assert "`artifact.csv`" in proc.stdout
+  assert "inventoried" not in proc.stdout
+  assert "inventoried 1 untracked path(s)" in proc.stderr

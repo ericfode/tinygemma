@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -163,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     args.output.write_text(markdown)
   else:
     print(markdown, end="")
-  print(f"inventoried {len(rows)} untracked path(s)")
+  print(f"inventoried {len(rows)} untracked path(s)", file=sys.stderr)
   return 0
 
 

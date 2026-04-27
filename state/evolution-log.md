@@ -1,5 +1,14 @@
 # Evolution Log
 
+## 2026-04-27 074 - Artifact inventory stdout contract
+
+- Status: accepted infrastructure hardening.
+- Change: `scripts/inventory_untracked_artifacts.py` now keeps stdout as pure generated markdown and prints the human `inventoried N untracked path(s)` summary to stderr.
+- Added regression coverage for stdout-mode stream purity in `tests/test_artifact_inventory.py`.
+- Fixed the implementation import required for stderr printing.
+- Verification: artifact inventory tests passed; stdout/stderr smoke confirmed stream separation; repo-loop JSON parsed; `git diff --check` passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 073 - Artifact inventory helper documented
 
 - Status: accepted docs increment.
