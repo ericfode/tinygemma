@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "exp0078-dense-frontier-profile-and-briefs-095",
+  "current_checkpoint": "exp0082-round096-frontier-and-briefs",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -702,6 +702,28 @@
         "profile_decode_jit.py on exp_0078 context_length=512 JIT=1 completed with source attribution complete: 1012/1012 attributed, 6 MetalGraph batches, 15.7192915212363 ms"
       ],
       "decision": "Continue from exp_0078 with only narrow additive cutpoint or semantics-identical guard probes; avoid final-hidden narrowing, broad bookkeeping rewrites, cache geometry, K/V projection internals, raw Metal runners, and layer-14 final after-cuts."
+    },
+    {
+      "id": "exp0082-round096-frontier-and-briefs",
+      "completed_at": "2026-04-27T07:57:39-0700",
+      "status": "accepted-evo-frontier-review-briefs",
+      "summary": "Cross-cut the exp_0078 worker round, accepted exp_0082 as the new short-score frontier at 66.3476, profile-confirmed its source/graph shape, and wrote the next four narrow composition/gap briefs.",
+      "artifacts": [
+        "docs/plans/2026-04-27-exp0082-round096-review-and-next-briefs.md",
+        "benchmarks/gemma4-metal-decode-graph-exp0082-earliest-frontier-512.json",
+        "benchmarks/gemma4-metal-decode-graph-exp0082-earliest-frontier-512.csv",
+        ".evo/project.md (local ignored evo state)",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ],
+      "verification": [
+        "evo status/frontier/path/gates inspected after workers; best=exp_0082 score=66.3476",
+        "outcome JSON aggregation for exp_0079, exp_0080, exp_0081, exp_0082 found all committed and no gate failures",
+        "mandatory read-only scan subagent completed for exp_0079..exp_0082",
+        "direct E2B config/model instantiation reported exp_0082 decode_realize_cut_idxs=[0,1,2,3,4,6,8,9,11,12]",
+        "profile_decode_jit.py on exp_0082 context_length=512 JIT=1 completed with source attribution complete: 950/950 attributed, 5 MetalGraph batches, 15.071791713126004 ms"
+      ],
+      "decision": "Continue from exp_0082. Next worker round: compose layer-13 boundary, compose layer-7 boundary, probe layer-5 gap, probe layer-10 gap; avoid layer14 after-cut, K/V internals, cache geometry, final-hidden narrowing, and bookkeeping rewrites."
     }
   ],
   "gates": [

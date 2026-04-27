@@ -1709,3 +1709,45 @@ Artifacts:
 - `.evo/project.md` (local ignored evo state)
 - `configs/repo-loop-state.json`
 - `state/evolution-log.md`
+
+## 2026-04-27 07:57:39 PDT - exp0082-round096-frontier-and-briefs
+
+Accepted evo worker/review state under the short-floor-first, graph-size-weighted policy. All runtime branches from `exp_0078` committed, and the frontier moved from `62.4154` to `66.3476` at `exp_0082`.
+
+Verification:
+- `evo status`: `experiments=83`, `committed=25`, `evaluated=0`, `discarded=58`, `failed=0`, `active=0`, `best=66.3476`.
+- `evo frontier`: rank-1 frontier is `exp_0082` at `66.3476`.
+- `evo path exp_0082`: `exp_0078 -> exp_0080 -> exp_0082` after the prior dense path.
+- Round workers:
+  - `exp_0079`: layer-13 adjacent shared-source sliding output boundary, score `63.9473`, committed.
+  - `exp_0080`: layer-1 earliest local boundary, score `64.5288`, committed.
+  - `exp_0081`: layer-7 second-tranche local-gap boundary, score `63.7228`, committed.
+  - `exp_0082`: layer-0 earliest local boundary on top of `exp_0080`, score `66.3476`, committed.
+- Structural aggregation of outcome JSON files: no gate failures, no evaluated/failed nodes, all worker branches improved relative to their parents.
+- Direct E2B config/model instantiation reports cutpoint sets:
+  - `exp_0079`: `[2,3,4,6,8,9,11,12,13]`
+  - `exp_0080`: `[1,2,3,4,6,8,9,11,12]`
+  - `exp_0081`: `[2,3,4,6,7,8,9,11,12]`
+  - `exp_0082`: `[0,1,2,3,4,6,8,9,11,12]`
+- Mandatory read-only scan subagent over `exp_0079..exp_0082` confirmed positive committed candidates and invariant preservation.
+- `profile_decode_jit.py` on `exp_0082`, `context_length=512`, `JIT=1`, wrote `benchmarks/gemma4-metal-decode-graph-exp0082-earliest-frontier-512.json` and `.csv`.
+- `exp_0082` profile source attribution is complete: `original_exec_count=950`, `attributed_source_count=950`, `source_count_mismatches=0`, `unattributed_tail_count=0`, `unparsed_graph_batches=0`, post-graph execution `5` MetalGraph batches, profiled elapsed `15.071791713126004 ms`.
+- Comparison: `exp_0078` profile was `1012` sources / `6` graph batches / `15.7192915212363 ms`, so the new earliest-frontier cuts reduce global captured source count and graph batches.
+- Dominant residual bucket remains `attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention`: `651` source items and apportioned `11.022088929398997 ms`; phase summary is `kv_projection=644` source items / `10.894385540742658 ms` and `store=7` source items / `0.12770338865633907 ms`.
+
+Decision:
+- Continue from `exp_0082`; stall counter resets again.
+- Next worker round should use `docs/plans/2026-04-27-exp0082-round096-review-and-next-briefs.md`:
+  1. compose known-positive layer-13 boundary with `exp_0082`,
+  2. compose known-positive layer-7 boundary with `exp_0082`,
+  3. probe remaining layer-5 first-post-full local gap,
+  4. probe remaining layer-10 second-post-full local gap.
+- Continue avoiding layer-14 after-cut, K/V internals, cache geometry, raw Metal runners, final-hidden narrowing, cutpoint removal, and cursor/frozenset/localized-lookup guard rewrites.
+
+Artifacts:
+- `docs/plans/2026-04-27-exp0082-round096-review-and-next-briefs.md`
+- `benchmarks/gemma4-metal-decode-graph-exp0082-earliest-frontier-512.json`
+- `benchmarks/gemma4-metal-decode-graph-exp0082-earliest-frontier-512.csv`
+- `.evo/project.md` (local ignored evo state)
+- `configs/repo-loop-state.json`
+- `state/evolution-log.md`
