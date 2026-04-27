@@ -883,7 +883,13 @@ def kv_projection_phase_sidecar_patch():
       return tuple(tensor.realize() for tensor in value)
     return value.realize()
 
-  def fused_int8_project_kv_with_subphase_sidecars(self, hidden_states, hidden_shape):
+  def fused_int8_project_kv_with_subphase_sidecars(
+    self,
+    hidden_states,
+    hidden_shape,
+    *,
+    head_first_single_token: bool = False,
+  ):
     # Profiler-only mirror of GemmaAttention._project_kv's fused-int8 branch.
     # Keep this deliberately small: runtime behavior belongs in model.py; this
     # wrapper only attaches measurement labels to otherwise identical tensor ops.
@@ -898,22 +904,28 @@ def kv_projection_phase_sidecar_patch():
       raw_k, raw_v = kv.chunk(2, dim=-1)
       raw_k, raw_v = realize_phase_value((raw_k, raw_v))
     with sidecar_scope(attention_phase_category(self, "kv_head_reshape")):
-      result = (
-        raw_k.reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim),
-        raw_v.reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim),
-      )
+      if head_first_single_token:
+        result = (
+          raw_k.reshape(hidden_shape[0], self.num_key_value_heads, hidden_shape[1], self.head_dim),
+          raw_v.reshape(hidden_shape[0], self.num_key_value_heads, hidden_shape[1], self.head_dim),
+        )
+      else:
+        result = (
+          raw_k.reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim),
+          raw_v.reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim),
+        )
       return realize_phase_value(result)
 
   @wraps(original)
-  def wrapped(self, hidden_states, hidden_shape):
+  def wrapped(self, hidden_states, hidden_shape, *args, **kwargs):
     category = attention_phase_category(self, "kv_projection")
     if category is None:
-      result = original(self, hidden_states, hidden_shape)
+      result = original(self, hidden_states, hidden_shape, *args, **kwargs)
     elif self._can_use_fused_int8_kv():
-      result = fused_int8_project_kv_with_subphase_sidecars(self, hidden_states, hidden_shape)
+      result = fused_int8_project_kv_with_subphase_sidecars(self, hidden_states, hidden_shape, *args, **kwargs)
     else:
       with sidecar_scope(category):
-        result = original(self, hidden_states, hidden_shape)
+        result = original(self, hidden_states, hidden_shape, *args, **kwargs)
         result = realize_phase_value(result)
     context = current_attention_context()
     if context is not None and context.get("attention") is self:

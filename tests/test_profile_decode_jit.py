@@ -617,6 +617,40 @@ def test_profile_kv_projection_phase_sidecar_patch_splits_fused_int8_projection_
   assert events.count(("reshape", head_reshape)) == 2
 
 
+def test_profile_kv_projection_phase_sidecar_patch_supports_head_first_single_token_projection():
+  events = []
+  hidden = EventTensor(events, shape=(1, 1, 4), ndim=3, dtype="bfloat16")
+  weight = EventTensor(events, shape=(8, 4), ndim=2, dtype="int8")
+  scale = EventTensor(events, shape=(8,), ndim=1, dtype="float32")
+
+  class FakeFusedAttention:
+    layer_idx = 13
+    layer_type = "sliding_attention"
+    is_kv_shared_layer = False
+    store_full_length_kv = True
+    num_key_value_heads = 2
+    head_dim = 2
+
+    def _can_use_fused_int8_kv(self):
+      return True
+
+    def _fused_int8_kv_weight_scale(self):
+      return weight, scale
+
+  head_reshape = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_head_reshape")
+
+  with profile.kv_projection_phase_sidecar_patch():
+    result = profile.GemmaAttention._project_kv(
+      FakeFusedAttention(),
+      hidden,
+      (1, 1, -1, 2),
+      head_first_single_token=True,
+    )
+
+  assert tuple(tensor.shape for tensor in result) == ((1, 2, 1, 2), (1, 2, 1, 2))
+  assert events.count(("reshape", head_reshape)) == 2
+
+
 def test_profile_source_attribution_uses_explicit_phase_targets_after_scope_reset():
   local_parent = profile.cache_write_sidecar_category("packed", "local", 12, "sliding_attention")
   local_phase = profile.cache_write_sidecar_category("packed", "local", 12, "sliding_attention", phase="kv_projection")
