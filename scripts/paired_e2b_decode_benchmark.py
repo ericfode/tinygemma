@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -42,8 +43,8 @@ def parse_result(stdout: str, *, label: str) -> dict[str, Any]:
   except json.JSONDecodeError as exc:
     raise SystemExit(f"{label} benchmark stdout was not valid JSON: {exc}\nstdout:\n{text}") from exc
   score = payload.get("score")
-  if not isinstance(score, int | float):
-    raise SystemExit(f"{label} benchmark JSON must contain numeric 'score'; got {score!r}")
+  if not isinstance(score, int | float) or not math.isfinite(score):
+    raise SystemExit(f"{label} benchmark JSON must contain finite numeric 'score'; got {score!r}")
   return payload
 
 
@@ -160,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     cwd=cwd,
     min_delta=args.min_delta,
   )
-  text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+  text = json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
   if args.out is not None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text)

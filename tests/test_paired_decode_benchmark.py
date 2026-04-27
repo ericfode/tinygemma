@@ -144,3 +144,41 @@ def test_paired_decode_benchmark_min_delta_fails_after_writing_payload(tmp_path:
   assert data["min_delta"] == 0.0
   assert data["passed_min_delta"] is False
   assert "below --min-delta" in proc.stderr
+
+
+def test_paired_decode_benchmark_rejects_nonfinite_scores(tmp_path: Path):
+  fake_benchmark = tmp_path / "fake_benchmark_nan.py"
+  fake_benchmark.write_text(
+    """
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--target', required=True)
+parser.parse_args()
+print('{"score": NaN}')
+""".strip()
+    + "\n"
+  )
+  baseline = tmp_path / "baseline_model.py"
+  candidate = tmp_path / "candidate_model.py"
+  baseline.write_text("# baseline\n")
+  candidate.write_text("# candidate\n")
+
+  proc = subprocess.run(
+    [
+      sys.executable,
+      str(SCRIPT),
+      "--benchmark-script",
+      str(fake_benchmark),
+      "--baseline-target",
+      str(baseline),
+      "--candidate-target",
+      str(candidate),
+    ],
+    cwd=ROOT,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+
+  assert proc.returncode == 1
+  assert "finite" in proc.stderr

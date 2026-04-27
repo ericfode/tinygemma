@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 066 - Paired helper JSON contract tightened
+
+- Status: accepted infrastructure hardening.
+- Change: `scripts/paired_e2b_decode_benchmark.py` now rejects non-finite numeric scores (`NaN`, `Infinity`, `-Infinity`) and serializes output with `allow_nan=False`.
+- Test: fake benchmark emitting `{"score": NaN}` now exits nonzero with a finite-score diagnostic.
+- Verification: full suite passed (`88 passed, 2 warnings`); CLI help, research METAL smoke, helper py_compile/help, and `git diff --check` passed.
+
 ## 2026-04-27 065 - Paired helper min-delta gate accepted
 
 - Status: accepted infrastructure.

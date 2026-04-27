@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "paired-helper-min-delta-gate-landed-065",
+  "current_checkpoint": "paired-helper-json-contract-tightened-066",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "paired-helper-json-contract-tightening-066",
+  "next_target": "paired-helper-contract-doc-refresh-067",
   "next_target_plan": "Return to graphable Tensor/tinygrad program surfaces after pruning the raw custom Runner branch. Refresh evo scratchpad/frontier evidence and the profiler-backed hot-path summary, then pick one narrow model.py or profiler-supported graphable increment. Do not re-open raw metal_int8 custom Runner integration unless tinygrad exposes a first-class graphable custom-call or CompiledRunner-compatible surface.",
-  "updated_at": "2026-04-27T03:02:16-0700",
+  "updated_at": "2026-04-27T03:05:20-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -948,6 +948,25 @@
         "git diff --check: passed"
       ],
       "decision": "Accepted infrastructure gate; no runtime score claim."
+    },
+    {
+      "id": "paired-helper-json-contract-tightening-066",
+      "completed_at": "2026-04-27T03:05:20-0700",
+      "status": "accepted-infrastructure",
+      "summary": "Rejected non-finite paired-helper benchmark scores and serialized output with allow_nan=False.",
+      "artifacts": [
+        "scripts/paired_e2b_decode_benchmark.py",
+        "tests/test_paired_decode_benchmark.py",
+        "docs/plans/2026-04-27-paired-helper-json-contract-tightening.md"
+      ],
+      "verification": [
+        ".venv/bin/python -m pytest -q: 88 passed, 2 warnings",
+        "CLI help: passed",
+        "research METAL smoke: passed; rollout_jit_count=3; decode_fallback=False",
+        "helper py_compile/help: passed",
+        "git diff --check: passed"
+      ],
+      "decision": "Accepted infrastructure hardening; no runtime score claim."
     }
   ]
 }
