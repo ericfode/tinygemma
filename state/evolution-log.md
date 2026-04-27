@@ -1,5 +1,16 @@
 # Evolution Log
 
+## 2026-04-27 055 - Local layer12 phase attribution scope fix accepted
+
+- Status: accepted profiler fix; no runtime probe launched.
+- Decision: the previous local-layer12 phase artifact was not safe enough to justify a runtime experiment because source attribution/summarization ran after the phase-target scope reset.
+- Change: added `attribute_profile_execution_sources(execution_items, rows, phase_targets)` and routed source attribution plus original-capture phase summary through the explicit requested target scope.
+- Test: `test_profile_source_attribution_uses_explicit_phase_targets_after_scope_reset` failed before the helper existed, then passed.
+- Corrected artifact: `benchmarks/gemma4-metal-decode-graph-local-layer12-phase-profile-700-scope-fixed.json` preserved 7 MetalGraph batches and 0 raw gate/up runners.
+- Corrected signal: local-layer12 parent is 256 source items / ~3.255 ms (~6.45% elapsed); `kv_projection` is 250 source items / ~3.178 ms (~6.30%), not the previous 885-source / ~14 ms transitive closure.
+- Verification: profiler test module passed (`34 passed, 2 warnings`); full suite passed (`83 passed, 2 warnings`); METAL smoke passed with `rollout_jit_count=3`, `decode_fallback=False`.
+- Next target: add explicit overlap reporting / compare exact neighboring targets before considering another runtime model.py experiment.
+
 ## 2026-04-27 054 - Profile phase target generalization accepted
 
 - Status: accepted.

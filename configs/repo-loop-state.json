@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "profile-phase-target-generalization-accepted-054",
+  "current_checkpoint": "local-layer12-phase-attribution-scope-fixed-055",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "local-layer12-phase-attribution-runtime-probe-055",
+  "next_target": "phase-overlap-reporting-and-next-runtime-surface-056",
   "next_target_plan": "Return to graphable Tensor/tinygrad program surfaces after pruning the raw custom Runner branch. Refresh evo scratchpad/frontier evidence and the profiler-backed hot-path summary, then pick one narrow model.py or profiler-supported graphable increment. Do not re-open raw metal_int8 custom Runner integration unless tinygrad exposes a first-class graphable custom-call or CompiledRunner-compatible surface.",
-  "updated_at": "2026-04-27T01:46:59-0700",
+  "updated_at": "2026-04-27T02:01:33-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -751,6 +751,25 @@
         "PYTHONPATH=/Users/ericfode/src/.tinygrad_research:. .venv/bin/python scripts/smoke_metal.py -> rollout_jit_count=3 decode_fallback=False"
       ],
       "decision": "Use exact phase selectors for the next runtime probe; broad selectors are useful for scanning but can smear phase metadata across graph batches."
+    },
+    {
+      "id": "local-layer12-phase-attribution-scope-fix-055",
+      "completed_at": "2026-04-27T02:01:33-0700",
+      "status": "accepted-profiler-fix-no-runtime-probe",
+      "summary": "Converted the planned local-layer12 runtime probe into a prerequisite profiler correctness fix. Source attribution now runs under the explicit requested phase-target scope; corrected local-layer12 signal is 256 sources / ~3.255 ms rather than the stale-scope 885-source transitive closure.",
+      "artifacts": [
+        "docs/plans/2026-04-27-local-layer12-phase-attribution-scope-fix.md",
+        "benchmarks/gemma4-metal-decode-graph-local-layer12-phase-profile-700-scope-fixed.json (untracked local artifact)",
+        "benchmarks/gemma4-metal-decode-graph-local-layer12-phase-profile-700-scope-fixed.csv (untracked local artifact)"
+      ],
+      "verification": [
+        "RED: test_profile_source_attribution_uses_explicit_phase_targets_after_scope_reset failed before helper existed",
+        ".venv/bin/python -m pytest -q tests/test_profile_decode_jit.py -> 34 passed, 2 warnings",
+        ".venv/bin/python -m pytest -q -> 83 passed, 2 warnings",
+        "PYTHONPATH=/Users/ericfode/src/.tinygrad_research:. .venv/bin/python scripts/smoke_metal.py -> rollout_jit_count=3 decode_fallback=False",
+        "Corrected local-layer12 profile: graph_batch_count=7, raw_gate_up_runner_count=0, phase parent source_count=256, kv_projection source_count=250, elapsed_ms\u22483.178"
+      ],
+      "decision": "Do not launch a runtime evo child from the old local-layer12 artifact; the corrected exclusive surface is real but too small and overlaps already rejected K/V projection variants."
     }
   ]
 }

@@ -507,6 +507,27 @@ def test_profile_cache_update_sidecar_patch_splits_layer13_packed_cache_phases()
   assert events[-1] == ("realize", parent)
 
 
+def test_profile_source_attribution_uses_explicit_phase_targets_after_scope_reset():
+  local_parent = profile.cache_write_sidecar_category("packed", "local", 12, "sliding_attention")
+  local_phase = profile.cache_write_sidecar_category("packed", "local", 12, "sliding_attention", phase="kv_projection")
+  shared_parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
+  shared_phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_projection")
+  targets = profile.parse_cache_write_phase_targets(["local-layer12"])
+  execution_items = [
+    FakeItem("graph_batch", FakeGraphProgram([
+      FakeItem(local_parent, ast=FakeAst(FakeUOp("STORE", [FakeMetadata(local_phase, f"repo_uop_sidecar:1::{local_phase}")]))),
+      FakeItem(shared_parent, ast=FakeAst(FakeUOp("STORE", [FakeMetadata(shared_phase, f"repo_uop_sidecar:1::{shared_phase}")]))),
+    ]))
+  ]
+  rows = [{"ordinal": 0, "program_type": "MetalGraph", "display_name": "<batched 2>", "elapsed_ms": 2.0}]
+
+  attribution = profile.attribute_profile_execution_sources(execution_items, rows, targets)
+
+  assert attribution["items"][0]["cache_write_phase_category_counts"] == {local_phase: 1}
+  assert attribution["items"][0]["cache_write_phase_conflict_count"] == 0
+  assert attribution["items"][0]["cache_write_phase_unclassified_count"] == 0
+
+
 def test_graph_batch_attribution_maps_batched_display_to_source_ranges():
   first_batch = [
     FakeItem("attention"),

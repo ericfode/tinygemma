@@ -1129,6 +1129,15 @@ def attribute_execution_source_ranges(execution_items, rows: list[dict[str, Any]
   }
 
 
+def attribute_profile_execution_sources(
+  execution_items,
+  rows: list[dict[str, Any]],
+  phase_targets: tuple[CacheWritePhaseTarget, ...],
+) -> dict[str, Any]:
+  with cache_write_phase_target_scope(phase_targets):
+    return attribute_execution_source_ranges(execution_items, rows)
+
+
 def attach_source_attribution(rows: list[dict[str, Any]], attribution: dict[str, Any]) -> None:
   by_ordinal = {item["ordinal"]: item for item in attribution["items"]}
   for row in rows:
@@ -1509,13 +1518,14 @@ def main() -> None:
       GlobalCounters.reset()
       rows, var_vals, execution_items = run_captured_items(captured, token, Variable("gemma_start_pos_window", sliding_start, max_length - 1).bind(profile_start))
 
-  source_attribution = attribute_execution_source_ranges(execution_items, rows)
+  source_attribution = attribute_profile_execution_sources(execution_items, rows, phase_targets)
   attach_source_attribution(rows, source_attribution)
-  original_source_summary = source_slice_summary([
-    source_item
-    for execution_item in execution_items
-    for source_item in execution_source_items(execution_item)
-  ])
+  with cache_write_phase_target_scope(phase_targets):
+    original_source_summary = source_slice_summary([
+      source_item
+      for execution_item in execution_items
+      for source_item in execution_source_items(execution_item)
+    ])
   original_capture_summary = {
     "exec_count": source_attribution["original_exec_count"],
     "program_type_counts": original_source_summary["program_type_counts"],
