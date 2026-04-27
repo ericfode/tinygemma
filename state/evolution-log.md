@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 068 - Repo-loop state compaction reviewed
+
+- Status: accepted documentation-only increment.
+- Inspection: `configs/repo-loop-state.json` was `66926` bytes, `988` lines, with `21` completed increments.
+- Decision: no structural compaction; append-only evidence remains useful and schema changes would be riskier than the current size.
+- Next target: validate the README paired-helper command shape against existing worktrees.
+
 ## 2026-04-27 067 - Paired helper contract docs refreshed
 
 - Status: accepted documentation-only increment.
