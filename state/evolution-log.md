@@ -1,5 +1,15 @@
 # Evolution Log
 
+## 2026-04-27 - Evo Active Shared-KV View Reuse Rejected
+
+- Objective: execute `evo-frontier-graphable-model-probe-048` from frontier `exp_0005` (`28.6153` default `128/20` score) while avoiding already-rejected K/V rank/view, RMSNorm cache, scaling-guard, and raw-runner surfaces.
+- `exp_0010` tested a narrow `model.py` change: for full-length shared-KV producer layers, store the active `k`/`v` tensors in `shared_kv_states` rather than handing shared consumers the bounded cache entry that was sliced again.
+- Focused behavior coverage: `tests/test_tinygrad_gemma.py::test_shared_kv_consumers_reuse_active_cache_views` first failed on repeated shared-consumer reslicing, then passed after the implementation. The focused safety set also passed `test_preallocated_cache_matches_full_forward_for_gemma4` and `test_rolled_shared_sliding_source_matches_full_forward_after_window`.
+- Verification before evo: `/Users/ericfode/Downloads/tinygrad-gemma/.venv/bin/python -m pytest -q tests/test_tinygrad_gemma.py tests/test_profile_decode_jit.py` passed inside the `exp_0010` worktree.
+- Rejection evidence: `evo run exp_0010` measured default score `28.2824` (`measured_decode_tokens_per_second=28.282413`, `generated_tokens=128`, `rollout_jit_count=127`, `decode_fallback=false`) versus parent `exp_0005` at `28.6153`. All inherited gates passed, including `_init_gate`, `metal_smoke`, `cli_help`, `e2b_int8_metal_hash16`, and `e2b_int8_metal_hash1000_current_floor` (`18.003002 tok/s`), but the calibrated default frontier regressed. `evo discard exp_0010` recorded the rejection.
+- Decision: do not pursue active shared-KV view reuse as a performance optimization under the current benchmark. It is semantically tidy and locally graphable, but the measured hot path is slower; the compiler has, with admirable terseness, declined the paperwork.
+- Next target: `evo-frontier-evidence-refresh-049`. Before another code child, refresh `evo scratchpad`/frontier evidence and avoid the now-rejected graphable micro-edit family: scaling guard, one-token K/V rank flattening, attention-output view elision, RMSNorm scale cache, and active shared-KV reuse. Either find a genuinely new `model.py` surface backed by profile evidence or pivot to the separate `metal_int8.py` research-tinygrad MTLB compatibility target.
+
 ## 2026-04-26 - Metal Int8 Local-Size Survey Rejected
 
 - Objective: execute `metal-int8-kernel-local-size-survey-047` before touching the runtime path. The candidate surface was `tinygrad_gemma/metal_int8.py`, especially the dormant raw rowwise-int8 METAL decode-linear runner and its `local_size` parameter.
