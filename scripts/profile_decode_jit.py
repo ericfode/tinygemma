@@ -1078,6 +1078,41 @@ def source_item_op_signature(item, *, limit: int = 8) -> str:
   return ",".join(f"{op}:{count}" for op, count in op_counts.items())
 
 
+def source_item_has_store_effect(item) -> bool:
+  ast = getattr(item, "ast", None)
+  if ast is None:
+    return False
+  try:
+    return any(is_store_effect_op(getattr(uop, "op", None)) for uop in ast.toposort())
+  except Exception:
+    return False
+
+
+def source_item_effect_kind(item) -> str:
+  return "store_effect" if source_item_has_store_effect(item) else "non_store_effect"
+
+
+def sorted_count_dict(counts: dict[str, int], *, limit: int = 20) -> dict[str, int]:
+  return dict(sorted(((str(key), int(value)) for key, value in counts.items()), key=lambda item: (-item[1], item[0]))[:limit])
+
+
+def source_items_structural_summary(items, *, limit: int = 20) -> dict[str, Any]:
+  source_items = list(items)
+  source_count = len(source_items)
+  store_effect_count = sum(1 for item in source_items if source_item_has_store_effect(item))
+  return {
+    "source_count": source_count,
+    "store_effect_count": store_effect_count,
+    "store_effect_share": store_effect_count / source_count if source_count else 0.0,
+    "effect_kind_counts": count_map((source_item_effect_kind(item) for item in source_items), limit=limit),
+    "program_type_counts": count_map((source_item_program_type(item) for item in source_items), limit=limit),
+    "display_name_counts": count_map((source_item_display_name(item) for item in source_items), limit=limit),
+    "ast_root_counts": count_map((source_item_ast_root(item) for item in source_items), limit=limit),
+    "op_signature_counts": count_map((source_item_op_signature(item) for item in source_items), limit=limit),
+    "category_basis_counts": count_map((source_item_category_basis(item) for item in source_items), limit=limit),
+  }
+
+
 def graph_source_count(row: dict[str, Any]) -> int | None:
   if "Graph" not in row["program_type"]:
     return 1
@@ -1090,6 +1125,7 @@ def source_slice_summary(items) -> dict[str, Any]:
   cache_write_phase_category_counts: dict[str, int] = defaultdict(int)
   cache_write_phase_group_counts: dict[str, int] = defaultdict(int)
   cache_write_phase_parent_category_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+  cache_write_phase_items: dict[str, list[Any]] = defaultdict(list)
   program_type_counts: dict[str, int] = defaultdict(int)
   category_basis_counts: dict[str, int] = defaultdict(int)
   unclassified_items = []
@@ -1108,6 +1144,7 @@ def source_slice_summary(items) -> dict[str, Any]:
         cache_write_phase_category_counts[phase_category] += 1
         cache_write_phase_group_counts[cache_write_phase_group(phase_category) or "unknown"] += 1
         cache_write_phase_parent_category_counts[phase_category][category] += 1
+        cache_write_phase_items[phase_category].append(item)
         if phase_conflict:
           cache_write_phase_conflict_count += 1
     if category == "other":
@@ -1120,6 +1157,10 @@ def source_slice_summary(items) -> dict[str, Any]:
     "cache_write_phase_parent_category_counts": {
       phase_category: dict(sorted(parent_counts.items()))
       for phase_category, parent_counts in sorted(cache_write_phase_parent_category_counts.items())
+    },
+    "cache_write_phase_structural_summary": {
+      phase_category: source_items_structural_summary(phase_items)
+      for phase_category, phase_items in sorted(cache_write_phase_items.items())
     },
     "cache_write_phase_conflict_count": cache_write_phase_conflict_count,
     "cache_write_phase_unclassified_count": cache_write_phase_unclassified_count,
@@ -1234,6 +1275,7 @@ def attach_source_attribution(rows: list[dict[str, Any]], attribution: dict[str,
     row["cache_write_phase_category_counts"] = item["cache_write_phase_category_counts"]
     row["cache_write_phase_group_counts"] = item["cache_write_phase_group_counts"]
     row["cache_write_phase_parent_category_counts"] = item["cache_write_phase_parent_category_counts"]
+    row["cache_write_phase_structural_summary"] = item["cache_write_phase_structural_summary"]
     row["cache_write_phase_conflict_count"] = item["cache_write_phase_conflict_count"]
     row["cache_write_phase_unclassified_count"] = item["cache_write_phase_unclassified_count"]
     row["source_category_basis"] = item["category_basis"]
@@ -1459,12 +1501,45 @@ def summarize_source_attribution(attribution: dict[str, Any]) -> dict[str, Any]:
   }
 
 
+STRUCTURAL_SUMMARY_COUNT_FIELDS = (
+  "effect_kind_counts",
+  "program_type_counts",
+  "display_name_counts",
+  "ast_root_counts",
+  "op_signature_counts",
+  "category_basis_counts",
+)
+
+
+def merge_phase_structural_summary(target: dict[str, Any], structural: dict[str, Any]) -> None:
+  target["source_count"] += int(structural.get("source_count", 0))
+  target["store_effect_count"] += int(structural.get("store_effect_count", 0))
+  for field in STRUCTURAL_SUMMARY_COUNT_FIELDS:
+    field_counts = target.setdefault(field, defaultdict(int))
+    for key, count in structural.get(field, {}).items():
+      field_counts[str(key)] += int(count)
+
+
+def finalized_phase_structural_summary(target: dict[str, Any]) -> dict[str, Any]:
+  source_count = int(target.get("source_count", 0))
+  store_effect_count = int(target.get("store_effect_count", 0))
+  finalized = {
+    "source_count": source_count,
+    "store_effect_count": store_effect_count,
+    "store_effect_share": store_effect_count / source_count if source_count else 0.0,
+  }
+  for field in STRUCTURAL_SUMMARY_COUNT_FIELDS:
+    finalized[field] = sorted_count_dict(target.get(field, {}))
+  return finalized
+
+
 def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict[str, Any]:
   by_category: dict[str, dict[str, Any]] = {}
   by_parent: dict[str, dict[str, Any]] = {}
   by_phase: dict[str, dict[str, Any]] = {}
   by_phase_group: dict[str, dict[str, Any]] = {}
   by_phase_parent_category: dict[str, dict[str, dict[str, Any]]] = {}
+  by_phase_structure: dict[str, dict[str, Any]] = {}
   total_elapsed = sum(float(item["elapsed_ms"]) for item in attribution["items"])
   phase_source_count = 0
   conflict_source_count = 0
@@ -1495,6 +1570,11 @@ def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict
       phase_group_entry = by_phase_group.setdefault(phase_group, {"source_count": 0, "elapsed_ms": 0.0})
       phase_group_entry["source_count"] += count_int
       phase_group_entry["elapsed_ms"] += category_elapsed
+    for phase_category, structural in item.get("cache_write_phase_structural_summary", {}).items():
+      merge_phase_structural_summary(
+        by_phase_structure.setdefault(phase_category, {"source_count": 0, "store_effect_count": 0}),
+        structural,
+      )
     for phase_category, parent_counts in item.get("cache_write_phase_parent_category_counts", {}).items():
       phase_parent_entry = by_phase_parent_category.setdefault(phase_category, {})
       for parent_category, count in parent_counts.items():
@@ -1522,6 +1602,10 @@ def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict
     "by_phase_parent_category": {
       phase_category: dict(sorted(parent_counts.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True))
       for phase_category, parent_counts in sorted(by_phase_parent_category.items(), key=lambda item: sum(v["elapsed_ms"] for v in item[1].values()), reverse=True)
+    },
+    "by_phase_structure": {
+      phase_category: finalized_phase_structural_summary(structural)
+      for phase_category, structural in sorted(by_phase_structure.items(), key=lambda item: (-int(item[1].get("source_count", 0)), item[0]))
     },
   }
 
@@ -1642,6 +1726,7 @@ def main() -> None:
     "cache_write_phase_category_counts": original_source_summary["cache_write_phase_category_counts"],
     "cache_write_phase_group_counts": original_source_summary["cache_write_phase_group_counts"],
     "cache_write_phase_parent_category_counts": original_source_summary["cache_write_phase_parent_category_counts"],
+    "cache_write_phase_structural_summary": original_source_summary["cache_write_phase_structural_summary"],
     "cache_write_phase_conflict_count": original_source_summary["cache_write_phase_conflict_count"],
     "cache_write_phase_unclassified_count": original_source_summary["cache_write_phase_unclassified_count"],
     "category_basis_counts": original_source_summary["category_basis_counts"],

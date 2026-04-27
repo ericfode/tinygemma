@@ -1,5 +1,17 @@
 # Evolution Log
 
+## 2026-04-27 101 - exp0091 KV structural attribution
+
+- Status: accepted profiler instrumentation increment; no runtime frontier change.
+- Change: `scripts/profile_decode_jit.py` now carries cache-write phase structural/effect summaries into `original_capture`, per-row source summaries, and `source_attributed_cache_write_phase_summary.by_phase_structure`. The summary records source counts, category bases, program/root types, display-name counts, op-signature counts, effect-kind counts, and `store_effect_count` / `store_effect_share`.
+- Regression coverage: `tests/test_profile_decode_jit.py::test_profile_phase_summary_reports_structural_store_effect_counts` pins both original-capture and elapsed rollup structural summaries. Full profiler slice passed (`40 passed, 2 warnings`).
+- Cheap gates: `.venv/bin/tinygrad-gemma --help` passed; `PYTHONPATH=/Users/ericfode/src/.tinygrad_research:. .venv/bin/python scripts/smoke_metal.py` passed on METAL with `rollout_jit_count=3` and `decode_fallback=False`; `git diff --check` passed.
+- Real frontier artifact: generated `benchmarks/gemma4-metal-decode-graph-exp0091-head-first-kv-layer13-kv-structural-profile-512.json` and `.csv` with the `exp_0091` worktree first on `PYTHONPATH`, `context_length=512`, `jit_mode=1`, `--phase-cutpoints`, and `--phase-target layer13`. Source attribution is complete (`954/954` sources), with `5` MetalGraph batches and `14.400458 ms` post-graph elapsed.
+- Measurement result: layer-13 phase attribution remains structurally dominated by `kv_head_reshape` (`377` sources / `6.043306 ms`) and `store` (`228` sources / `3.636602 ms`), with smaller `kv_scale_cast` (`29` / `0.460615 ms`), `rmsnorm_rope` (`18` / `0.276917 ms`), `kv_fused_int8_matmul` (`2` / `0.020110 ms`), and `rhs_pack` (`1` / `0.010055 ms`).
+- Important negative evidence: every phase currently reports `store_effect_share=1.0` because lowered source roots are dependency-closed sink/store-effect kernels. A naive store-effect split will not isolate literal store cost; the next useful split is by `display_name_counts` / `op_signature_counts` motifs inside `kv_head_reshape` and `store`.
+- Artifact: `docs/plans/2026-04-27-exp0091-kv-structural-attribution.md` records the command, artifact paths, verification, and next refinement.
+- Next: keep `exp_0091` as frontier. Use the new structural motif fields to isolate the dominant `kv_head_reshape`/`store` families before proposing a new non-boundary runtime child; do not repeat `exp_0092`/`exp_0093` head-first scope broadening.
+
 ## 2026-04-27 100 - Head-first KV reshape scope review
 
 - Status: accepted evo frontier plus negative scope review; runtime change remains in evo, not merged to main.

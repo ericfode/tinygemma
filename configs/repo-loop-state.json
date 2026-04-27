@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "exp0091-head-first-kv-reshape-scope-review-100",
+  "current_checkpoint": "exp0091-kv-structural-attribution-101",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -809,6 +809,21 @@
         "exp_0093 measured 72.7641 vs exp_0091 72.8749 with gates passing, then was annotated/discarded as all-sliding scope regression"
       ],
       "decision": "Keep exp_0091 as the frontier. Do not broaden the head-first K/V projection layout beyond the accepted sliding shared-source producer under the current 128/20 short-floor metric. Next work should refine attribution inside the remaining kv_head_reshape/store surfaces or test a different narrow layer-13 producer/cache-write graph change rather than more layout-scope widening."
+    },
+    {
+      "id": "exp0091-kv-structural-attribution-101",
+      "status": "accepted-profiler-instrumentation",
+      "completed_at": "2026-04-27T10:49:51-0700",
+      "summary": "Added cache-write phase structural/effect summaries to the decode TinyJit profiler and regenerated the accepted exp_0091 layer-13 METAL profile. The new artifact keeps source attribution complete at 954/954 sources and shows kv_head_reshape remains 377 sources / 6.043306 ms while store remains 228 sources / 3.636602 ms; all phase roots are dependency-closed store-effect sinks, so the next split should use display-name/op-signature motifs rather than a naive store-effect test.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "docs/plans/2026-04-27-exp0091-kv-structural-attribution.md",
+        "benchmarks/gemma4-metal-decode-graph-exp0091-head-first-kv-layer13-kv-structural-profile-512.json",
+        "benchmarks/gemma4-metal-decode-graph-exp0091-head-first-kv-layer13-kv-structural-profile-512.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -816,14 +831,14 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "exp0091-layer13-kv-reshape-store-attribution-or-narrow-graph-change",
+  "next_target": "exp0091-kv-reshape-store-structural-motif-split",
   "next_target_plan": [
     "Do not repeat exp_0092/exp_0093-style head-first KV scope broadening; both preserved correctness and regressed score.",
-    "If doing instrumentation, split remaining exp_0091 layer-13 kv_head_reshape/store attribution into view-root, transpose/reshape, assignment, and actual producer/store costs without changing runtime behavior.",
-    "If doing runtime, only test a narrowly justified layer-13 shared-source producer/cache-write graph change with focused red coverage and inherited E2B hash/JIT/fallback gates.",
-    "Treat exp_0091 score 72.8749 as the short-floor frontier; retain candidates only if they beat or materially match it with graph/source-count evidence."
+    "Parse the new exp0091 structural profile by phase, display_name_counts, op_signature_counts, and category_basis_counts to identify the dominant kv_head_reshape/store source families.",
+    "Record whether each dominant family maps to producer compute, view/reshape roots, cache assignment, or unavoidable dependency-closed store-effect sinks.",
+    "Only if the motif split identifies a non-rejected graph shape, create a narrow evo child from exp_0091 with focused red coverage and inherited hash/JIT/fallback gates."
   ],
-  "updated_at": "2026-04-27T10:34:30-0700",
+  "updated_at": "2026-04-27T10:49:51-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1563,6 +1578,6 @@
     }
   ],
   "active_increment": null,
-  "next": "Keep exp_0091 as the frontier; avoid more head-first KV scope-broadening children. Next increment should refine profiler attribution inside remaining kv_head_reshape/store surfaces or test a different narrow layer-13 producer/cache-write graph change.",
-  "last_updated": "2026-04-27T10:34:30-0700"
+  "next": "Keep exp_0091 as the frontier. Use by_phase_structure display-name/op-signature motifs to split the remaining kv_head_reshape/store families before any new runtime child.",
+  "last_updated": "2026-04-27T10:49:51-0700"
 }

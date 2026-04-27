@@ -692,6 +692,33 @@ def test_profile_phase_summary_reports_parent_category_overlap():
   }
 
 
+def test_profile_phase_summary_reports_structural_store_effect_counts():
+  parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
+  reshape_phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_head_reshape")
+  store_phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="store")
+  items = [
+    FakeItem(parent, ast=FakeAst(FakeUOp("RESHAPE", [FakeMetadata(reshape_phase, f"repo_uop_sidecar:1::{reshape_phase}")]))),
+    FakeItem(parent, ast=FakeAst(FakeUOp("STORE", [FakeMetadata(store_phase, f"repo_uop_sidecar:1::{store_phase}")]))),
+  ]
+
+  with profile.cache_write_phase_target_scope(profile.parse_cache_write_phase_targets(["shared-source-layer13"])):
+    summary = profile.source_slice_summary(items)
+  phase_structure = summary["cache_write_phase_structural_summary"]
+
+  assert phase_structure[reshape_phase]["source_count"] == 1
+  assert phase_structure[reshape_phase]["store_effect_count"] == 0
+  assert phase_structure[reshape_phase]["effect_kind_counts"] == {"non_store_effect": 1}
+  assert phase_structure[reshape_phase]["ast_root_counts"] == {"RESHAPE": 1}
+  assert phase_structure[store_phase]["source_count"] == 1
+  assert phase_structure[store_phase]["store_effect_count"] == 1
+  assert phase_structure[store_phase]["effect_kind_counts"] == {"store_effect": 1}
+
+  attribution = {"items": [{"source_count": 2, "elapsed_ms": 4.0, **summary}]}
+  aggregate = profile.summarize_cache_write_phase_attribution(attribution)
+  assert aggregate["by_phase_structure"][reshape_phase]["store_effect_count"] == 0
+  assert aggregate["by_phase_structure"][store_phase]["store_effect_count"] == 1
+
+
 def test_graph_batch_attribution_maps_batched_display_to_source_ranges():
   first_batch = [
     FakeItem("attention"),
