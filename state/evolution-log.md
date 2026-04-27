@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 073 - Artifact inventory helper documented
+
+- Status: accepted docs increment.
+- Change: README now documents `scripts/inventory_untracked_artifacts.py --output docs/plans/$(date +%F)-untracked-artifact-inventory.md`.
+- The docs explicitly state the helper is read-only and does not delete, ignore, stage, or decide artifact disposition.
+- Verification: artifact inventory test passed; after staging the README/doc changes, the helper smoke inventoried 56 untracked path(s).
+
 ## 2026-04-27 072 - Artifact inventory helper script
 
 - Status: accepted infrastructure.

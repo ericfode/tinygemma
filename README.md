@@ -149,6 +149,15 @@ python scripts/paired_e2b_decode_benchmark.py \
 
 The helper writes both child benchmark payloads plus absolute/relative score deltas. The child benchmark stdout must be JSON containing a finite numeric `score`; `NaN` and infinities are rejected rather than recorded. Add `--min-delta <float>` before `--` to make the helper exit nonzero after writing the JSON artifact when the candidate delta is below a required floor. Treat very short paired runs as smoke tests; throughput claims still require durable benchmark artifacts under `benchmarks/` and the longer evo gates.
 
+When local benchmark/profile artifacts accumulate, inventory them before cleanup:
+
+```bash
+python scripts/inventory_untracked_artifacts.py \
+  --output docs/plans/$(date +%F)-untracked-artifact-inventory.md
+```
+
+The inventory helper is read-only: it reports untracked paths, sizes, categories, tracked-doc references, and suggested dispositions. It does not delete artifacts, edit ignore files, stage files, or decide which benchmark evidence should travel with the repo. A small tool that knows it is not a broom is a civilized thing.
+
 The full beam/format matrix is intentionally resumable because the large checkpoints and higher beams can take a long time on local Metal:
 
 ```bash
