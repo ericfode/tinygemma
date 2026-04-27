@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "evo-layer13-kv-probes-rejected-044",
+  "current_checkpoint": "evo-layer13-rank-view-probes-rejected-045",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -619,6 +619,15 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "evo-layer13-rank-view-probes-rejected-045",
+      "summary": "Rejected the two follow-up evo model.py probes after recalibrating exp_0005 as the current frontier. exp_0007 flattened one-token fused-int8 K/V decode matmul rank and passed focused tests plus current hash/long gates, but regressed the default 128/20 score to 28.4375 versus exp_0005 at 28.6153. exp_0008 elided one-token attention-output merge views and passed tests, profile-decode, smoke/help, and hash gates, but regressed the default score to 28.4258 and its long 1000/20 row measured 18.078904, below the exp_0005 long calibration at 18.090845. No runtime throughput floor was superseded; exp_0005 remains the frontier.",
+      "artifacts": [
+        ".evo/project.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ],
   "gates": [
@@ -626,7 +635,7 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "layer13-fused-kv-decode-rank-flattening-045",
-  "next_target_plan": "Continue from evo frontier exp_0005, not the stale exp_0000 score. The next narrow model.py probe should test one-token fused-int8 K/V decode-rank flattening inside GemmaAttention._project_kv: flatten (batch, 1, hidden) to 2D for the fused rowwise-int8 matmul, then reshape back before the existing chunk path. This is non-overlapping with rejected dequantized/transposed/separate/lane-reshape K/V probes and the rejected unit-scaling guard. Focused tests should cover fused-vs-separate K/V and cache/full-forward equivalence before evo run; acceptance requires beating exp_0005 default score 28.6153 while passing the current E2B int8 METAL 1000/20 hash floor (min-score 18.0), rollout_jit_count=999, and decode_fallback=false. If it fails, try decode-only attention-output view elision for query_len == 1 as the safer orthogonal model.py probe.",
-  "updated_at": "2026-04-26T22:48:16-0700"
+  "next_target": "rmsnorm-inference-scale-cache-046",
+  "next_target_plan": "Continue from evo frontier exp_0005. The layer-13 K/V rank/view surface has now rejected fused decode-rank flattening (exp_0007) and one-token attention-output view elision (exp_0008), both below the calibrated parent score 28.6153. Use a broader but still model.py-local probe next: cache the inference RMSNorm scale tensor when Tensor.training is false and the norm has immutable scale weights, avoiding repeated construction of `(1 + weight.float())` or `weight.float()` inside RMSNorm.__call__. Add focused tests that plus-one and ordinary scale caching matches the uncached result and does not apply during training/mutable-weight contexts. Acceptance still requires beating exp_0005 default score 28.6153 while passing the current E2B int8 METAL 1000/20 hash floor (min-score 18.0), rollout_jit_count=999, and decode_fallback=false. If the short/default row does not improve, discard without spending additional design time; remaining candidates shift to metal_int8 kernel/local-size exploration or a separate profile-metric evo run.",
+  "updated_at": "2026-04-26T23:14:49-0700"
 }
