@@ -1,5 +1,16 @@
 # Evolution Log
 
+## 2026-04-27 053 - Graphable rowwise-int8 QKV fusion probe rejected
+
+- Status: rejected.
+- Evo child: `exp_0011` from `exp_0005`, hypothesis `probe: graphable rowwise-int8 qkv decode fusion`.
+- Implementation tested inside the evo worktree only: decode-only Tensor-level rowwise-int8 Q/K/V projection fusion plus focused parity coverage.
+- Verification before evo: focused QKV parity passed; `tests/test_tinygrad_gemma.py tests/test_profile_decode_jit.py` passed (`74 passed, 1 skipped`); research METAL smoke passed with `rollout_jit_count=3` and `decode_fallback=False`; hash16 E2B int8 METAL gate passed at `29.464043 tok/s` with expected hash.
+- `evo run exp_0011` result: default score `27.7816 tok/s` versus parent `exp_0005` at `28.6153`; inherited `e2b_int8_metal_hash1000_current_floor` failed.
+- Action: discarded `exp_0011` with reason: graphable rowwise-int8 QKV decode fusion regressed default score and failed the long floor.
+- Decision: do not retry Q/K/V rowwise-int8 projection fusion under the current benchmark without new profile evidence.
+- Next target: profiler-first phase target generalization for local/shared-source cache-write attribution before another runtime patch.
+
 ## 2026-04-27 - Metal Int8 First-Class Raw Bridge Graphability Rejected
 
 - Objective: execute `metal-int8-first-class-raw-bridge-graphability-052` after 051 proved that a process-local research tinygrad bridge can replay the dormant raw rowwise-int8 METAL runner only when UOps are preserved through `resolve_params(ctx, call)`. This increment decides whether that bridge can honestly become a production, graphable decode optimization.
