@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "untracked-benchmark-artifact-inventory-071",
+  "current_checkpoint": "artifact-inventory-helper-script-072",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-helper-script-072",
+  "next_target": "artifact-inventory-readme-doc-073",
   "next_target_plan": [
-    "Add a small repo script that regenerates the untracked artifact inventory from git status and tracked docs/state references.",
-    "Test it with a synthetic temporary git repo or temp files where practical; otherwise py_compile and dry-run it against current repo.",
-    "Keep it read-only: no delete, no ignore writes, no staging generated benchmark artifacts."
+    "Document scripts/inventory_untracked_artifacts.py in README near paired benchmark helper usage.",
+    "Keep documentation explicit that the helper is read-only and does not decide what to delete/commit.",
+    "Run the helper test and markdown/diff checks before committing."
   ],
-  "updated_at": "2026-04-27T03:13:17-0700",
+  "updated_at": "2026-04-27T03:17:15-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1048,6 +1048,26 @@
         "No untracked benchmark artifacts were deleted, staged, or ignored"
       ],
       "decision": "Do not blanket-ignore benchmarks because selected benchmark artifacts are intentionally tracked; next safe increment is to make artifact inventory reproducible with a checked helper instead of one-off script logic."
+    },
+    {
+      "id": "artifact-inventory-helper-script-072",
+      "completed_at": "2026-04-27T03:17:15-0700",
+      "status": "accepted-infrastructure",
+      "summary": "Added a read-only script to regenerate untracked artifact inventories from git status and tracked docs/state references, with temp-git-repo regression coverage.",
+      "artifacts": [
+        "scripts/inventory_untracked_artifacts.py",
+        "tests/test_artifact_inventory.py",
+        "docs/plans/2026-04-27-artifact-inventory-helper-script.md"
+      ],
+      "verification": [
+        "RED: missing helper script failed new test",
+        "Focused artifact inventory test: 1 passed",
+        "Real repo dry-run wrote /tmp/tinygrad-gemma-artifact-inventory-smoke.md and inventoried 56 untracked path(s)",
+        "Artifact inventory + paired helper + profiler tests: 40 passed, 2 warnings",
+        "repo-loop JSON valid",
+        "git diff --cached --check and git diff --check passed"
+      ],
+      "decision": "Accepted read-only helper; generated benchmark artifacts remain untracked and untouched."
     }
   ]
 }

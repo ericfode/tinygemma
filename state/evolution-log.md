@@ -1,5 +1,14 @@
 # Evolution Log
 
+## 2026-04-27 072 - Artifact inventory helper script
+
+- Status: accepted infrastructure.
+- RED: `tests/test_artifact_inventory.py::test_inventory_untracked_artifacts_reports_references_without_mutating_repo` failed before `scripts/inventory_untracked_artifacts.py` existed.
+- Change: added read-only helper that inventories untracked files, classifies artifact categories, detects references from tracked text files, and emits Markdown.
+- Real repo smoke: after staging the helper/test/note, `scripts/inventory_untracked_artifacts.py` inventoried 56 untracked path(s) into `/tmp/tinygrad-gemma-artifact-inventory-smoke.md`.
+- Verification: artifact inventory + paired helper + profiler tests passed (`40 passed, 2 warnings`); repo-loop JSON and diff checks passed.
+- Decision: generated benchmark artifacts remain untracked and untouched.
+
 ## 2026-04-27 071 - Untracked benchmark artifact inventory
 
 - Status: accepted docs/evidence increment.
