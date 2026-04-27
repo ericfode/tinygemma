@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "paired-baseline-candidate-helper-landed-061",
+  "current_checkpoint": "paired-helper-frontier-smoke-accepted-062",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "paired-helper-smoke-on-evo-frontier-062",
+  "next_target": "paired-helper-ci-doc-and-usage-surface-063",
   "next_target_plan": "Return to graphable Tensor/tinygrad program surfaces after pruning the raw custom Runner branch. Refresh evo scratchpad/frontier evidence and the profiler-backed hot-path summary, then pick one narrow model.py or profiler-supported graphable increment. Do not re-open raw metal_int8 custom Runner integration unless tinygrad exposes a first-class graphable custom-call or CompiledRunner-compatible surface.",
-  "updated_at": "2026-04-27T02:41:58-0700",
+  "updated_at": "2026-04-27T02:54:41-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -877,6 +877,29 @@
         "git diff --check: passed"
       ],
       "decision": "Benchmark infrastructure only; no runtime throughput claim."
+    },
+    {
+      "id": "paired-helper-smoke-on-evo-frontier-062",
+      "completed_at": "2026-04-27T02:54:41-0700",
+      "status": "accepted-infrastructure",
+      "summary": "Real frontier self-pair smoke exposed and fixed default benchmark-script resolution for evo worktree benchmarks.",
+      "artifacts": [
+        "scripts/paired_e2b_decode_benchmark.py",
+        "tests/test_paired_decode_benchmark.py",
+        "benchmarks/paired-exp0005-self-hash16.json",
+        "benchmarks/paired-exp0005-self-default-hash4.json",
+        "docs/plans/2026-04-27-paired-helper-smoke-on-evo-frontier.md"
+      ],
+      "verification": [
+        "explicit-script exp_0005 self-pair hash16: passed; delta -0.0380",
+        "default-resolution exp_0005 self-pair hash4: passed; delta +0.0010",
+        ".venv/bin/python -m pytest -q: 86 passed, 2 warnings",
+        "CLI help: passed",
+        "research METAL smoke: passed; rollout_jit_count=3; decode_fallback=False",
+        "py_compile paired helper: passed",
+        "git diff --check: passed"
+      ],
+      "decision": "Accepted helper default worktree benchmark resolution; hash4 score is only a smoke, not a throughput benchmark."
     }
   ]
 }

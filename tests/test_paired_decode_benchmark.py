@@ -68,3 +68,48 @@ print(f'stderr for {args.target}', file=sys.stderr)
   assert file_payload["benchmark_args"] == ["--tag", "smoke"]
   assert file_payload["baseline"]["command"][0] == sys.executable
   assert "stderr for" in file_payload["candidate"]["stderr"]
+
+
+def test_paired_decode_benchmark_finds_default_benchmark_inside_baseline_worktree(tmp_path: Path):
+  worktree = tmp_path / "worktree"
+  benchmark = worktree / "benchmarks" / "evo_e2b_int8_metal_decode.py"
+  model_dir = worktree / "tinygrad_gemma"
+  benchmark.parent.mkdir(parents=True)
+  model_dir.mkdir(parents=True)
+  benchmark.write_text(
+    """
+import argparse
+import json
+parser = argparse.ArgumentParser()
+parser.add_argument('--target', required=True)
+args = parser.parse_args()
+score = 2.0 if 'candidate' in args.target else 1.0
+print(json.dumps({'score': score}))
+""".strip()
+    + "\n"
+  )
+  baseline = model_dir / "baseline_model.py"
+  candidate = model_dir / "candidate_model.py"
+  baseline.write_text("# baseline\n")
+  candidate.write_text("# candidate\n")
+
+  proc = subprocess.run(
+    [
+      sys.executable,
+      str(SCRIPT),
+      "--baseline-target",
+      str(baseline),
+      "--candidate-target",
+      str(candidate),
+    ],
+    cwd=ROOT,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=True,
+  )
+
+  data = json.loads(proc.stdout)
+  assert data["benchmark_script"] == str(benchmark)
+  assert data["candidate_improved"] is True
+  assert data["delta"] == 1.0

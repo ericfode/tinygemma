@@ -1,5 +1,14 @@
 # Evolution Log
 
+## 2026-04-27 062 - Paired helper frontier smoke accepted
+
+- Status: accepted infrastructure.
+- Real smoke 1: explicit-script exp_0005 self-pair hash16 wrote `benchmarks/paired-exp0005-self-hash16.json`; baseline `30.4576`, candidate `30.4196`, delta `-0.0380` on the same target.
+- Real smoke 2: default-resolution exp_0005 self-pair hash4 wrote `benchmarks/paired-exp0005-self-default-hash4.json`; baseline `0.2349`, candidate `0.2359`, delta `+0.0010`. Hash4 is only a helper smoke, not a throughput metric.
+- Fix: `scripts/paired_e2b_decode_benchmark.py` now resolves the default benchmark script from the baseline evo worktree when `benchmarks/evo_e2b_int8_metal_decode.py` is absent on main.
+- Tests: added unit coverage for worktree-default benchmark resolution.
+- Verification: full suite passed (`86 passed, 2 warnings`); CLI help, research METAL smoke, helper py_compile, and `git diff --check` passed.
+
 ## 2026-04-27 061 - Paired baseline/candidate benchmark helper accepted
 
 - Status: accepted infrastructure; no runtime code changed.

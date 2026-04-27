@@ -10,8 +10,29 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_BENCHMARK_SCRIPT = Path("benchmarks/evo_e2b_int8_metal_decode.py")
+
+
 def utc_now() -> str:
   return datetime.now(timezone.utc).isoformat()
+
+
+def resolve_benchmark_script(benchmark_script: Path, baseline_target: Path, *, cwd: Path) -> Path:
+  candidate = benchmark_script if benchmark_script.is_absolute() else cwd / benchmark_script
+  if candidate.exists():
+    return benchmark_script
+  if benchmark_script != DEFAULT_BENCHMARK_SCRIPT:
+    return benchmark_script
+
+  baseline = baseline_target if baseline_target.is_absolute() else cwd / baseline_target
+  for parent in baseline.resolve().parents:
+    worktree_candidate = parent / DEFAULT_BENCHMARK_SCRIPT
+    if worktree_candidate.exists():
+      try:
+        return worktree_candidate.relative_to(cwd)
+      except ValueError:
+        return worktree_candidate
+  return benchmark_script
 
 
 def parse_result(stdout: str, *, label: str) -> dict[str, Any]:
@@ -110,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
   parser = argparse.ArgumentParser(
     description="Run the same decode benchmark against baseline and candidate targets in one session and report score deltas."
   )
-  parser.add_argument("--benchmark-script", type=Path, default=Path("benchmarks/evo_e2b_int8_metal_decode.py"))
+  parser.add_argument("--benchmark-script", type=Path, default=DEFAULT_BENCHMARK_SCRIPT)
   parser.add_argument("--baseline-target", type=Path, required=True)
   parser.add_argument("--candidate-target", type=Path, required=True)
   parser.add_argument("--out", type=Path)
@@ -120,9 +141,10 @@ def main(argv: list[str] | None = None) -> int:
     benchmark_args = benchmark_args[1:]
 
   cwd = Path.cwd()
+  benchmark_script = resolve_benchmark_script(args.benchmark_script, args.baseline_target, cwd=cwd)
   payload = build_payload(
     label=args.label,
-    benchmark_script=args.benchmark_script,
+    benchmark_script=benchmark_script,
     baseline_target=args.baseline_target,
     candidate_target=args.candidate_target,
     benchmark_args=benchmark_args,
