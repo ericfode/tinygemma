@@ -1,5 +1,13 @@
 # Evolution Log
 
+## 2026-04-27 071 - Untracked benchmark artifact inventory
+
+- Status: accepted docs/evidence increment.
+- Scope: inventoried 56 untracked paths totaling 1,048,622 bytes (~1.00 MiB): 28 decode profiler artifacts, 14 progress logs, 11 benchmark result artifacts, 2 paired-helper smoke artifacts, and `uv.lock`.
+- Finding: 18 artifacts are referenced by committed docs/state and are selective-commit or external-archive candidates; uncited progress logs are cleanup candidates after review.
+- Decision: do not blanket-ignore `benchmarks/*.csv` / `*.json` because the repo intentionally tracks selected benchmark evidence. No generated artifacts were deleted, staged, or ignored.
+- Artifact: `docs/plans/2026-04-27-untracked-benchmark-artifact-inventory.md`.
+
 ## 2026-04-27 070 - Final working-tree and gate summary recorded
 
 - Status: accepted summary increment.

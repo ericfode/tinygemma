@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "final-working-tree-and-gate-summary-070",
+  "current_checkpoint": "untracked-benchmark-artifact-inventory-071",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,9 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "await-user-decision-push-and-untracked-artifacts",
-  "next_target_plan": "Return to graphable Tensor/tinygrad program surfaces after pruning the raw custom Runner branch. Refresh evo scratchpad/frontier evidence and the profiler-backed hot-path summary, then pick one narrow model.py or profiler-supported graphable increment. Do not re-open raw metal_int8 custom Runner integration unless tinygrad exposes a first-class graphable custom-call or CompiledRunner-compatible surface.",
-  "updated_at": "2026-04-27T03:10:03-0700",
+  "next_target": "artifact-inventory-helper-script-072",
+  "next_target_plan": [
+    "Add a small repo script that regenerates the untracked artifact inventory from git status and tracked docs/state references.",
+    "Test it with a synthetic temporary git repo or temp files where practical; otherwise py_compile and dry-run it against current repo.",
+    "Keep it read-only: no delete, no ignore writes, no staging generated benchmark artifacts."
+  ],
+  "updated_at": "2026-04-27T03:13:17-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1028,6 +1032,22 @@
         "git diff --check: passed"
       ],
       "decision": "Stop boundary is push/artifact cleanup, both requiring user choice because they are side-effectful."
+    },
+    {
+      "id": "untracked-benchmark-artifact-inventory-071",
+      "completed_at": "2026-04-27T03:13:17-0700",
+      "status": "accepted-docs",
+      "summary": "Inventoried 56 untracked benchmark/profile artifacts (~1.00 MiB), classified them, and identified referenced evidence candidates without deleting, pushing, ignoring, or committing generated outputs.",
+      "artifacts": [
+        "docs/plans/2026-04-27-untracked-benchmark-artifact-inventory.md"
+      ],
+      "verification": [
+        "Inventory source: git status --porcelain -z plus filesystem stat calls",
+        "configs/repo-loop-state.json parsed before update",
+        "git diff --check: passed before record update",
+        "No untracked benchmark artifacts were deleted, staged, or ignored"
+      ],
+      "decision": "Do not blanket-ignore benchmarks because selected benchmark artifacts are intentionally tracked; next safe increment is to make artifact inventory reproducible with a checked helper instead of one-off script logic."
     }
   ]
 }
