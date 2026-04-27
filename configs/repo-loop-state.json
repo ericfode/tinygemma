@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-invalid-category-doc-087",
+  "current_checkpoint": "artifact-inventory-final-helper-review-088",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-final-helper-review-088",
+  "next_target": "user-policy-decision-push-and-artifact-disposition",
   "next_target_plan": [
-    "Run a final focused review of inventory helper UX/API and decide whether further local-only increments are justified before returning to the push/artifact-cleanup user decision.",
-    "Inspect git status, helper --help/list/categories, and latest tests.",
-    "Record final helper state; do not push or delete artifacts."
+    "Ask the user whether to push local commits to origin/main.",
+    "Ask the user whether generated benchmark/profile artifacts should be committed selectively, archived elsewhere, ignored, deleted, or left untracked.",
+    "Do not push, delete, stage generated benchmark artifacts, or alter ignore policy without explicit user instruction."
   ],
-  "updated_at": "2026-04-27T03:46:29-0700",
+  "updated_at": "2026-04-27T03:48:24-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1338,6 +1338,27 @@
         "git diff --check: passed"
       ],
       "decision": "Documentation-only; generated benchmark/profile artifacts remain untracked and untouched."
+    },
+    {
+      "id": "artifact-inventory-final-helper-review-088",
+      "completed_at": "2026-04-27T03:48:24-0700",
+      "status": "accepted-review",
+      "summary": "Final focused review of artifact inventory helper surface; concluded helper is sufficient and remaining actions are side-effectful user policy decisions.",
+      "artifacts": [
+        "docs/plans/2026-04-27-artifact-inventory-final-helper-review.md"
+      ],
+      "verification": [
+        "git status/log inspected: main ahead 59 before recording, untracked generated artifacts still present",
+        "inventory helper --help inspected",
+        "--list-categories smoke listed six known categories",
+        "full real-repo JSON inventory smoke returned 56 rows with expected category counts",
+        "filtered real-repo JSON inventory smoke returned 14 benchmark-progress-log rows with no category leakage",
+        "helper/profiler/paired-helper slice: 48 passed, 2 warnings",
+        "scripts/inventory_untracked_artifacts.py py_compile: passed",
+        "configs/repo-loop-state.json parsed successfully",
+        "git diff --check: passed"
+      ],
+      "decision": "No further speculative helper work; remaining boundary is push/artifact cleanup policy, which is side-effectful and needs user choice."
     }
   ]
 }
