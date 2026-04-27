@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "exp0091-kv-structural-attribution-101",
+  "current_checkpoint": "exp0091-kv-structural-motif-split-102",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -824,6 +824,31 @@
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
+    },
+    {
+      "id": "exp0091-kv-structural-motif-split-102",
+      "status": "accepted-analysis-helper",
+      "completed_at": "2026-04-27T10:56:27-0700",
+      "summary": "Added a reusable phase-structure motif analysis helper and generated the exp_0091 layer-13 KV structural motif artifact. The selected kv_head_reshape/store phases cover 605 sources, all dependency-closed store-effect roots; kv_head_reshape is dominated by r_16_96 reduce-like motifs and store by E_16_32_3 index/cast motifs. This supports a narrow producer/source-count child only, not another broad head-first or store-only rewrite.",
+      "artifacts": [
+        "scripts/analyze_profile_phase_structure.py",
+        "tests/test_phase_structure_analysis.py",
+        "docs/plans/2026-04-27-exp0091-kv-structural-motif-split.md",
+        "benchmarks/gemma4-metal-decode-graph-exp0091-head-first-kv-layer13-kv-structural-motifs-512.json",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ],
+      "verification": [
+        "RED test observed before helper existed: tests/test_phase_structure_analysis.py failed with FileNotFoundError for scripts/analyze_profile_phase_structure.py",
+        "tests/test_phase_structure_analysis.py: 2 passed",
+        "full pytest suite: 104 passed, 2 warnings",
+        "tinygrad-gemma --help succeeded",
+        "scripts/smoke_metal.py succeeded on METAL with rollout_jit_count=3 and decode_fallback=False",
+        "configs/repo-loop-state.json validated with json.tool",
+        "motif artifact validated with json.tool",
+        "git diff --check clean"
+      ],
+      "decision": "Keep exp_0091 as frontier. Use the motif artifact to gate any exp_0094 candidate: the candidate must target the dominant layer-13 sliding shared-source producer/source-count motifs without repeating exp_0092/exp_0093 layout broadening."
     }
   ],
   "gates": [
@@ -831,14 +856,15 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "exp0091-kv-reshape-store-structural-motif-split",
+  "next_target": "exp0094-layer13-shared-source-producer-source-count-smoke",
   "next_target_plan": [
-    "Do not repeat exp_0092/exp_0093-style head-first KV scope broadening; both preserved correctness and regressed score.",
-    "Parse the new exp0091 structural profile by phase, display_name_counts, op_signature_counts, and category_basis_counts to identify the dominant kv_head_reshape/store source families.",
-    "Record whether each dominant family maps to producer compute, view/reshape roots, cache assignment, or unavoidable dependency-closed store-effect sinks.",
-    "Only if the motif split identifies a non-rejected graph shape, create a narrow evo child from exp_0091 with focused red coverage and inherited hash/JIT/fallback gates."
+    "Use parent exp_0091; do not repeat exp_0092 full-attention shared-source or exp_0093 all-sliding head-first widenings.",
+    "Inspect tinygrad_gemma/model.py around the accepted head-first sliding shared-source producer path and identify the smallest producer/source-count change that could affect r_16_96 or E_16_32_3 without broadening scope.",
+    "Add focused RED coverage for exact scope before editing any runtime path.",
+    "Run a cheap profile/source-count smoke against the candidate worktree before spending full evo throughput if possible.",
+    "Only run evo run exp_0094 if the smoke preserves safety and plausibly reduces the selected motif family."
   ],
-  "updated_at": "2026-04-27T10:49:51-0700",
+  "updated_at": "2026-04-27T10:56:27-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1578,6 +1604,6 @@
     }
   ],
   "active_increment": null,
-  "next": "Keep exp_0091 as the frontier. Use by_phase_structure display-name/op-signature motifs to split the remaining kv_head_reshape/store families before any new runtime child.",
-  "last_updated": "2026-04-27T10:49:51-0700"
+  "next": "Create a narrow exp_0094 child from exp_0091 only after adding focused scope coverage and a cheap source-count/profile smoke for the dominant r_16_96/E_16_32_3 motif families.",
+  "last_updated": "2026-04-27T10:56:27-0700"
 }

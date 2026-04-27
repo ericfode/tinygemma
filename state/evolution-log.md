@@ -1,5 +1,16 @@
 # Evolution Log
 
+## 2026-04-27 102 - exp0091 KV structural motif split
+
+- Status: accepted analysis/helper increment; no model runtime change.
+- Change: added `scripts/analyze_profile_phase_structure.py` plus `tests/test_phase_structure_analysis.py` so regenerated `profile_decode_jit` JSON artifacts can be reduced to repeatable per-phase structural motif summaries instead of one-off terminal inspection.
+- Artifact: generated `benchmarks/gemma4-metal-decode-graph-exp0091-head-first-kv-layer13-kv-structural-motifs-512.json` from `benchmarks/gemma4-metal-decode-graph-exp0091-head-first-kv-layer13-kv-structural-profile-512.json`, selecting `kv_head_reshape` and `store` with `--top-n 12`.
+- Measurement result: selected phases cover `605` source items and all `605` are store-effect roots. `kv_head_reshape` remains `377` sources / `6.043306 ms`, dominated by `r_16_96` (`176`, `46.684%`) with reduce-like op signature `Ops.CONST:4,Ops.INDEX:2,Ops.MUL:2,Ops.PARAM:2,Ops.ADD:1,Ops.RANGE:1,Ops.RECIPROCAL:1,Ops.REDUCE:1`. `store` is `228` sources / `3.636602 ms`, dominated by `E_16_32_3` (`70`, `30.702%`) with index/cast signature `Ops.INDEX:5,Ops.PARAM:5,Ops.CONST:2,Ops.MUL:2,Ops.ADD:1,Ops.CAST:1,Ops.END:1,Ops.RANGE:1`.
+- Interpretation: this is not evidence for another broad cache-store rewrite or head-first scope widening. The next viable runtime child must change a narrow producer/cache-write graph shape feeding these dependency-closed store-effect roots, and it must avoid the rejected `exp_0092`/`exp_0093` widenings.
+- Verification: full suite passed (`104 passed, 2 warnings`); `tinygrad-gemma --help` passed; METAL smoke passed with `rollout_jit_count=3` and `decode_fallback=False`; repo-loop JSON and motif JSON validated with `json.tool`; `git diff --check` passed.
+- Plan: `docs/plans/2026-04-27-exp0091-kv-structural-motif-split.md` records the split, artifacts, and next candidate constraints.
+- Next: branch from `exp_0091` only if the candidate is a minimal, non-boundary layer-13 sliding shared-source producer source-count reduction targeting the dominant motif family; first add scope coverage and check profile/source-count smoke before spending a full `evo run exp_0094`.
+
 ## 2026-04-27 101 - exp0091 KV structural attribution
 
 - Status: accepted profiler instrumentation increment; no runtime frontier change.
