@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "lane-before-head-dim-packed-cache-rejected-091",
+  "current_checkpoint": "exp0078-dense-frontier-profile-and-briefs-095",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -658,6 +658,50 @@
         "evo discard exp_0014 completed; evo frontier reports exp_0005 rank 1"
       ],
       "decision": "Reject and treat the remaining packed-cache slot-layout sweep as exhausted for this benchmark epoch; continue short-floor search from exp_0005 with graph/source-count evidence required for near-misses."
+    },
+    {
+      "id": "decode-final-hidden-evo-frontier-093",
+      "summary": "Accepted evo round-review state: realization cutpoint chain reached exp_0037 at 48.7248, then final hidden-state realization before logits committed as exp_0039 at 51.5143 on the configured short 128/20 E2B int8 METAL metric; exp_0039 preserved hashes/invariants and passed manual 1000/20 confirmation at 30.5888 tok/s. Near-frontier siblings exp_0058, exp_0040, and exp_0051 are recorded for combination probes.",
+      "artifacts": [
+        ".evo/project.md",
+        ".evo/run_0000/experiments/exp_0039/attempts/001/outcome.json",
+        ".evo/run_0000/experiments/exp_0058/attempts/001/outcome.json",
+        "configs/repo-loop-state.json",
+        "state/evolution-log.md"
+      ]
+    },
+    {
+      "id": "dense-cutpoint-frontier-094",
+      "summary": "Accepted evo round-review state: dense decode cutpoints plus exp_0039 final-hidden boundary reached exp_0078 at 62.4154 on the configured short E2B int8 METAL metric, with manual 1000/20 confirmation at 38.957688 tok/s and stable expected sha256. Positive path: exp_0060, exp_0065, exp_0068, exp_0072, exp_0076, exp_0078. Negative walls recorded for final-hidden narrowing and broad host-control rewrites.",
+      "artifacts": [
+        ".evo/project.md",
+        ".evo/run_0000/experiments/exp_0078/attempts/001/outcome.json",
+        ".evo/round3-exp0078-long/task_e2b_int8_metal_decode.json",
+        "configs/repo-loop-state.json",
+        "state/evolution-log.md"
+      ]
+    },
+    {
+      "id": "exp0078-dense-frontier-profile-and-briefs-095",
+      "completed_at": "2026-04-27T07:33:16-0700",
+      "status": "accepted-evo-profile-briefs",
+      "summary": "Source-confirmed the exp_0078 dense cutpoint frontier, corrected the actual E2B cutpoint set to include layer 2, and wrote four narrow next-round evo briefs.",
+      "artifacts": [
+        "docs/plans/2026-04-27-exp0078-profile-and-next-briefs.md",
+        "benchmarks/gemma4-metal-decode-graph-exp0078-dense-frontier-512.json",
+        "benchmarks/gemma4-metal-decode-graph-exp0078-dense-frontier-512.csv",
+        ".evo/project.md (local ignored evo state)",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ],
+      "verification": [
+        "evo status/frontier/path/gates inspected for exp_0078",
+        "read-only scan subagents completed over exp_0060..exp_0078",
+        "structural outcome aggregation found no round-094 gate failures",
+        "direct E2B config/model instantiation reported decode_realize_cut_idxs=[2,3,4,6,8,9,11,12]",
+        "profile_decode_jit.py on exp_0078 context_length=512 JIT=1 completed with source attribution complete: 1012/1012 attributed, 6 MetalGraph batches, 15.7192915212363 ms"
+      ],
+      "decision": "Continue from exp_0078 with only narrow additive cutpoint or semantics-identical guard probes; avoid final-hidden narrowing, broad bookkeeping rewrites, cache geometry, K/V projection internals, raw Metal runners, and layer-14 final after-cuts."
     }
   ],
   "gates": [

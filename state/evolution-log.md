@@ -1621,3 +1621,91 @@ Artifacts:
 - `.evo/project.md` (local ignored evo state)
 - `configs/repo-loop-state.json`
 - `state/evolution-log.md`
+
+## 2026-04-27 06:24:34 PDT - decode-final-hidden-evo-frontier-093
+
+Accepted evo round-review state under the short-floor-first, graph-size-weighted policy. Round 092 found the first large realization-cutpoint chain: `exp_0030` at `33.0202`, `exp_0034` at `42.6414`, and `exp_0037` at `48.7248`, with `exp_0037` manually confirmed on the `1000/20` E2B int8 METAL hash row at `30.741555 tok/s`. Round 093 then improved the configured short frontier to `exp_0039` at `51.5143` by realizing the final decode hidden state after the model norm before the logits tail.
+
+Verification:
+- `evo status`: `experiments=60`, `committed=10`, `evaluated=0`, `discarded=50`, `failed=0`, `active=0`, `best=51.5143`.
+- `evo path exp_0039`: `root -> exp_0000 -> exp_0005 -> exp_0030 -> exp_0034 -> exp_0037 -> exp_0039`.
+- `exp_0039` short trace: `generated_tokens=128`, `rollout_jit_count=127`, `decode_fallback=false`, output hash `1c39dd289bb7363f0f600ae1087ad39926e9733447df72bf03955c92d06066b0`.
+- `exp_0039` manual long confirmation: expected sha256 `aa4944455473e236807f6c711a77a969caf73680ea5ea9725648294e5fd23cfa`, measured `30.5888 tok/s`.
+- Near-frontier committed siblings: `exp_0058` at `51.4743` with midpoint cut set `{3,6,8,12}` and manual long `32.914473 tok/s`; `exp_0040` at `50.6654` with first cut shifted to `{4,8,12}`; `exp_0051` at `49.8923` with a sequential decode-cutpoint cursor.
+
+Negative evidence:
+- Removing existing cutpoints regressed: `exp_0041`, `exp_0046`, `exp_0054`.
+- Naive state/eligibility/decision rewrites regressed or failed to beat the frontier: `exp_0042`, `exp_0043`, `exp_0047`, `exp_0057`.
+- `exp_0059` is a compound infra/gate standout rather than an accepted runtime signal: benchmark score `49.9663` was slightly above parent `exp_0051`, but inherited `cli_help` and `e2b_int8_metal_hash16` failed because the worktree files were missing.
+- Plain `.realize()` without `.contiguous()` regressed for both cutpoint and final-hidden boundaries: `exp_0050`, `exp_0044`.
+- Logits/pre-norm/moved-final-boundary variants regressed: `exp_0048`, `exp_0052`, `exp_0055`.
+
+Decision:
+- Continue from `exp_0039` for the configured short metric.
+- Next round should test combinations with validated near-frontier changes (`exp_0058`, `exp_0040`, `exp_0051`) and profile/source-count confirmation, while preserving `.contiguous().realize()` and avoiding semantic logits/argmax simplifications, raw Metal runner work, cache geometry changes, and cached Tensor-view probes.
+
+Artifacts:
+- `.evo/project.md` (local ignored evo state)
+- `.evo/run_0000/experiments/exp_0039/attempts/001/outcome.json`
+- `.evo/run_0000/experiments/exp_0058/attempts/001/outcome.json`
+- `configs/repo-loop-state.json`
+- `state/evolution-log.md`
+
+## 2026-04-27 07:17:54 PDT - dense-cutpoint-frontier-094
+
+Accepted evo round-review state under the short-floor-first, graph-size-weighted policy. Parallel combination search from `exp_0039` pushed the configured short E2B int8 METAL frontier from `51.5143` to `62.4154` at `exp_0078`. The winning path is `root -> exp_0000 -> exp_0005 -> exp_0030 -> exp_0034 -> exp_0037 -> exp_0039 -> exp_0060 -> exp_0065 -> exp_0068 -> exp_0072 -> exp_0076 -> exp_0078`.
+
+Verification:
+- `evo status`: `experiments=79`, `committed=21`, `evaluated=0`, `discarded=58`, `failed=0`, `active=0`, `best=62.4154`.
+- `exp_0078` short score: `62.415387`; inherited gates passed.
+- `exp_0078` manual long `1000/20`: `38.957688 tok/s`, expected sha256 `aa4944455473e236807f6c711a77a969caf73680ea5ea9725648294e5fd23cfa`.
+- `exp_0078` preserves final-hidden post-norm `.contiguous().realize()` from `exp_0039` and drops only the redundant `and self.decode_realize_cut_idxs` condition before membership.
+- Effective E2B dense cutpoint set on the winning path: `[2,3,4,6,8,9,11,12]` plus the final-hidden boundary. This corrects the earlier local summary that omitted the layer-2 leading guard from `exp_0076`.
+
+Positive evidence:
+- Midpoint/full-source bracket/guard densification under the final-hidden boundary repeatedly committed: `exp_0060` (`53.5555`), `exp_0065` (`56.6309`), `exp_0068` (`59.3509`), `exp_0072` (`60.6170`), `exp_0076` (`61.0861`).
+- The smallest host-side cleanup committed on top of the dense frontier: `exp_0078` removed a redundant truthiness check and reached `62.4154`.
+
+Negative evidence:
+- Final-hidden boundary narrowing regressed while preserving hashes/gates: `exp_0064`, `exp_0067`, `exp_0070`.
+- Sequential cursor / direct earliest-cut replacement / frozenset control rewrites regressed: `exp_0061`, `exp_0063`, `exp_0071`.
+- The final pre-shared full-source after-cut at layer14 regressed from `exp_0072`: `exp_0075` scored `59.8228` versus parent `60.6170`.
+- Localizing the cutpoint-set lookup did not compose with the best dense branch: `exp_0077` scored `57.3033` versus parent `60.6170`.
+
+Decision:
+- Continue from `exp_0078`; stall counter resets because the frontier improved and long confirmation passed.
+- Next round should profile/source-confirm the dense frontier and test only narrow remaining cutpoint/membership simplifications. Avoid final-hidden narrowing, broad host-control rewrites, logits/pre-norm/CausalLM moved boundaries, cache geometry, raw Metal runners, and cutpoint removal.
+
+Artifacts:
+- `.evo/project.md` (local ignored evo state)
+- `.evo/run_0000/experiments/exp_0078/attempts/001/outcome.json`
+- `.evo/round3-exp0078-long/task_e2b_int8_metal_decode.json`
+- `configs/repo-loop-state.json`
+- `state/evolution-log.md`
+
+## 2026-04-27 07:33:16 PDT - exp0078-dense-frontier-profile-and-briefs-095
+
+Source-confirmed the `exp_0078` dense frontier and wrote the next narrow evo briefs under the short-floor-first policy.
+
+Verification:
+- `evo status`: `experiments=79`, `committed=21`, `evaluated=0`, `discarded=58`, `failed=0`, `active=0`, `best=62.4154` before the next worker round.
+- `evo frontier`: rank-1 frontier is `exp_0078` at `62.4154`.
+- Direct E2B config/model instantiation on the `exp_0078` worktree reports `decode_realize_cut_idxs=[2,3,4,6,8,9,11,12]`, correcting the previous local summary that omitted the layer-2 guard.
+- Read-only scan subagents over `exp_0060..exp_0078` found additive cutpoint lattice changes as the positive pattern; final-hidden narrowing, late/final after-cuts, and most bookkeeping rewrites remain walls.
+- Structural aggregation of round-094 `outcome.json` files found no gate failures; regressions were performance regressions.
+- `profile_decode_jit.py` on `exp_0078`, `context_length=512`, `JIT=1`, wrote `benchmarks/gemma4-metal-decode-graph-exp0078-dense-frontier-512.json` and `.csv`.
+- Profile source attribution is complete: `original_exec_count=1012`, `attributed_source_count=1012`, `source_count_mismatches=0`, `unattributed_tail_count=0`, `unparsed_graph_batches=0`, post-graph execution `6` MetalGraph batches, profiled elapsed `15.7192915212363 ms`.
+- Dominant remaining bucket is `attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention`: `646` source items and apportioned `11.067749330777588 ms`; phase summary is `kv_projection=639` source items / `10.974117984005716 ms` and `store=7` source items / `0.0936313467718719 ms`.
+
+Decision:
+- Continue from `exp_0078`.
+- Next worker round should use the four briefs in `docs/plans/2026-04-27-exp0078-profile-and-next-briefs.md`: additive earliest-region boundary, additive second-tranche local-gap boundary, one layer-13 adjacent output-boundary probe that avoids K/V internals, and at most one semantics-identical guard cleanup.
+- Do not pursue final-hidden narrowing, cursor/frozenset/localized lookup rewrites, cutpoint removal, cache geometry, K/V projection fusion/caching, raw Metal runners, or layer-14 final after-cuts.
+
+Artifacts:
+- `docs/plans/2026-04-27-exp0078-profile-and-next-briefs.md`
+- `benchmarks/gemma4-metal-decode-graph-exp0078-dense-frontier-512.json`
+- `benchmarks/gemma4-metal-decode-graph-exp0078-dense-frontier-512.csv`
+- `.evo/project.md` (local ignored evo state)
+- `configs/repo-loop-state.json`
+- `state/evolution-log.md`
