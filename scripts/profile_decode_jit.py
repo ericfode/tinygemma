@@ -66,6 +66,32 @@ CACHE_WRITE_CATEGORY_RE = re.compile(
 CACHE_WRITE_ROLES = ("shared_source", "shared_consumer", "local")
 CACHE_WRITE_KINDS = ("key", "value", "packed")
 CACHE_WRITE_PHASES = ("kv_projection", "rmsnorm_rope", "rhs_pack", "store")
+CACHE_WRITE_PHASE_TARGET_PRESETS = ("layer13", "all-shared-source", "all-local", "all-packed")
+CACHE_WRITE_PHASE_TARGET_EXACT_RE = re.compile(r"^(?P<role>local|shared-source|shared-consumer)-layer(?P<layer>\d+)$")
+
+
+class CacheWritePhaseTarget:
+  __slots__ = ("kind", "role", "layer_idx", "layer_type")
+
+  def __init__(self, *, kind: str | None = None, role: str | None = None, layer_idx: int | None = None, layer_type: str | None = None):
+    self.kind = kind
+    self.role = role
+    self.layer_idx = layer_idx
+    self.layer_type = layer_type
+
+  def matches(self, kind: str, role: str, layer_idx: int | None, layer_type: str | None) -> bool:
+    return (
+      (self.kind is None or self.kind == kind)
+      and (self.role is None or self.role == role)
+      and (self.layer_idx is None or self.layer_idx == layer_idx)
+      and (self.layer_type is None or self.layer_type == layer_type)
+    )
+
+
+DEFAULT_CACHE_WRITE_PHASE_TARGETS = (
+  CacheWritePhaseTarget(kind="packed", role="shared_source", layer_idx=13, layer_type="sliding_attention"),
+)
+_CACHE_WRITE_PHASE_TARGETS: tuple[CacheWritePhaseTarget, ...] = DEFAULT_CACHE_WRITE_PHASE_TARGETS
 
 
 def _source_range(obj) -> tuple[int, int]:
@@ -260,8 +286,56 @@ def cache_write_phase_order(category: str) -> int:
   return CACHE_WRITE_PHASES.index(phase) if phase in CACHE_WRITE_PHASES else len(CACHE_WRITE_PHASES)
 
 
-def cache_write_phase_target(kind: str, role: str, layer_idx: int | None, layer_type: str | None) -> bool:
-  return kind == "packed" and role == "shared_source" and layer_idx == 13 and layer_type == "sliding_attention"
+def parse_cache_write_phase_targets(raw_targets: list[str] | tuple[str, ...] | None) -> tuple[CacheWritePhaseTarget, ...]:
+  if not raw_targets:
+    return DEFAULT_CACHE_WRITE_PHASE_TARGETS
+  presets = {
+    "layer13": DEFAULT_CACHE_WRITE_PHASE_TARGETS,
+    "all-shared-source": (CacheWritePhaseTarget(kind="packed", role="shared_source"),),
+    "all-local": (CacheWritePhaseTarget(kind="packed", role="local"),),
+    "all-packed": (CacheWritePhaseTarget(kind="packed"),),
+  }
+  targets: list[CacheWritePhaseTarget] = []
+  for raw_target in raw_targets:
+    if raw_target in presets:
+      targets.extend(presets[raw_target])
+      continue
+    exact_match = CACHE_WRITE_PHASE_TARGET_EXACT_RE.fullmatch(raw_target)
+    if exact_match is not None:
+      targets.append(CacheWritePhaseTarget(
+        kind="packed",
+        role=exact_match.group("role").replace("-", "_"),
+        layer_idx=int(exact_match.group("layer")),
+      ))
+      continue
+    allowed = ", ".join(CACHE_WRITE_PHASE_TARGET_PRESETS)
+    raise ValueError(
+      f"unknown cache write phase target {raw_target!r}; expected one of: {allowed}, local-layer<N>, shared-source-layer<N>, shared-consumer-layer<N>"
+    )
+  return tuple(targets)
+
+
+@contextmanager
+def cache_write_phase_target_scope(targets: tuple[CacheWritePhaseTarget, ...] | None):
+  global _CACHE_WRITE_PHASE_TARGETS
+  previous = _CACHE_WRITE_PHASE_TARGETS
+  _CACHE_WRITE_PHASE_TARGETS = parse_cache_write_phase_targets(None) if targets is None else targets
+  try:
+    yield
+  finally:
+    _CACHE_WRITE_PHASE_TARGETS = previous
+
+
+def cache_write_phase_target(
+  kind: str,
+  role: str,
+  layer_idx: int | None,
+  layer_type: str | None,
+  *,
+  targets: tuple[CacheWritePhaseTarget, ...] | None = None,
+) -> bool:
+  active_targets = _CACHE_WRITE_PHASE_TARGETS if targets is None else targets
+  return any(target.matches(kind, role, layer_idx, layer_type) for target in active_targets)
 
 
 def cache_write_phase_target_category(category: str) -> bool:
@@ -838,7 +912,11 @@ def rope_phase_sidecar_patch():
 
 
 @contextmanager
-def gemma_profile_sidecars(*, cache_write_phase_cutpoints: bool = False):
+def gemma_profile_sidecars(
+  *,
+  cache_write_phase_cutpoints: bool = False,
+  cache_write_phase_targets: tuple[CacheWritePhaseTarget, ...] | None = None,
+):
   patches: list[tuple[type, str, str]] = [
     (TextScaledEmbedding, "__call__", "embedding_per_layer"),
     (GemmaModel, "project_per_layer_inputs", "embedding_per_layer"),
@@ -848,6 +926,7 @@ def gemma_profile_sidecars(*, cache_write_phase_cutpoints: bool = False):
     (GemmaForConditionalGeneration, "sample_next", "logits_argmax"),
   ]
   with ExitStack() as stack:
+    stack.enter_context(cache_write_phase_target_scope(cache_write_phase_targets))
     stack.enter_context(cache_write_phase_cutpoint_scope(cache_write_phase_cutpoints))
     stack.enter_context(uop_creation_sidecar_patch())
     stack.enter_context(uop_replace_sidecar_patch())
@@ -1383,11 +1462,25 @@ def main() -> None:
   parser.add_argument(
     "--layer13-phase-cutpoints",
     action="store_true",
-    help="Profiler-only diagnostic: force realization cutpoints around layer-13 shared-source packed-cache K/V projection, normalized/rotated K/V, RHS packing, and store phases.",
+    help="Backward-compatible alias for --phase-cutpoints with the default layer13 phase target.",
+  )
+  parser.add_argument(
+    "--phase-cutpoints",
+    action="store_true",
+    help="Profiler-only diagnostic: force realization cutpoints around selected cache-write phase targets.",
+  )
+  parser.add_argument(
+    "--phase-target",
+    action="append",
+    dest="phase_targets",
+    metavar="TARGET",
+    help="Cache-write phase target to instrument. Presets: layer13, all-shared-source, all-local, all-packed. Exact selectors: local-layer<N>, shared-source-layer<N>, shared-consumer-layer<N>. May be repeated. Defaults to layer13.",
   )
   parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
   parser.add_argument("--csv-out", type=Path)
   args = parser.parse_args()
+  phase_targets = parse_cache_write_phase_targets(args.phase_targets)
+  phase_cutpoints = args.phase_cutpoints or args.layer13_phase_cutpoints
 
   resolved_device = prepare_device(args.device)
   model = load_pretrained(args.model_dir, device=resolved_device)
@@ -1403,7 +1496,7 @@ def main() -> None:
   cache = build_zero_cache(model, args.context_length, max_length)
   token = Tensor([[2]], dtype="int32", device=model.device).realize()
 
-  with gemma_profile_sidecars(cache_write_phase_cutpoints=args.layer13_phase_cutpoints):
+  with gemma_profile_sidecars(cache_write_phase_cutpoints=phase_cutpoints, cache_write_phase_targets=phase_targets):
     with Context(JIT=args.jit_mode, BEAM=0, TRACEMETA=2):
       rollout_jit = TinyJit(lambda token, start_pos: model._rollout_next_token(token, start_pos, cache, 0.0, decode_sliding_window=True))
       for offset in range(3):
@@ -1463,6 +1556,8 @@ def main() -> None:
     "jit_mode": args.jit_mode,
     "jit_interpretation": "JIT=1 graph-batched execution" if args.jit_mode == 1 else "JIT=2 ungraphed per-kernel timing",
     "metal_int8_gate_up": "default",
+    "cache_write_phase_targets": args.phase_targets or ["layer13"],
+    "cache_write_phase_cutpoints": phase_cutpoints,
     "tensor_dtype": str(lm.embed_tokens.weight.dtype),
     "text_config": {
       "num_hidden_layers": lm.config.num_hidden_layers,
@@ -1493,6 +1588,8 @@ def main() -> None:
     "elapsed_ms": round(payload["summary"]["elapsed_ms"], 3),
     "jit_mode": args.jit_mode,
     "metal_int8_gate_up": "default",
+    "cache_write_phase_targets": args.phase_targets or ["layer13"],
+    "cache_write_phase_cutpoints": phase_cutpoints,
     "original_capture": payload["original_capture"],
     "post_graph_execution": payload["post_graph_execution"],
     "source_attribution": {

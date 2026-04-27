@@ -1,5 +1,16 @@
 # Evolution Log
 
+## 2026-04-27 054 - Profile phase target generalization accepted
+
+- Status: accepted.
+- Change: generalized `scripts/profile_decode_jit.py` cache-write phase target selection from a hardcoded layer-13 shared-source selector to scoped presets and exact role/layer selectors.
+- New CLI: `--phase-cutpoints` plus repeatable `--phase-target TARGET`; supported targets include `layer13`, `all-shared-source`, `all-local`, `all-packed`, `local-layer<N>`, `shared-source-layer<N>`, and `shared-consumer-layer<N>`. `--layer13-phase-cutpoints` remains a compatibility alias.
+- TDD: new parser/scope tests failed before implementation, then passed.
+- Verification: `tests/test_profile_decode_jit.py` passed (`32 passed, 2 warnings`); full suite passed (`82 passed, 2 warnings`); METAL smoke passed with `rollout_jit_count=3` and `decode_fallback=False`.
+- Real artifacts: generated all-local and local-layer12 phase-cutpoint profiles at `benchmarks/gemma4-metal-decode-graph-all-local-phase-profile-700.json` and `benchmarks/gemma4-metal-decode-graph-local-layer12-phase-profile-700.json` (left untracked). Both preserved 7 `MetalGraph` batches.
+- Observation: broad `all-local` targeting is useful for scanning but can smear phase metadata across graph batches; exact selectors are safer for runtime probes.
+- Next target: use exact `local-layer12` phase attribution to choose a narrow graphable runtime experiment.
+
 ## 2026-04-27 053 - Graphable rowwise-int8 QKV fusion probe rejected
 
 - Status: rejected.

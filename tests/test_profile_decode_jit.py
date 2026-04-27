@@ -178,10 +178,38 @@ def test_profile_cache_write_phase_category_rejects_unknown_phase():
     profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="mystery")
 
 
-def test_profile_cache_write_phase_target_is_layer13_shared_source_only():
+def test_profile_cache_write_phase_target_defaults_to_layer13_shared_source_only():
   assert profile.cache_write_phase_target("packed", "shared_source", 13, "sliding_attention")
   assert not profile.cache_write_phase_target("packed", "local", 13, "sliding_attention")
   assert not profile.cache_write_phase_target("packed", "shared_source", 14, "full_attention")
+
+
+def test_profile_cache_write_phase_target_accepts_scoped_presets():
+  targets = profile.parse_cache_write_phase_targets(["all-local"])
+
+  with profile.cache_write_phase_target_scope(targets):
+    assert profile.cache_write_phase_target("packed", "local", 10, "sliding_attention")
+    assert profile.cache_write_phase_target("packed", "local", 14, "full_attention")
+    assert not profile.cache_write_phase_target("packed", "shared_source", 13, "sliding_attention")
+
+  assert profile.cache_write_phase_target("packed", "shared_source", 13, "sliding_attention")
+
+
+def test_profile_cache_write_phase_target_parser_supports_multiple_presets():
+  targets = profile.parse_cache_write_phase_targets(["all-shared-source", "all-local"])
+
+  assert profile.cache_write_phase_target("packed", "shared_source", 14, "full_attention", targets=targets)
+  assert profile.cache_write_phase_target("packed", "local", 3, "sliding_attention", targets=targets)
+  assert not profile.cache_write_phase_target("value", "local", 3, "sliding_attention", targets=targets)
+
+
+def test_profile_cache_write_phase_target_parser_supports_exact_role_layer_selectors():
+  targets = profile.parse_cache_write_phase_targets(["local-layer12", "shared-source-layer14"])
+
+  assert profile.cache_write_phase_target("packed", "local", 12, "sliding_attention", targets=targets)
+  assert profile.cache_write_phase_target("packed", "shared_source", 14, "full_attention", targets=targets)
+  assert not profile.cache_write_phase_target("packed", "local", 11, "sliding_attention", targets=targets)
+  assert not profile.cache_write_phase_target("packed", "shared_consumer", 12, "sliding_attention", targets=targets)
 
 
 def test_profile_uop_creation_sidecar_patch_restores_and_stamps_cached_uops():
