@@ -263,3 +263,18 @@ def test_inventory_untracked_artifacts_lists_known_categories_without_git_repo(t
   assert "dependency-lockfile" in categories
   assert "inventoried" not in proc.stdout
   assert proc.stderr == ""
+
+
+def test_inventory_untracked_artifacts_rejects_unknown_category_before_git_collection(tmp_path: Path):
+  proc = subprocess.run(
+    [sys.executable, str(SCRIPT), "--only-category", "typo-category"],
+    cwd=tmp_path,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+
+  assert proc.returncode != 0
+  assert proc.stdout == ""
+  assert "unknown --only-category: typo-category" in proc.stderr
+  assert "--list-categories" in proc.stderr

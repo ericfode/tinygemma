@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-list-categories-doc-085",
+  "current_checkpoint": "artifact-inventory-invalid-category-validation-086",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-invalid-category-validation-086",
+  "next_target": "artifact-inventory-invalid-category-doc-087",
   "next_target_plan": [
-    "Reject unknown --only-category values before inventory collection so typos do not silently return empty reports.",
-    "Use strict TDD and confirm the error message points to --list-categories.",
-    "Keep helper read-only and generated artifacts untouched."
+    "Document that unknown --only-category values fail and --list-categories is the discovery path.",
+    "Run artifact inventory tests plus invalid-category smoke and diff checks.",
+    "Keep generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:43:25-0700",
+  "updated_at": "2026-04-27T03:45:10-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1302,6 +1302,26 @@
         "git diff --check: passed"
       ],
       "decision": "Documentation-only; generated benchmark/profile artifacts remain untracked and untouched."
+    },
+    {
+      "id": "artifact-inventory-invalid-category-validation-086",
+      "completed_at": "2026-04-27T03:45:10-0700",
+      "status": "accepted-infrastructure",
+      "summary": "Added validation for unknown --only-category values before inventory collection.",
+      "artifacts": [
+        "scripts/inventory_untracked_artifacts.py",
+        "tests/test_artifact_inventory.py",
+        "docs/plans/2026-04-27-artifact-inventory-invalid-category-validation.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 9 passed",
+        "helper/profiler/paired-helper slice: 48 passed, 2 warnings",
+        "invalid-category smoke exited nonzero and stderr mentioned unknown category plus --list-categories",
+        "scripts/inventory_untracked_artifacts.py py_compile: passed",
+        "configs/repo-loop-state.json parsed successfully",
+        "git diff --check: passed"
+      ],
+      "decision": "Accepted typo protection; generated benchmark/profile artifacts remain untracked and untouched."
     }
   ]
 }

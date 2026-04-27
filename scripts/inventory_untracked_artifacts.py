@@ -215,6 +215,13 @@ def main(argv: list[str] | None = None) -> int:
   if args.list_categories:
     print("\n".join(sorted(ARTIFACT_CATEGORIES)))
     return 0
+  unknown_categories = sorted(set(args.only_category) - set(ARTIFACT_CATEGORIES))
+  if unknown_categories:
+    parser.error(
+      "unknown --only-category: "
+      + ", ".join(unknown_categories)
+      + "; use --list-categories to see valid values"
+    )
 
   cwd = Path.cwd()
   rows = collect_inventory(cwd=cwd)

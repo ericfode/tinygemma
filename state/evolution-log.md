@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 086 - Artifact inventory invalid category validation
+
+- Status: accepted infrastructure improvement.
+- Change: `scripts/inventory_untracked_artifacts.py` now rejects unknown `--only-category` values before inventory collection and points users to `--list-categories`.
+- Verification: artifact inventory tests passed; helper/profiler/paired-helper slice passed with 48 tests and 2 warnings; invalid-category smoke exited nonzero with the expected guidance; py_compile, repo-loop JSON, and diff checks passed.
+- Decision: generated benchmark/profile artifacts remain untracked and untouched.
+
 ## 2026-04-27 085 - Artifact inventory category listing documented
 
 - Status: accepted docs increment.
