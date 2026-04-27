@@ -1,5 +1,15 @@
 # Evolution Log
 
+## 2026-04-27 059 - Decode-only attention output view elision rejected
+
+- Status: rejected evo experiment; no runtime code merged.
+- Evo child: `exp_0012` from `exp_0005`, hypothesis `probe: decode-only attention output view elision`.
+- Implementation tested only in the child worktree: skip final attention-output transpose/permute before reshape when `query_len == 1` in both grouped and ungrouped attention paths.
+- Pre-evo verification: focused tests passed (`73 passed, 1 skipped, 2 warnings`), research METAL smoke passed (`rollout_jit_count=3`, `decode_fallback=False`), hash16 real-checkpoint gate passed at `30.415459 tok/s` with expected hash.
+- Evo result: default score `28.4939 tok/s`, regressing from parent `exp_0005` at `28.6153`; inherited `e2b_int8_metal_hash1000_current_floor` failed.
+- Action: discarded `exp_0012` with reason not to skip transpose/permute before decode attention-output reshape under this benchmark.
+- Next target: `frontier-saturation-and-rmsnorm-cache-review-060`, a review of remaining non-rejected surfaces before spending another evo child.
+
 ## 2026-04-27 058 - Shared-source layer13 runtime hypothesis exhausted
 
 - Status: accepted negative decision; no runtime code changed.
