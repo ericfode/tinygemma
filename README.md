@@ -132,6 +132,23 @@ python scripts/benchmark_gemma4_matrix.py \
 
 The machine-specific speed envelope and local optimization gates are recorded in `benchmarks/gemma4-metal-speed-targets.md`. The short version: optimized Apple Silicon runtimes should reach tens to 100+ tokens/sec on this M5 Max depending on model size, while this repo's current tinygrad decode path is still below the first usable long-run target.
 
+For same-session baseline/candidate comparisons, use the paired decode benchmark helper. It accepts a baseline target, a candidate target, and forwards benchmark arguments after `--`; when the default evo benchmark is absent from main, it resolves it from the baseline evo worktree:
+
+```bash
+. .venv/bin/activate
+python scripts/paired_e2b_decode_benchmark.py \
+  --baseline-target .evo/run_0000/worktrees/exp_0005/tinygrad_gemma/model.py \
+  --candidate-target .evo/run_0000/worktrees/exp_0013/tinygrad_gemma/model.py \
+  --out benchmarks/paired-exp0005-exp0013-hash16.json \
+  --label exp0005-vs-exp0013-hash16 \
+  -- \
+  --max-new-tokens 16 \
+  --decode-warmup-tokens 4 \
+  --min-score 5.0
+```
+
+The helper writes both child benchmark payloads plus absolute/relative score deltas. Treat very short paired runs as smoke tests; throughput claims still require durable benchmark artifacts under `benchmarks/` and the longer evo gates.
+
 The full beam/format matrix is intentionally resumable because the large checkpoints and higher beams can take a long time on local Metal:
 
 ```bash

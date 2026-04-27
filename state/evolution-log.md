@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 063 - Paired helper usage documented
+
+- Status: accepted documentation-only increment.
+- Change: updated `README.md` Gemma 4 Matrix Workflow with paired helper usage, default evo worktree benchmark resolution behavior, and short-run smoke caution.
+- Verification: paired helper tests passed (`2 passed`); `git diff --check` passed.
+- Decision: no runtime or benchmark semantics changed.
+
 ## 2026-04-27 062 - Paired helper frontier smoke accepted
 
 - Status: accepted infrastructure.

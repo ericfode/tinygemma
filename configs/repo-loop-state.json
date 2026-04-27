@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "paired-helper-frontier-smoke-accepted-062",
+  "current_checkpoint": "paired-helper-readme-usage-documented-063",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "paired-helper-ci-doc-and-usage-surface-063",
+  "next_target": "post-frontier-handoff-and-stop-boundary-064",
   "next_target_plan": "Return to graphable Tensor/tinygrad program surfaces after pruning the raw custom Runner branch. Refresh evo scratchpad/frontier evidence and the profiler-backed hot-path summary, then pick one narrow model.py or profiler-supported graphable increment. Do not re-open raw metal_int8 custom Runner integration unless tinygrad exposes a first-class graphable custom-call or CompiledRunner-compatible surface.",
-  "updated_at": "2026-04-27T02:54:41-0700",
+  "updated_at": "2026-04-27T02:56:25-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -900,6 +900,21 @@
         "git diff --check: passed"
       ],
       "decision": "Accepted helper default worktree benchmark resolution; hash4 score is only a smoke, not a throughput benchmark."
+    },
+    {
+      "id": "paired-helper-ci-doc-and-usage-surface-063",
+      "completed_at": "2026-04-27T02:56:25-0700",
+      "status": "accepted-docs",
+      "summary": "Documented paired decode benchmark helper usage in README Gemma 4 Matrix Workflow.",
+      "artifacts": [
+        "README.md",
+        "docs/plans/2026-04-27-paired-helper-ci-doc-and-usage-surface.md"
+      ],
+      "verification": [
+        ".venv/bin/python -m pytest -q tests/test_paired_decode_benchmark.py: 2 passed",
+        "git diff --check: passed"
+      ],
+      "decision": "Documentation-only; no runtime or benchmark semantics changed."
     }
   ]
 }
