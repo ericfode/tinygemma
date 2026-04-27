@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 078 - Artifact inventory JSON output
+
+- Status: accepted infrastructure improvement.
+- Change: `scripts/inventory_untracked_artifacts.py` now supports `--format json`, producing a strict machine-readable payload with ranked rows and per-row reference counts while keeping the human summary on stderr.
+- Verification: artifact inventory tests passed; helper/profiler/paired-helper slice passed with 44 tests and 2 warnings; real-repo JSON smoke parsed 56 rows and preserved stable top-ranked evidence; py_compile, repo-loop JSON, and diff checks passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 077 - Artifact inventory reference exactness
 
 - Status: accepted infrastructure precision improvement.

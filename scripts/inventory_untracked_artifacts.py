@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -106,8 +107,35 @@ def collect_inventory(*, cwd: Path) -> list[dict[str, Any]]:
   return rows
 
 
+def sort_inventory_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+  return sorted(rows, key=lambda row: (0 if row["refs"] else 1, -len(row["refs"]), row["path"]))
+
+
+def render_json_payload(rows: list[dict[str, Any]], *, timestamp: str) -> dict[str, Any]:
+  rows = sort_inventory_rows(rows)
+  total_size = sum(int(row["size"]) for row in rows)
+  referenced_count = sum(1 for row in rows if row["refs"])
+  return {
+    "timestamp": timestamp,
+    "untracked_count": len(rows),
+    "total_size": total_size,
+    "referenced_count": referenced_count,
+    "rows": [
+      {
+        "path": row["path"],
+        "category": row["category"],
+        "size": row["size"],
+        "refs": row["refs"],
+        "reference_count": len(row["refs"]),
+        "disposition": row["disposition"],
+      }
+      for row in rows
+    ],
+  }
+
+
 def render_markdown(rows: list[dict[str, Any]], *, timestamp: str) -> str:
-  rows = sorted(rows, key=lambda row: (0 if row["refs"] else 1, -len(row["refs"]), row["path"]))
+  rows = sort_inventory_rows(rows)
   by_category = Counter(row["category"] for row in rows)
   by_suffix = Counter(Path(row["path"]).suffix or "<none>" for row in rows)
   total_size = sum(int(row["size"]) for row in rows)
@@ -160,18 +188,22 @@ def default_timestamp() -> str:
 
 def main(argv: list[str] | None = None) -> int:
   parser = argparse.ArgumentParser(description="Inventory untracked repo artifacts without mutating git state.")
-  parser.add_argument("--output", type=Path, help="Write markdown inventory to this path. Defaults to stdout.")
+  parser.add_argument("--output", type=Path, help="Write inventory to this path. Defaults to stdout.")
+  parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Output format. Defaults to markdown.")
   parser.add_argument("--timestamp", default=default_timestamp())
   args = parser.parse_args(argv)
 
   cwd = Path.cwd()
   rows = collect_inventory(cwd=cwd)
-  markdown = render_markdown(rows, timestamp=args.timestamp)
+  if args.format == "json":
+    text = json.dumps(render_json_payload(rows, timestamp=args.timestamp), indent=2, sort_keys=True, allow_nan=False) + "\n"
+  else:
+    text = render_markdown(rows, timestamp=args.timestamp)
   if args.output:
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(markdown)
+    args.output.write_text(text)
   else:
-    print(markdown, end="")
+    print(text, end="")
   print(f"inventoried {len(rows)} untracked path(s)", file=sys.stderr)
   return 0
 

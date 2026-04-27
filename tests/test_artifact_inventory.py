@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -130,3 +131,33 @@ def test_inventory_untracked_artifacts_uses_exact_reference_tokens(tmp_path: Pat
   assert "false.md" not in artifact_line
   assert "| `1` | docs/exact_path.md |" in path_line
   assert "| `0` | — |" in lonely_line
+
+
+def test_inventory_untracked_artifacts_json_output_is_machine_readable(tmp_path: Path):
+  repo = tmp_path / "repo"
+  repo.mkdir()
+  run_git(repo, "init")
+  (repo / "docs").mkdir()
+  (repo / "docs" / "note.md").write_text("Keep artifact.csv\n")
+  run_git(repo, "add", "docs/note.md")
+  (repo / "artifact.csv").write_text("score\n1\n")
+  (repo / "orphan.progress.jsonl").write_text('{"step": 1}\n')
+
+  proc = subprocess.run(
+    [sys.executable, str(SCRIPT), "--format", "json", "--timestamp", "2026-04-27T03:50:00-0700"],
+    cwd=repo,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+
+  assert proc.returncode == 0, proc.stderr
+  payload = json.loads(proc.stdout)
+  assert payload["timestamp"] == "2026-04-27T03:50:00-0700"
+  assert payload["untracked_count"] == 2
+  assert payload["referenced_count"] == 1
+  assert [row["path"] for row in payload["rows"]] == ["artifact.csv", "orphan.progress.jsonl"]
+  assert payload["rows"][0]["reference_count"] == 1
+  assert payload["rows"][0]["refs"] == ["docs/note.md"]
+  assert "inventoried" not in proc.stdout
+  assert "inventoried 2 untracked path(s)" in proc.stderr
