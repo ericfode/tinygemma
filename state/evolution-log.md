@@ -1,5 +1,14 @@
 # Evolution Log
 
+## 2026-04-27 089 - Short-floor-first evo policy
+
+- Status: accepted evo policy update.
+- User policy: optimize only the default short floor until it appears saturated; defer the long `1000/20` floor; weigh graph-size/source-count reductions more heavily.
+- Change: removed inherited long gate `e2b_int8_metal_hash1000_current_floor` from `exp_0000`; effective gates on `exp_0005` are now `metal_smoke`, `cli_help`, and `e2b_int8_metal_hash16`.
+- Updated local `.evo/project.md` to record the short-floor-first policy and graph-size weighting.
+- Scan: read-only evo scan over `exp_0006`..`exp_0012` confirmed no short-score improvers over `exp_0005=28.6153` and flagged repeated micro-elision/KV-view surfaces as negative evidence.
+- Next: run a graph-size-weighted short-floor child from `exp_0005`; do not run long floor per child.
+
 ## 2026-04-27 088 - Artifact inventory final helper review
 
 - Status: accepted review increment.
