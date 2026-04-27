@@ -1603,3 +1603,21 @@ Artifacts:
 - `benchmarks/gemma4-metal-decode-graph-singleton-kv-broadcast-exp0013-512.csv`
 - `configs/repo-loop-state.json`
 - `state/evolution-log.md`
+
+## 2026-04-27 04:28:57 - lane-before-head-dim-packed-cache-rejected-091
+
+Rejected evo exp_0014 under the short-floor-first, graph-size-weighted policy. The candidate moved packed K/V cache backing storage from accepted final-lane `(B,H,L,D,2)` to lane-before-head-dim `(B,H,L,2,D)` and updated runtime/profiler packed assignment shapes accordingly. Focused cache/profile tests passed, but evo default 128/20 score regressed to 27.2326 versus exp_0005 at 28.6153. A post-window METAL decode graph profile measured source_count=2994, graph_batch_count=7, and elapsed_ms=53.861, so the candidate did not earn retention by graph-size reduction either; exp_0014 was discarded and exp_0005 remains the frontier.
+
+Verification:
+- Focused exp_0014 tests: `36 passed, 2 warnings`.
+- `evo run exp_0014`: `score=27.2326`, parent `exp_0005=28.6153`, no gate failures, score regressed.
+- Graph profile: `benchmarks/gemma4-metal-decode-graph-lane-before-head-dim-exp0014-512.json`, `source_count=2994`, `graph_batch_count=7`, `elapsed_ms=53.861`.
+- `evo discard exp_0014 --reason ...` completed; `evo frontier` reports `exp_0005` rank 1.
+
+Artifacts:
+- `docs/plans/2026-04-27-lane-before-head-dim-evo-probe.md`
+- `benchmarks/gemma4-metal-decode-graph-lane-before-head-dim-exp0014-512.json`
+- `benchmarks/gemma4-metal-decode-graph-lane-before-head-dim-exp0014-512.csv`
+- `.evo/project.md` (local ignored evo state)
+- `configs/repo-loop-state.json`
+- `state/evolution-log.md`

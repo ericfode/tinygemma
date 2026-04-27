@@ -1,0 +1,1215 @@
+{
+  "context_length": 512,
+  "csv": "/Users/ericfode/Downloads/tinygrad-gemma/benchmarks/gemma4-metal-decode-graph-lane-before-head-dim-exp0014-512.csv",
+  "device": "METAL",
+  "jit_interpretation": "JIT=1 graph-batched execution",
+  "jit_mode": 1,
+  "max_length": 517,
+  "metal_int8_gate_up": "default",
+  "model_dir": "/Users/ericfode/Downloads/tinygrad-gemma/checkpoints/gemma-4-E2B-int8",
+  "original_capture": {
+    "cache_write_phase_category_counts": {
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 863,
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 9
+    },
+    "cache_write_phase_conflict_count": 37,
+    "cache_write_phase_unclassified_count": 13,
+    "category_basis_counts": {
+      "repo_sidecar_realize_scope_metadata": 2275,
+      "repo_sidecar_uop_creation_metadata": 719
+    },
+    "category_counts": {
+      "attention_packed_cache_write__role_local__layer_00__type_sliding_attention": 7,
+      "attention_packed_cache_write__role_local__layer_01__type_sliding_attention": 30,
+      "attention_packed_cache_write__role_local__layer_02__type_sliding_attention": 51,
+      "attention_packed_cache_write__role_local__layer_03__type_sliding_attention": 71,
+      "attention_packed_cache_write__role_local__layer_04__type_full_attention": 91,
+      "attention_packed_cache_write__role_local__layer_05__type_sliding_attention": 112,
+      "attention_packed_cache_write__role_local__layer_06__type_sliding_attention": 132,
+      "attention_packed_cache_write__role_local__layer_07__type_sliding_attention": 152,
+      "attention_packed_cache_write__role_local__layer_08__type_sliding_attention": 172,
+      "attention_packed_cache_write__role_local__layer_09__type_full_attention": 192,
+      "attention_packed_cache_write__role_local__layer_10__type_sliding_attention": 213,
+      "attention_packed_cache_write__role_local__layer_11__type_sliding_attention": 233,
+      "attention_packed_cache_write__role_local__layer_12__type_sliding_attention": 253,
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 885,
+      "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention": 293,
+      "mlp": 107
+    },
+    "category_counts_rollup": {
+      "attention_packed_cache_write_local": 1709,
+      "attention_packed_cache_write_shared_source": 1178,
+      "mlp": 107
+    },
+    "compiled_runner_count": 2994,
+    "exec_count": 2994,
+    "graph_batch_count": 0,
+    "program_type_counts": {
+      "CompiledRunner": 2994
+    },
+    "raw_gate_up_runner_count": 0,
+    "unclassified_source_summary": {
+      "ast_root_counts": {},
+      "count": 0,
+      "display_name_counts": {},
+      "op_signature_counts": {},
+      "program_type_counts": {},
+      "uop_sidecar_category_counts": {}
+    }
+  },
+  "post_graph_execution": {
+    "category_counts": {
+      "graph_batch": 7
+    },
+    "category_counts_rollup": {
+      "graph_batch": 7
+    },
+    "compiled_runner_count": 0,
+    "exec_count": 7,
+    "graph_batch_count": 7,
+    "program_type_counts": {
+      "MetalGraph": 7
+    },
+    "raw_gate_up_runner_count": 0
+  },
+  "profile_start": 515,
+  "quantization": {
+    "manifest_method": "int8",
+    "manifest_quantized_tensor_count": 582,
+    "raw_dtype_counts": {
+      "__bf16": 1429,
+      "float": 582,
+      "signed char": 582
+    },
+    "sample_tensors": {
+      "model.language_model.embed_tokens.weight": "(262144, 1536) dtypes.char",
+      "model.language_model.layers.0.mlp.gate_proj.weight": "(6144, 1536) dtypes.char",
+      "model.language_model.layers.0.self_attn.q_proj.weight": "(2048, 1536) dtypes.char",
+      "model.language_model.per_layer_model_projection.weight": "(8960, 1536) dtypes.char"
+    }
+  },
+  "sliding_start": 511,
+  "source_attributed_cache_write_phase_summary": {
+    "by_category": {
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": {
+        "elapsed_ms": 13.43030193149188,
+        "elapsed_share": 0.24935307282301594,
+        "source_count": 863
+      },
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": {
+        "elapsed_ms": 0.14446813454567164,
+        "elapsed_share": 0.0026822608648509006,
+        "source_count": 9
+      }
+    },
+    "by_parent": {
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": {
+        "elapsed_ms": 13.574770066037551,
+        "elapsed_share": 0.25203533368786685,
+        "source_count": 872
+      }
+    },
+    "by_phase": {
+      "kv_projection": {
+        "elapsed_ms": 13.43030193149188,
+        "elapsed_share": 0.24935307282301594,
+        "source_count": 863
+      },
+      "store": {
+        "elapsed_ms": 0.14446813454567164,
+        "elapsed_share": 0.0026822608648509006,
+        "source_count": 9
+      }
+    },
+    "conflict_source_count": 37,
+    "elapsed_ms": 13.574770066037551,
+    "source_count": 872,
+    "total_elapsed_ms": 53.86058322619647,
+    "unclassified_source_count": 13
+  },
+  "source_attributed_summary": {
+    "by_category": {
+      "attention_packed_cache_write__role_local__layer_00__type_sliding_attention": {
+        "elapsed_ms": 0.26867968335864134,
+        "elapsed_share": 0.004988428777874097,
+        "source_count": 7
+      },
+      "attention_packed_cache_write__role_local__layer_01__type_sliding_attention": {
+        "elapsed_ms": 1.2625130057131173,
+        "elapsed_share": 0.023440388686676195,
+        "source_count": 30
+      },
+      "attention_packed_cache_write__role_local__layer_02__type_sliding_attention": {
+        "elapsed_ms": 3.0900156216375763,
+        "elapsed_share": 0.057370630552969364,
+        "source_count": 51
+      },
+      "attention_packed_cache_write__role_local__layer_03__type_sliding_attention": {
+        "elapsed_ms": 2.5898147687257733,
+        "elapsed_share": 0.04808367480629417,
+        "source_count": 71
+      },
+      "attention_packed_cache_write__role_local__layer_04__type_full_attention": {
+        "elapsed_ms": 2.972057276565465,
+        "elapsed_share": 0.055180562454807014,
+        "source_count": 91
+      },
+      "attention_packed_cache_write__role_local__layer_05__type_sliding_attention": {
+        "elapsed_ms": 3.4466796641936526,
+        "elapsed_share": 0.06399261682181845,
+        "source_count": 112
+      },
+      "attention_packed_cache_write__role_local__layer_06__type_sliding_attention": {
+        "elapsed_ms": 3.854417454022041,
+        "elapsed_share": 0.07156286143123951,
+        "source_count": 132
+      },
+      "attention_packed_cache_write__role_local__layer_07__type_sliding_attention": {
+        "elapsed_ms": 2.422165995085379,
+        "elapsed_share": 0.044971031689595535,
+        "source_count": 152
+      },
+      "attention_packed_cache_write__role_local__layer_08__type_sliding_attention": {
+        "elapsed_ms": 2.7408720470702974,
+        "elapsed_share": 0.05088827270138442,
+        "source_count": 172
+      },
+      "attention_packed_cache_write__role_local__layer_09__type_full_attention": {
+        "elapsed_ms": 2.97234006529834,
+        "elapsed_share": 0.055185812838593,
+        "source_count": 192
+      },
+      "attention_packed_cache_write__role_local__layer_10__type_sliding_attention": {
+        "elapsed_ms": 2.3619027208496846,
+        "elapsed_share": 0.043852156426351374,
+        "source_count": 213
+      },
+      "attention_packed_cache_write__role_local__layer_11__type_sliding_attention": {
+        "elapsed_ms": 2.583677624215852,
+        "elapsed_share": 0.047969729799717704,
+        "source_count": 233
+      },
+      "attention_packed_cache_write__role_local__layer_12__type_sliding_attention": {
+        "elapsed_ms": 2.8054525275820197,
+        "elapsed_share": 0.05208730317308403,
+        "source_count": 253
+      },
+      "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": {
+        "elapsed_ms": 13.718923753225559,
+        "elapsed_share": 0.25471175638055493,
+        "source_count": 885
+      },
+      "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention": {
+        "elapsed_ms": 4.901771171457516,
+        "elapsed_share": 0.09100850525275067,
+        "source_count": 293
+      },
+      "mlp": {
+        "elapsed_ms": 1.8692998471955533,
+        "elapsed_share": 0.034706268206289526,
+        "source_count": 107
+      }
+    },
+    "by_category_basis": {
+      "repo_sidecar_realize_scope_metadata": {
+        "elapsed_ms": 53.86058322619647,
+        "elapsed_share": 1.0,
+        "execution_count": 7,
+        "source_count": 2994
+      }
+    },
+    "by_category_rollup": {
+      "attention_packed_cache_write_local": {
+        "elapsed_ms": 33.37058845431784,
+        "elapsed_share": 0.6195734701604049,
+        "source_count": 1709
+      },
+      "attention_packed_cache_write_shared_source": {
+        "elapsed_ms": 18.620694924683075,
+        "elapsed_share": 0.3457202616333056,
+        "source_count": 1178
+      },
+      "mlp": {
+        "elapsed_ms": 1.8692998471955533,
+        "elapsed_share": 0.034706268206289526,
+        "source_count": 107
+      }
+    },
+    "elapsed_ms": 53.86058322619647,
+    "source_count": 2994
+  },
+  "source_attribution": {
+    "attributed_source_count": 2994,
+    "category_basis_counts": {
+      "repo_sidecar_realize_scope_metadata": 7
+    },
+    "execution_item_count": 7,
+    "execution_row_count": 7,
+    "items": [
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 32
+        },
+        "category_counts": {
+          "attention_packed_cache_write__role_local__layer_00__type_sliding_attention": 7,
+          "attention_packed_cache_write__role_local__layer_01__type_sliding_attention": 25
+        },
+        "category_counts_rollup": {
+          "attention_packed_cache_write_local": 32
+        },
+        "display_name": "<batched 32>",
+        "elapsed_ms": 1.2282499810680747,
+        "expected_source_count": 32,
+        "ordinal": 0,
+        "program_type": "MetalGraph",
+        "program_type_counts": {
+          "CompiledRunner": 32
+        },
+        "source_count": 32,
+        "source_end": 31,
+        "source_start": 0,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {},
+          "uop_sidecar_category_counts": {}
+        }
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 64
+        },
+        "category_counts": {
+          "attention_packed_cache_write__role_local__layer_01__type_sliding_attention": 5,
+          "attention_packed_cache_write__role_local__layer_02__type_sliding_attention": 51,
+          "attention_packed_cache_write__role_local__layer_03__type_sliding_attention": 8
+        },
+        "category_counts_rollup": {
+          "attention_packed_cache_write_local": 64
+        },
+        "display_name": "<batched 64>",
+        "elapsed_ms": 3.8776666624471545,
+        "expected_source_count": 64,
+        "ordinal": 1,
+        "program_type": "MetalGraph",
+        "program_type_counts": {
+          "CompiledRunner": 64
+        },
+        "source_count": 64,
+        "source_end": 95,
+        "source_start": 32,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {},
+          "uop_sidecar_category_counts": {}
+        }
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 128
+        },
+        "category_counts": {
+          "attention_packed_cache_write__role_local__layer_03__type_sliding_attention": 63,
+          "attention_packed_cache_write__role_local__layer_04__type_full_attention": 65
+        },
+        "category_counts_rollup": {
+          "attention_packed_cache_write_local": 128
+        },
+        "display_name": "<batched 128>",
+        "elapsed_ms": 4.277041647583246,
+        "expected_source_count": 128,
+        "ordinal": 2,
+        "program_type": "MetalGraph",
+        "program_type_counts": {
+          "CompiledRunner": 128
+        },
+        "source_count": 128,
+        "source_end": 223,
+        "source_start": 96,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {},
+          "uop_sidecar_category_counts": {}
+        }
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 256
+        },
+        "category_counts": {
+          "attention_packed_cache_write__role_local__layer_04__type_full_attention": 26,
+          "attention_packed_cache_write__role_local__layer_05__type_sliding_attention": 112,
+          "attention_packed_cache_write__role_local__layer_06__type_sliding_attention": 118
+        },
+        "category_counts_rollup": {
+          "attention_packed_cache_write_local": 256
+        },
+        "display_name": "<batched 256>",
+        "elapsed_ms": 7.878124946728349,
+        "expected_source_count": 256,
+        "ordinal": 3,
+        "program_type": "MetalGraph",
+        "program_type_counts": {
+          "CompiledRunner": 256
+        },
+        "source_count": 256,
+        "source_end": 479,
+        "source_start": 224,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {},
+          "uop_sidecar_category_counts": {}
+        }
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 512
+        },
+        "category_counts": {
+          "attention_packed_cache_write__role_local__layer_06__type_sliding_attention": 14,
+          "attention_packed_cache_write__role_local__layer_07__type_sliding_attention": 152,
+          "attention_packed_cache_write__role_local__layer_08__type_sliding_attention": 172,
+          "attention_packed_cache_write__role_local__layer_09__type_full_attention": 174
+        },
+        "category_counts_rollup": {
+          "attention_packed_cache_write_local": 512
+        },
+        "display_name": "<batched 512>",
+        "elapsed_ms": 8.158874930813909,
+        "expected_source_count": 512,
+        "ordinal": 4,
+        "program_type": "MetalGraph",
+        "program_type_counts": {
+          "CompiledRunner": 512
+        },
+        "source_count": 512,
+        "source_end": 991,
+        "source_start": 480,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {},
+          "uop_sidecar_category_counts": {}
+        }
+      },
+      {
+        "cache_write_phase_category_counts": {
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 258,
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 2
+        },
+        "cache_write_phase_conflict_count": 9,
+        "cache_write_phase_unclassified_count": 13,
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 1024
+        },
+        "category_counts": {
+          "attention_packed_cache_write__role_local__layer_09__type_full_attention": 18,
+          "attention_packed_cache_write__role_local__layer_10__type_sliding_attention": 213,
+          "attention_packed_cache_write__role_local__layer_11__type_sliding_attention": 233,
+          "attention_packed_cache_write__role_local__layer_12__type_sliding_attention": 253,
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 273,
+          "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention": 34
+        },
+        "category_counts_rollup": {
+          "attention_packed_cache_write_local": 717,
+          "attention_packed_cache_write_shared_source": 307
+        },
+        "display_name": "<batched 1024>",
+        "elapsed_ms": 11.35487505234778,
+        "expected_source_count": 1024,
+        "ordinal": 5,
+        "program_type": "MetalGraph",
+        "program_type_counts": {
+          "CompiledRunner": 1024
+        },
+        "source_count": 1024,
+        "source_end": 2015,
+        "source_start": 992,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {},
+          "uop_sidecar_category_counts": {}
+        }
+      },
+      {
+        "cache_write_phase_category_counts": {
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 605,
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 7
+        },
+        "cache_write_phase_conflict_count": 28,
+        "cache_write_phase_unclassified_count": 0,
+        "category_basis": "repo_sidecar_realize_scope_metadata",
+        "category_basis_counts": {
+          "repo_sidecar_realize_scope_metadata": 259,
+          "repo_sidecar_uop_creation_metadata": 719
+        },
+        "category_counts": {
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 612,
+          "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention": 259,
+          "mlp": 107
+        },
+        "category_counts_rollup": {
+          "attention_packed_cache_write_shared_source": 871,
+          "mlp": 107
+        },
+        "display_name": "<batched 978>",
+        "elapsed_ms": 17.085750005207956,
+        "expected_source_count": 978,
+        "ordinal": 6,
+        "program_type": "MetalGraph",
+        "program_type_counts": {
+          "CompiledRunner": 978
+        },
+        "source_count": 978,
+        "source_end": 2993,
+        "source_start": 2016,
+        "unclassified_source_summary": {
+          "ast_root_counts": {},
+          "count": 0,
+          "display_name_counts": {},
+          "op_signature_counts": {},
+          "program_type_counts": {},
+          "uop_sidecar_category_counts": {}
+        }
+      }
+    ],
+    "original_exec_count": 2994,
+    "source_count_mismatches": 0,
+    "status": "complete",
+    "unattributed_tail_count": 0,
+    "unparsed_graph_batches": 0
+  },
+  "summary": {
+    "by_category": {
+      "graph_batch": {
+        "elapsed_ms": 53.86058322619647,
+        "elapsed_share": 1.0,
+        "est_mem": 0,
+        "est_ops": 0,
+        "kernel_count": 7,
+        "ops_share": 0.0
+      }
+    },
+    "by_category_rollup": {
+      "graph_batch": {
+        "elapsed_ms": 53.86058322619647,
+        "elapsed_share": 1.0,
+        "est_mem": 0,
+        "est_ops": 0,
+        "kernel_count": 7,
+        "ops_share": 0.0
+      }
+    },
+    "by_program_type": {
+      "MetalGraph": {
+        "elapsed_ms": 53.86058322619647,
+        "elapsed_share": 1.0,
+        "kernel_count": 7
+      }
+    },
+    "elapsed_ms": 53.86058322619647,
+    "est_mem": 0,
+    "est_ops": 0,
+    "kernel_count": 7,
+    "top_elapsed_kernels": [
+      {
+        "cache_write_phase_category_counts": {
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 605,
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 7
+        },
+        "cache_write_phase_conflict_count": 28,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 978>",
+        "elapsed_ms": 17.085750005207956,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_shared_source__layer_14__type_full_attention",
+            "count": "259",
+            "name": "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention"
+          }
+        ],
+        "ordinal": 6,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 612,
+          "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention": 259,
+          "mlp": 107
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_shared_source": 871,
+          "mlp": 107
+        },
+        "source_count": 978,
+        "source_end": 2993,
+        "source_start": 2016
+      },
+      {
+        "cache_write_phase_category_counts": {
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 258,
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 2
+        },
+        "cache_write_phase_conflict_count": 9,
+        "cache_write_phase_unclassified_count": 13,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 1024>",
+        "elapsed_ms": 11.35487505234778,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_09__type_full_attention",
+            "count": "18",
+            "name": "attention_packed_cache_write__role_local__layer_09__type_full_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_10__type_sliding_attention",
+            "count": "213",
+            "name": "attention_packed_cache_write__role_local__layer_10__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_11__type_sliding_attention",
+            "count": "233",
+            "name": "attention_packed_cache_write__role_local__layer_11__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_12__type_sliding_attention",
+            "count": "253",
+            "name": "attention_packed_cache_write__role_local__layer_12__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+            "count": "273",
+            "name": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_shared_source__layer_14__type_full_attention",
+            "count": "34",
+            "name": "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention"
+          }
+        ],
+        "ordinal": 5,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_09__type_full_attention": 18,
+          "attention_packed_cache_write__role_local__layer_10__type_sliding_attention": 213,
+          "attention_packed_cache_write__role_local__layer_11__type_sliding_attention": 233,
+          "attention_packed_cache_write__role_local__layer_12__type_sliding_attention": 253,
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 273,
+          "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention": 34
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 717,
+          "attention_packed_cache_write_shared_source": 307
+        },
+        "source_count": 1024,
+        "source_end": 2015,
+        "source_start": 992
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 512>",
+        "elapsed_ms": 8.158874930813909,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_06__type_sliding_attention",
+            "count": "14",
+            "name": "attention_packed_cache_write__role_local__layer_06__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_07__type_sliding_attention",
+            "count": "152",
+            "name": "attention_packed_cache_write__role_local__layer_07__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_08__type_sliding_attention",
+            "count": "172",
+            "name": "attention_packed_cache_write__role_local__layer_08__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_09__type_full_attention",
+            "count": "174",
+            "name": "attention_packed_cache_write__role_local__layer_09__type_full_attention"
+          }
+        ],
+        "ordinal": 4,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_06__type_sliding_attention": 14,
+          "attention_packed_cache_write__role_local__layer_07__type_sliding_attention": 152,
+          "attention_packed_cache_write__role_local__layer_08__type_sliding_attention": 172,
+          "attention_packed_cache_write__role_local__layer_09__type_full_attention": 174
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 512
+        },
+        "source_count": 512,
+        "source_end": 991,
+        "source_start": 480
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 256>",
+        "elapsed_ms": 7.878124946728349,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_04__type_full_attention",
+            "count": "26",
+            "name": "attention_packed_cache_write__role_local__layer_04__type_full_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_05__type_sliding_attention",
+            "count": "112",
+            "name": "attention_packed_cache_write__role_local__layer_05__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_06__type_sliding_attention",
+            "count": "118",
+            "name": "attention_packed_cache_write__role_local__layer_06__type_sliding_attention"
+          }
+        ],
+        "ordinal": 3,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_04__type_full_attention": 26,
+          "attention_packed_cache_write__role_local__layer_05__type_sliding_attention": 112,
+          "attention_packed_cache_write__role_local__layer_06__type_sliding_attention": 118
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 256
+        },
+        "source_count": 256,
+        "source_end": 479,
+        "source_start": 224
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 128>",
+        "elapsed_ms": 4.277041647583246,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_03__type_sliding_attention",
+            "count": "63",
+            "name": "attention_packed_cache_write__role_local__layer_03__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_04__type_full_attention",
+            "count": "65",
+            "name": "attention_packed_cache_write__role_local__layer_04__type_full_attention"
+          }
+        ],
+        "ordinal": 2,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_03__type_sliding_attention": 63,
+          "attention_packed_cache_write__role_local__layer_04__type_full_attention": 65
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 128
+        },
+        "source_count": 128,
+        "source_end": 223,
+        "source_start": 96
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 64>",
+        "elapsed_ms": 3.8776666624471545,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_01__type_sliding_attention",
+            "count": "5",
+            "name": "attention_packed_cache_write__role_local__layer_01__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_02__type_sliding_attention",
+            "count": "51",
+            "name": "attention_packed_cache_write__role_local__layer_02__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_03__type_sliding_attention",
+            "count": "8",
+            "name": "attention_packed_cache_write__role_local__layer_03__type_sliding_attention"
+          }
+        ],
+        "ordinal": 1,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_01__type_sliding_attention": 5,
+          "attention_packed_cache_write__role_local__layer_02__type_sliding_attention": 51,
+          "attention_packed_cache_write__role_local__layer_03__type_sliding_attention": 8
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 64
+        },
+        "source_count": 64,
+        "source_end": 95,
+        "source_start": 32
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 32>",
+        "elapsed_ms": 1.2282499810680747,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_00__type_sliding_attention",
+            "count": "7",
+            "name": "attention_packed_cache_write__role_local__layer_00__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_01__type_sliding_attention",
+            "count": "25",
+            "name": "attention_packed_cache_write__role_local__layer_01__type_sliding_attention"
+          }
+        ],
+        "ordinal": 0,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_00__type_sliding_attention": 7,
+          "attention_packed_cache_write__role_local__layer_01__type_sliding_attention": 25
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 32
+        },
+        "source_count": 32,
+        "source_end": 31,
+        "source_start": 0
+      }
+    ],
+    "top_est_ops_kernels": [
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 32>",
+        "elapsed_ms": 1.2282499810680747,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_00__type_sliding_attention",
+            "count": "7",
+            "name": "attention_packed_cache_write__role_local__layer_00__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_01__type_sliding_attention",
+            "count": "25",
+            "name": "attention_packed_cache_write__role_local__layer_01__type_sliding_attention"
+          }
+        ],
+        "ordinal": 0,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_00__type_sliding_attention": 7,
+          "attention_packed_cache_write__role_local__layer_01__type_sliding_attention": 25
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 32
+        },
+        "source_count": 32,
+        "source_end": 31,
+        "source_start": 0
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 64>",
+        "elapsed_ms": 3.8776666624471545,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_01__type_sliding_attention",
+            "count": "5",
+            "name": "attention_packed_cache_write__role_local__layer_01__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_02__type_sliding_attention",
+            "count": "51",
+            "name": "attention_packed_cache_write__role_local__layer_02__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_03__type_sliding_attention",
+            "count": "8",
+            "name": "attention_packed_cache_write__role_local__layer_03__type_sliding_attention"
+          }
+        ],
+        "ordinal": 1,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_01__type_sliding_attention": 5,
+          "attention_packed_cache_write__role_local__layer_02__type_sliding_attention": 51,
+          "attention_packed_cache_write__role_local__layer_03__type_sliding_attention": 8
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 64
+        },
+        "source_count": 64,
+        "source_end": 95,
+        "source_start": 32
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 128>",
+        "elapsed_ms": 4.277041647583246,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_03__type_sliding_attention",
+            "count": "63",
+            "name": "attention_packed_cache_write__role_local__layer_03__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_04__type_full_attention",
+            "count": "65",
+            "name": "attention_packed_cache_write__role_local__layer_04__type_full_attention"
+          }
+        ],
+        "ordinal": 2,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_03__type_sliding_attention": 63,
+          "attention_packed_cache_write__role_local__layer_04__type_full_attention": 65
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 128
+        },
+        "source_count": 128,
+        "source_end": 223,
+        "source_start": 96
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 256>",
+        "elapsed_ms": 7.878124946728349,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_04__type_full_attention",
+            "count": "26",
+            "name": "attention_packed_cache_write__role_local__layer_04__type_full_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_05__type_sliding_attention",
+            "count": "112",
+            "name": "attention_packed_cache_write__role_local__layer_05__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_06__type_sliding_attention",
+            "count": "118",
+            "name": "attention_packed_cache_write__role_local__layer_06__type_sliding_attention"
+          }
+        ],
+        "ordinal": 3,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_04__type_full_attention": 26,
+          "attention_packed_cache_write__role_local__layer_05__type_sliding_attention": 112,
+          "attention_packed_cache_write__role_local__layer_06__type_sliding_attention": 118
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 256
+        },
+        "source_count": 256,
+        "source_end": 479,
+        "source_start": 224
+      },
+      {
+        "cache_write_phase_category_counts": {},
+        "cache_write_phase_conflict_count": 0,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 512>",
+        "elapsed_ms": 8.158874930813909,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_06__type_sliding_attention",
+            "count": "14",
+            "name": "attention_packed_cache_write__role_local__layer_06__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_07__type_sliding_attention",
+            "count": "152",
+            "name": "attention_packed_cache_write__role_local__layer_07__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_08__type_sliding_attention",
+            "count": "172",
+            "name": "attention_packed_cache_write__role_local__layer_08__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_09__type_full_attention",
+            "count": "174",
+            "name": "attention_packed_cache_write__role_local__layer_09__type_full_attention"
+          }
+        ],
+        "ordinal": 4,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_06__type_sliding_attention": 14,
+          "attention_packed_cache_write__role_local__layer_07__type_sliding_attention": 152,
+          "attention_packed_cache_write__role_local__layer_08__type_sliding_attention": 172,
+          "attention_packed_cache_write__role_local__layer_09__type_full_attention": 174
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 512
+        },
+        "source_count": 512,
+        "source_end": 991,
+        "source_start": 480
+      },
+      {
+        "cache_write_phase_category_counts": {
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 258,
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 2
+        },
+        "cache_write_phase_conflict_count": 9,
+        "cache_write_phase_unclassified_count": 13,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 1024>",
+        "elapsed_ms": 11.35487505234778,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_09__type_full_attention",
+            "count": "18",
+            "name": "attention_packed_cache_write__role_local__layer_09__type_full_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_10__type_sliding_attention",
+            "count": "213",
+            "name": "attention_packed_cache_write__role_local__layer_10__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_11__type_sliding_attention",
+            "count": "233",
+            "name": "attention_packed_cache_write__role_local__layer_11__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_local__layer_12__type_sliding_attention",
+            "count": "253",
+            "name": "attention_packed_cache_write__role_local__layer_12__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention",
+            "count": "273",
+            "name": "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention"
+          },
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_shared_source__layer_14__type_full_attention",
+            "count": "34",
+            "name": "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention"
+          }
+        ],
+        "ordinal": 5,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_local__layer_09__type_full_attention": 18,
+          "attention_packed_cache_write__role_local__layer_10__type_sliding_attention": 213,
+          "attention_packed_cache_write__role_local__layer_11__type_sliding_attention": 233,
+          "attention_packed_cache_write__role_local__layer_12__type_sliding_attention": 253,
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 273,
+          "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention": 34
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_local": 717,
+          "attention_packed_cache_write_shared_source": 307
+        },
+        "source_count": 1024,
+        "source_end": 2015,
+        "source_start": 992
+      },
+      {
+        "cache_write_phase_category_counts": {
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_kv_projection": 605,
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention__phase_store": 7
+        },
+        "cache_write_phase_conflict_count": 28,
+        "cache_write_phase_unclassified_count": 0,
+        "category": "graph_batch",
+        "device": "METAL",
+        "display_name": "<batched 978>",
+        "elapsed_ms": 17.085750005207956,
+        "est_mem": 0,
+        "est_ops": 0,
+        "metadata": [
+          {
+            "caller": "repo_sidecar:1::attention_packed_cache_write__role_shared_source__layer_14__type_full_attention",
+            "count": "259",
+            "name": "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention"
+          }
+        ],
+        "ordinal": 6,
+        "program_type": "MetalGraph",
+        "source_category_basis": "repo_sidecar_realize_scope_metadata",
+        "source_category_counts": {
+          "attention_packed_cache_write__role_shared_source__layer_13__type_sliding_attention": 612,
+          "attention_packed_cache_write__role_shared_source__layer_14__type_full_attention": 259,
+          "mlp": 107
+        },
+        "source_category_counts_rollup": {
+          "attention_packed_cache_write_shared_source": 871,
+          "mlp": 107
+        },
+        "source_count": 978,
+        "source_end": 2993,
+        "source_start": 2016
+      }
+    ]
+  },
+  "tensor_dtype": "dtypes.float",
+  "text_config": {
+    "hidden_size": 1536,
+    "intermediate_size": 6144,
+    "layer_types": [
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention"
+    ],
+    "num_attention_heads": 8,
+    "num_hidden_layers": 35,
+    "num_key_value_heads": 1,
+    "sliding_window": 512,
+    "vocab_size": 262144
+  },
+  "tinygrad_path": "/Users/ericfode/src/.tinygrad_research/tinygrad/__init__.py",
+  "var_vals": {
+    "gemma_start_pos_window": 515
+  }
+}
