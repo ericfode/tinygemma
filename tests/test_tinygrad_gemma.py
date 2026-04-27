@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from tinygrad import Tensor, dtypes, nn
+from tinygrad.device import Buffer
 
 from tinygrad_gemma import (
   DEFAULT_IGNORE_INDEX,
@@ -1138,6 +1139,82 @@ def test_runtime_int8_attention_fused_kv_matches_separate_path(tmp_path: Path):
 
   np.testing.assert_allclose(fused_k.numpy(), separate_k.numpy(), rtol=1e-5, atol=1e-5)
   np.testing.assert_allclose(fused_v.numpy(), separate_v.numpy(), rtol=1e-5, atol=1e-5)
+
+
+def _raw_metal_int8_capture_buffers() -> list[Buffer]:
+  return [
+    Buffer("CPU", 1, dtypes.float32),
+    Buffer("CPU", 1, dtypes.float32),
+    Buffer("CPU", 1, dtypes.int8),
+    Buffer("CPU", 1, dtypes.float32),
+  ]
+
+
+def _with_fake_raw_metal_capture(capture) -> None:
+  metal_int8_module.capturing[:] = [capture]
+
+
+def test_raw_metal_rowwise_int8_stock_capture_adds_exec_item_and_runs(monkeypatch):
+  class FakeCapture:
+    def __init__(self):
+      self.items = []
+
+    def add(self, item):
+      self.items.append(item)
+
+  calls = []
+
+  def fake_runner_call(self, rawbufs, var_vals, wait=False):
+    calls.append((self.device, self.in_features, self.out_features, self.local_size, len(rawbufs), wait))
+
+  capture = FakeCapture()
+  original_capturing = list(metal_int8_module.capturing)
+  monkeypatch.setattr(metal_int8_module, "CAPTURING", True)
+  monkeypatch.setattr(metal_int8_module.RowwiseInt8DecodeLinearRunner, "__call__", fake_runner_call)
+  try:
+    _with_fake_raw_metal_capture(capture)
+    metal_int8_module._run_or_capture_rowwise_int8_decode_linear(
+      *[buffer.ensure_allocated() for buffer in _raw_metal_int8_capture_buffers()],
+      in_features=1,
+      out_features=1,
+      local_size=1,
+      device="METAL",
+    )
+  finally:
+    metal_int8_module.capturing[:] = original_capturing
+
+  assert len(capture.items) == 1
+  assert isinstance(capture.items[0].prg, metal_int8_module.RowwiseInt8DecodeLinearRunner)
+  assert calls == [("METAL", 1, 1, 1, 4, False)]
+
+
+def test_raw_metal_rowwise_int8_rejects_capture_without_exec_item_add(monkeypatch):
+  class LinearOnlyCapture:
+    def add_linear(self, linear, var_vals):
+      raise AssertionError("raw ExecItem path must not use add_linear implicitly")
+
+  calls = []
+
+  def fake_runner_call(self, rawbufs, var_vals, wait=False):
+    calls.append((rawbufs, var_vals, wait))
+
+  original_capturing = list(metal_int8_module.capturing)
+  monkeypatch.setattr(metal_int8_module, "CAPTURING", True)
+  monkeypatch.setattr(metal_int8_module.RowwiseInt8DecodeLinearRunner, "__call__", fake_runner_call)
+  try:
+    _with_fake_raw_metal_capture(LinearOnlyCapture())
+    with pytest.raises(RuntimeError, match=r"cannot be captured.*add\(ExecItem\)"):
+      metal_int8_module._run_or_capture_rowwise_int8_decode_linear(
+        *[buffer.ensure_allocated() for buffer in _raw_metal_int8_capture_buffers()],
+        in_features=1,
+        out_features=1,
+        local_size=1,
+        device="METAL",
+      )
+  finally:
+    metal_int8_module.capturing[:] = original_capturing
+
+  assert calls == []
 
 
 def test_metal_rowwise_int8_program_compiles_source_before_runtime(monkeypatch):

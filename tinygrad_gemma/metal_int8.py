@@ -108,7 +108,13 @@ def _run_or_capture_rowwise_int8_decode_linear(
     prg=runner,
   )
   if len(capturing) and CAPTURING:
-    capturing[0].add(item)
+    add_exec_item = getattr(capturing[0], "add", None)
+    if add_exec_item is None:
+      raise RuntimeError(
+        "raw rowwise-int8 decode linear cannot be captured by this tinygrad runtime: "
+        "active capture object does not support add(ExecItem)"
+      )
+    add_exec_item(item)
   item.run()
 
 

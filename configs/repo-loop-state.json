@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "metal-int8-raw-runner-capture-safety-050",
-  "next_target_plan": "After 049, the raw rowwise-int8 METAL runner can construct a program under the research tinygrad runtime by passing compiler.compile_cached MTLB bytes to Device.runtime. For 050, do not integrate into RowwiseInt8Linear or GemmaMLP yet; first prove replay/capture behavior for RowwiseInt8DecodeLinearRunner under stock and research tinygrad. Add a focused test/prototype that exercises TinyJit or capturing semantics for the raw runner and verifies repeated calls remain correct and do not silently bypass execution. Only after capture safety is proven should a later increment consider guarded model hot-path integration or local_size tuning.",
-  "updated_at": "2026-04-27T00:23:05-0700",
+  "next_target": "metal-int8-research-capture-bridge-spike-051",
+  "next_target_plan": "After 050, standalone stock tinygrad TinyJit replay of the raw rowwise-int8 METAL runner is proven, but the research tinygrad runtime used by the active E2B path has only add_linear capture and now correctly rejects raw ExecItem capture. For 051, do not integrate the raw runner into GemmaMLP yet. First inspect the research tinygrad linear/custom-function execution path and prototype, outside the model hot path, whether a raw rowwise-int8 runner can be represented as a replayable captured linear/custom function with correct buffer substitution. If no small honest bridge exists, record the negative result and return to graphable model.py/profiler-backed surfaces.",
+  "updated_at": "2026-04-27T00:30:56-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -673,6 +673,17 @@
         "tinygrad_gemma/metal_int8.py",
         "tests/test_tinygrad_gemma.py",
         "docs/plans/2026-04-27-metal-int8-mtlb-compatibility.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-int8-raw-runner-capture-safety-050",
+      "summary": "Accepted a narrow capture-safety patch for the dormant raw rowwise-int8 METAL decode-linear runner. Stock-style TinyJit capture objects with add(ExecItem) still record the raw runner and execute the capture pass; add_linear-only research tinygrad capture now raises a clear RuntimeError before kernel execution, avoiding a silent capture/replay bypass. A real stock TinyJit METAL canary replayed three different inputs correctly, while the research canary rejected capture explicitly. No model hot-path integration or throughput claim was made.",
+      "artifacts": [
+        "tinygrad_gemma/metal_int8.py",
+        "tests/test_tinygrad_gemma.py",
+        "docs/plans/2026-04-27-metal-int8-capture-safety.md",
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
