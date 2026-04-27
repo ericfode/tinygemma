@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "phase-overlap-reporting-accepted-056",
+  "current_checkpoint": "neighbor-exact-phase-targets-compared-057",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "compare-neighbor-exact-phase-targets-057",
+  "next_target": "shared-source-layer13-nonrejected-runtime-hypothesis-058",
   "next_target_plan": "Return to graphable Tensor/tinygrad program surfaces after pruning the raw custom Runner branch. Refresh evo scratchpad/frontier evidence and the profiler-backed hot-path summary, then pick one narrow model.py or profiler-supported graphable increment. Do not re-open raw metal_int8 custom Runner integration unless tinygrad exposes a first-class graphable custom-call or CompiledRunner-compatible surface.",
-  "updated_at": "2026-04-27T02:08:02-0700",
+  "updated_at": "2026-04-27T02:16:24-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -789,6 +789,28 @@
         "local-layer12 overlap artifact: graph_batch_count=7, raw_gate_up_runner_count=0, phase_source_count=256, kv_projection=250 sources / ~2.954 ms"
       ],
       "decision": "Profiler overlap now proves local-layer12 attribution exclusivity, but the surface is too small for an immediate runtime patch without a new transformation beyond rejected K/V projection variants."
+    },
+    {
+      "id": "compare-neighbor-exact-phase-targets-057",
+      "completed_at": "2026-04-27T02:16:24-0700",
+      "status": "accepted-profiling-decision",
+      "summary": "Compared exact phase targets local-layer11, local-layer12, shared-source-layer13, and shared-source-layer14 with corrected overlap reporting. All preserved 7 MetalGraph batches and 0 raw runners. shared-source-layer13 is the dominant exact phase bucket at 888 sources / ~14.503 ms / ~14.422 ms kv_projection.",
+      "artifacts": [
+        "docs/plans/2026-04-27-compare-neighbor-exact-phase-targets.md",
+        "benchmarks/gemma4-metal-decode-graph-local-layer11-phase-overlap-compare-700.json (untracked local artifact)",
+        "benchmarks/gemma4-metal-decode-graph-local-layer12-phase-overlap-compare-700.json (untracked local artifact)",
+        "benchmarks/gemma4-metal-decode-graph-shared-source-layer13-phase-overlap-compare-700.json (untracked local artifact)",
+        "benchmarks/gemma4-metal-decode-graph-shared-source-layer14-phase-overlap-compare-700.json (untracked local artifact)"
+      ],
+      "verification": [
+        "Sequential profiler loop exited 0 for all four exact targets",
+        "All four artifacts: graph_batch_count=7, raw_gate_up_runner_count=0",
+        "local-layer11: 236 sources / 3.222 ms / kv_projection 3.140 ms",
+        "local-layer12: 256 sources / 3.142 ms / kv_projection 3.069 ms",
+        "shared-source-layer13: 888 sources / 14.503 ms / kv_projection 14.422 ms",
+        "shared-source-layer14: 296 sources / 5.011 ms / kv_projection 4.905 ms"
+      ],
+      "decision": "Focus future runtime investigation on shared-source-layer13 if a genuinely new graphable transformation exists; local-layer11/12 are too small and projection variants are mostly exhausted."
     }
   ]
 }

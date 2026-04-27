@@ -1,5 +1,14 @@
 # Evolution Log
 
+## 2026-04-27 057 - Neighbor exact phase targets compared
+
+- Status: accepted profiling decision; no runtime code changed.
+- Method: sequential METAL graph profiles with exact `--phase-target` selectors: `local-layer11`, `local-layer12`, `shared-source-layer13`, `shared-source-layer14`, all with `--phase-cutpoints` at context length 700.
+- Result: all four profiles preserved 7 MetalGraph batches and 0 raw gate/up runners.
+- Exact target comparison: local-layer11 = 236 sources / ~3.222 ms; local-layer12 = 256 / ~3.142 ms; shared-source-layer13 = 888 / ~14.503 ms; shared-source-layer14 = 296 / ~5.011 ms.
+- Hot exact target: `shared-source-layer13`, with `kv_projection` at 882 sources / ~14.422 ms (~29.8% elapsed).
+- Decision: if another runtime experiment is attempted, it should target shared-source-layer13, not local-layer12; however obvious K/V projection reshape/fusion/materialization paths have already been rejected, so 058 must first find a non-repeated graphable transformation.
+
 ## 2026-04-27 056 - Phase overlap reporting accepted
 
 - Status: accepted profiler instrumentation.
