@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "metal-int8-research-capture-bridge-spike-051",
-  "next_target_plan": "After 050, standalone stock tinygrad TinyJit replay of the raw rowwise-int8 METAL runner is proven, but the research tinygrad runtime used by the active E2B path has only add_linear capture and now correctly rejects raw ExecItem capture. For 051, do not integrate the raw runner into GemmaMLP yet. First inspect the research tinygrad linear/custom-function execution path and prototype, outside the model hot path, whether a raw rowwise-int8 runner can be represented as a replayable captured linear/custom function with correct buffer substitution. If no small honest bridge exists, record the negative result and return to graphable model.py/profiler-backed surfaces.",
-  "updated_at": "2026-04-27T00:30:56-0700",
+  "next_target": "metal-int8-first-class-raw-bridge-graphability-052",
+  "next_target_plan": "After 051 proved a process-local research tinygrad custom-function bridge can replay the raw rowwise-int8 METAL runner when UOps are preserved until resolve_params, decide whether there is an honest first-class integration path that is graphable enough to avoid the known MetalGraph fragmentation regression. Do not enable project-local global monkeypatching in the model hot path. Inspect tinygrad graph/custom-function support, prototype only if the bridge can be made first-class or tightly scoped, and prune the raw-runner branch if it remains graph-breaking or production-fragile.",
+  "updated_at": "2026-04-27T00:51:47-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -684,6 +684,16 @@
         "tinygrad_gemma/metal_int8.py",
         "tests/test_tinygrad_gemma.py",
         "docs/plans/2026-04-27-metal-int8-capture-safety.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-int8-research-capture-bridge-spike-051",
+      "summary": "Accepted a prototype-only feasibility spike for representing the dormant raw rowwise-int8 METAL decode-linear runner in the research tinygrad add_linear capture world. The inspectable script first reproduces the production helper rejection, then installs a temporary process-local pm_exec/_call_outs_ins bridge for Ops.CUSTOM_FUNCTION(arg=\"raw_rowwise_int8_decode_linear\"), preserves UOps until resolve_params(ctx, call) at replay time, verifies three distinct METAL replay inputs against NumPy, proves a later tinygrad op can consume the output, and restores globals. No production model path was changed and no throughput improvement is claimed.",
+      "artifacts": [
+        "scripts/prototype_research_raw_metal_capture_bridge.py",
+        "docs/plans/2026-04-27-metal-int8-research-capture-bridge-spike.md",
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]
