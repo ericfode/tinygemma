@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 080 - Artifact inventory JSON summary counts
+
+- Status: accepted infrastructure improvement.
+- Change: `scripts/inventory_untracked_artifacts.py --format json` now includes `counts_by_category` and `counts_by_suffix` alongside ranked rows and aggregate counts.
+- Verification: artifact inventory tests passed; helper/profiler/paired-helper slice passed with 45 tests and 2 warnings; real-repo JSON smoke parsed 56 rows and confirmed summary counts; py_compile, repo-loop JSON, and diff checks passed.
+- Decision: generated benchmark/profile artifacts remain untracked and untouched.
+
 ## 2026-04-27 079 - Artifact inventory JSON output documented
 
 - Status: accepted docs increment.

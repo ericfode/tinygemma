@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-json-output-doc-079",
+  "current_checkpoint": "artifact-inventory-category-summary-json-080",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-category-summary-json-080",
+  "next_target": "artifact-inventory-json-summary-doc-081",
   "next_target_plan": [
-    "Add category/suffix count summaries to the JSON payload so downstream review scripts do not need to recompute markdown-only summary data.",
-    "Add tests verifying JSON summary fields match rows.",
-    "Keep helper read-only and generated artifacts untouched."
+    "Document JSON summary fields in README so downstream scripts can rely on counts_by_category/counts_by_suffix.",
+    "Run artifact inventory tests plus a JSON smoke and diff checks.",
+    "Keep generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:31:58-0700",
+  "updated_at": "2026-04-27T03:34:27-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1194,6 +1194,26 @@
         "git diff --check: passed"
       ],
       "decision": "Documentation-only; no generated benchmark/profile artifacts were deleted, staged, ignored, or committed."
+    },
+    {
+      "id": "artifact-inventory-category-summary-json-080",
+      "completed_at": "2026-04-27T03:34:27-0700",
+      "status": "accepted-infrastructure",
+      "summary": "Added category and suffix summary counts to artifact inventory JSON output.",
+      "artifacts": [
+        "scripts/inventory_untracked_artifacts.py",
+        "tests/test_artifact_inventory.py",
+        "docs/plans/2026-04-27-artifact-inventory-json-summary-counts.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 6 passed",
+        "helper/profiler/paired-helper slice: 45 passed, 2 warnings",
+        "real-repo JSON smoke parsed 56 rows and summary counts: decode-profiler-artifact=28, benchmark-progress-log=14, benchmark-result-artifact=11; .csv=23, .json=18, .jsonl=14",
+        "scripts/inventory_untracked_artifacts.py py_compile: passed",
+        "configs/repo-loop-state.json parsed successfully",
+        "git diff --check: passed"
+      ],
+      "decision": "Accepted machine-readable summary counts; generated benchmark/profile artifacts remain untracked and untouched."
     }
   ]
 }

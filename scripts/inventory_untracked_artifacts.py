@@ -115,11 +115,15 @@ def render_json_payload(rows: list[dict[str, Any]], *, timestamp: str) -> dict[s
   rows = sort_inventory_rows(rows)
   total_size = sum(int(row["size"]) for row in rows)
   referenced_count = sum(1 for row in rows if row["refs"])
+  by_category = Counter(row["category"] for row in rows)
+  by_suffix = Counter(Path(row["path"]).suffix or "<none>" for row in rows)
   return {
     "timestamp": timestamp,
     "untracked_count": len(rows),
     "total_size": total_size,
     "referenced_count": referenced_count,
+    "counts_by_category": dict(sorted(by_category.items())),
+    "counts_by_suffix": dict(sorted(by_suffix.items())),
     "rows": [
       {
         "path": row["path"],

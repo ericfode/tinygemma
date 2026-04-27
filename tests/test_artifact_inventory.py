@@ -161,3 +161,31 @@ def test_inventory_untracked_artifacts_json_output_is_machine_readable(tmp_path:
   assert payload["rows"][0]["refs"] == ["docs/note.md"]
   assert "inventoried" not in proc.stdout
   assert "inventoried 2 untracked path(s)" in proc.stderr
+
+
+def test_inventory_untracked_artifacts_json_output_includes_summary_counts(tmp_path: Path):
+  repo = tmp_path / "repo"
+  repo.mkdir()
+  run_git(repo, "init")
+  (repo / "tracked.md").write_text("tracked\n")
+  run_git(repo, "add", "tracked.md")
+  (repo / "artifact.csv").write_text("score\n1\n")
+  (repo / "paired-smoke.json").write_text('{"score": 1}\n')
+  (repo / "run.progress.jsonl").write_text('{"step": 1}\n')
+
+  proc = subprocess.run(
+    [sys.executable, str(SCRIPT), "--format", "json", "--timestamp", "2026-04-27T04:10:00-0700"],
+    cwd=repo,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+
+  assert proc.returncode == 0, proc.stderr
+  payload = json.loads(proc.stdout)
+  assert payload["counts_by_category"] == {
+    "benchmark-progress-log": 1,
+    "benchmark-result-artifact": 1,
+    "paired-helper-smoke": 1,
+  }
+  assert payload["counts_by_suffix"] == {".csv": 1, ".json": 1, ".jsonl": 1}
