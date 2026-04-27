@@ -1751,3 +1751,32 @@ Artifacts:
 - `.evo/project.md` (local ignored evo state)
 - `configs/repo-loop-state.json`
 - `state/evolution-log.md`
+
+## 2026-04-27 08:32:20 PDT - exp0082-round097-stall-and-next-briefs
+
+Cross-cut the next worker round from `exp_0082`. The frontier stayed at `exp_0082` (`66.3476`), and all four adjacent/simple additive layer-output cutpoint children became clean negative evidence rather than correctness or infrastructure failures.
+
+Verification:
+- `evo status`: `experiments=87`, `committed=25`, `evaluated=0`, `discarded=62`, `failed=0`, `active=0`, `best=66.3476`.
+- `evo frontier`: rank-1 frontier remains `exp_0082` at `66.3476`.
+- `evo gate list exp_0082`: effective gates remain `metal_smoke`, `cli_help`, and `e2b_int8_metal_hash16`.
+- Worker outcomes:
+  - `exp_0083`: additive layer-10 local cut on `exp_0082`, score `65.7860`, discarded.
+  - `exp_0084`: additive layer-13 adjacent output boundary on `exp_0082`, score `54.5064`, discarded.
+  - `exp_0085`: additive layer-5 local cut on `exp_0082`, score `65.6087`, discarded.
+  - `exp_0086`: additive layer-7 local-gap cut on `exp_0082`, score `52.8999`, discarded.
+- Review scans confirmed the discarded children preserved the protected short-row invariants: `generated_tokens=128`, `measured_decode_tokens=108`, `rollout_jit_count=127`, `decode_fallback=false`, stable output hash `1c39dd289bb7363f0f600ae1087ad39926e9733447df72bf03955c92d06066b0`, and inherited gates passed.
+- Manual long confirmation for unchanged `exp_0082` completed in `benchmarks/gemma4-metal-e2b-int8-1000-exp0082-long-confirm.json` with `score=40.8412` (`40.841211` for `e2b_int8_metal_decode`), started `2026-04-27T15:18:50+00:00`, ended `2026-04-27T15:20:46+00:00`.
+
+Decision:
+- Increment the stall count for the `exp_0082` layer-output cutpoint lattice; do not repeat additive layer-output cuts at 5, 7, 10, or 13 on `exp_0082`.
+- Continue from `exp_0082`, but switch candidate class to one-shot intra-layer post-attention/pre-MLP boundaries and one partial `exp_0079` side-branch composition.
+- Next worker round should use `docs/plans/2026-04-27-exp0082-round097-stall-and-next-briefs.md`: layer-13 intra-layer boundary, layer-11 intra-layer boundary, layer-8 intra-layer boundary, and `exp_0079 + layer1` partial composition.
+- If these also regress, stop the current `model.py` layer-boundary search and pivot to measurement-first instrumentation or a separate profile/source-count evo run.
+
+Artifacts:
+- `docs/plans/2026-04-27-exp0082-round097-stall-and-next-briefs.md`
+- `benchmarks/gemma4-metal-e2b-int8-1000-exp0082-long-confirm.json`
+- `.evo/project.md` (local ignored evo state)
+- `configs/repo-loop-state.json`
+- `state/evolution-log.md`
