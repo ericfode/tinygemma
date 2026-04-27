@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "exp0082-round098-boundary-search-stop-and-pivot",
+  "current_checkpoint": "exp0082-measurement-pivot-layer13-kv-subphase-profile-099",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -762,6 +762,30 @@
         "worker summaries reported tests/test_profile_decode_jit.py: 32 passed, inherited gates passed, stable output hash, rollout_jit_count=127, decode_fallback=false"
       ],
       "decision": "Stop the current model.py realization-boundary throughput search. Pivot to measurement-first profiler instrumentation or a separate profile/source-count evo run before more performance children."
+    },
+    {
+      "id": "exp0082-measurement-pivot-layer13-kv-subphase-profile-099",
+      "status": "accepted-measurement-instrumentation-pivot",
+      "completed_at": "2026-04-27T09:19:26-0700",
+      "summary": "Started the measurement-first profiler pivot by splitting layer-13 fused-int8 kv_projection attribution into profiler-only subphases and generating a real exp_0082 METAL profile artifact.",
+      "artifacts": [
+        "scripts/profile_decode_jit.py",
+        "tests/test_profile_decode_jit.py",
+        "benchmarks/gemma4-metal-decode-graph-exp0082-layer13-kv-subphase-cutpoints-512.json",
+        "benchmarks/gemma4-metal-decode-graph-exp0082-layer13-kv-subphase-cutpoints-512.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ],
+      "verification": [
+        "tests/test_profile_decode_jit.py: 38 passed, 2 warnings",
+        "full pytest suite: 100 passed, 2 warnings",
+        "tinygrad-gemma --help succeeded",
+        "scripts/smoke_metal.py succeeded on METAL synthetic config with decode_fallback=false",
+        "profile_decode_jit.py on exp_0082 context_length=512 JIT=1 completed with source attribution complete: 954/954 attributed, 5 MetalGraph batches, 15.517 ms",
+        "independent code review passed with no security concerns or logic errors; one dimensionality-test suggestion was patched and reverified",
+        "git diff --check clean"
+      ],
+      "decision": "Use the new artifact before further throughput children. Layer-13 shared-source cache-write attribution now splits into kv_projection group 408 sources / ~7.077 ms, store 228 sources / ~3.951 ms, rmsnorm_rope 18 sources / ~0.305 ms, rhs_pack 1 source / ~0.011 ms. Inside kv_projection, kv_head_reshape dominates at 377 sources / ~6.555 ms; kv_scale_cast is 29 sources / ~0.499 ms; fused_int8_matmul itself is only 2 sources / ~0.022 ms. Next runtime work should target reshape/source-count/layout effects, not the fused int8 matmul kernel directly."
     }
   ],
   "gates": [
@@ -1514,5 +1538,8 @@
         "configs/repo-loop-state.json"
       ]
     }
-  ]
+  ],
+  "active_increment": null,
+  "next": "Plan the next non-boundary runtime/profile increment from the layer-13 kv_subphase evidence; avoid more realization-boundary throughput children until a concrete non-rejected surface is identified.",
+  "last_updated": "2026-04-27T09:19:26-0700"
 }

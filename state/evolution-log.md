@@ -1,5 +1,15 @@
 # Evolution Log
 
+## 2026-04-27 099 - Measurement pivot layer-13 KV subphase profiling
+
+- Status: accepted measurement-first profiler instrumentation increment.
+- Change: `scripts/profile_decode_jit.py` now splits fused-int8 layer-13 `kv_projection` profiler attribution into `kv_fused_int8_matmul`, `kv_scale_cast`, `kv_chunk_split`, and `kv_head_reshape` subphases while preserving the parent cache-write category by default. Phase metadata selection now uses the latest active phase when `prefer_cache_write_phase=True`, and JSON/CSV outputs include `cache_write_phase_group_counts` plus `source_attributed_cache_write_phase_summary.by_phase_group`.
+- Regression coverage: `tests/test_profile_decode_jit.py` now pins KV subphase category parsing/rollup, latest-phase preference, profiler-only fused-int8 subphase sidecar scoping, and phase-group attribution summaries. Reviewer feedback on impossible fake tensor dimensions was addressed by making the fake chunk shape-aware and using a dimensionally consistent `num_key_value_heads=2`, `head_dim=2` test shape.
+- Real profile artifact: `benchmarks/gemma4-metal-decode-graph-exp0082-layer13-kv-subphase-cutpoints-512.json` and `.csv` were generated against exp_0082 with `context_length=512`, `jit_mode=1`, phase cutpoints enabled, and complete source attribution: `954/954` sources, `5` MetalGraph batches, `15.517 ms` post-graph elapsed.
+- Measurement result: layer-13 shared-source cache-write attribution now splits into `kv_projection` group `408` sources / `~7.077 ms`, `store` `228` sources / `~3.951 ms`, `rmsnorm_rope` `18` sources / `~0.305 ms`, and `rhs_pack` `1` source / `~0.011 ms`. Inside `kv_projection`, `kv_head_reshape` dominates (`377` sources / `~6.555 ms`), with `kv_scale_cast` (`29` / `~0.499 ms`) and `kv_fused_int8_matmul` itself only (`2` / `~0.022 ms`).
+- Verification: focused profiler tests passed (`38 passed, 2 warnings`); full suite passed (`100 passed, 2 warnings`); `tinygrad-gemma --help` passed; `scripts/smoke_metal.py` passed on METAL synthetic config with `decode_fallback=false`; independent code review passed with no security concerns or logic errors; `git diff --check` clean.
+- Decision: do not return directly to realization-boundary throughput children. The next credible runtime surface is reshape/source-count/layout behavior around the KV head reshape attribution, not fused int8 matmul kernel work.
+
 ## 2026-04-27 089 - Short-floor-first evo policy
 
 - Status: accepted evo policy update.

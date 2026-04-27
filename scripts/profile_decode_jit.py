@@ -61,11 +61,26 @@ CACHE_WRITE_CATEGORY_RE = re.compile(
   r"__role_(?P<role>local|shared_source|shared_consumer)"
   r"__layer_(?P<layer>\d+|unknown)"
   r"__type_(?P<layer_type>[A-Za-z0-9_]+?)"
-  r"(?:__phase_(?P<phase>kv_projection|rmsnorm_rope|rhs_pack|store))?$"
+  r"(?:__phase_(?P<phase>kv_projection|kv_fused_int8_matmul|kv_scale_cast|kv_chunk_split|kv_head_reshape|rmsnorm_rope|rhs_pack|store))?$"
 )
 CACHE_WRITE_ROLES = ("shared_source", "shared_consumer", "local")
 CACHE_WRITE_KINDS = ("key", "value", "packed")
-CACHE_WRITE_PHASES = ("kv_projection", "rmsnorm_rope", "rhs_pack", "store")
+CACHE_WRITE_PHASES = (
+  "kv_projection",
+  "kv_fused_int8_matmul",
+  "kv_scale_cast",
+  "kv_chunk_split",
+  "kv_head_reshape",
+  "rmsnorm_rope",
+  "rhs_pack",
+  "store",
+)
+KV_PROJECTION_SUBPHASES = frozenset((
+  "kv_fused_int8_matmul",
+  "kv_scale_cast",
+  "kv_chunk_split",
+  "kv_head_reshape",
+))
 CACHE_WRITE_PHASE_TARGET_PRESETS = ("layer13", "all-shared-source", "all-local", "all-packed")
 CACHE_WRITE_PHASE_TARGET_EXACT_RE = re.compile(r"^(?P<role>local|shared-source|shared-consumer)-layer(?P<layer>\d+)$")
 
@@ -241,6 +256,7 @@ def cache_write_category_metadata(category: str) -> dict[str, Any] | None:
     }
     if phase is not None:
       metadata["phase"] = phase
+      metadata["phase_group"] = cache_write_phase_group_name(phase)
       metadata["parent"] = cache_write_sidecar_category(kind, role, layer_idx, match.group("layer_type"))
     return metadata
   prefix = "attention_"
@@ -278,6 +294,18 @@ def parent_cache_write_category(category: str) -> str:
 def cache_write_phase_name(category: str) -> str | None:
   metadata = cache_write_category_metadata(category)
   return None if metadata is None else metadata.get("phase")
+
+
+@lru_cache(maxsize=None)
+def cache_write_phase_group_name(phase: str | None) -> str | None:
+  if phase is None:
+    return None
+  return "kv_projection" if phase in KV_PROJECTION_SUBPHASES else phase
+
+
+@lru_cache(maxsize=None)
+def cache_write_phase_group(category: str) -> str | None:
+  return cache_write_phase_group_name(cache_write_phase_name(category))
 
 
 @lru_cache(maxsize=None)
@@ -415,17 +443,21 @@ def priority_category(categories: set[str], *, prefer_cache_write_phase: bool = 
 
 
 def sidecar_metadata_category(metadata, *, prefer_cache_write_phase: bool = False) -> str:
-  categories: set[str] = set()
+  categories: list[str] = []
   for item in metadata:
     name = str(getattr(item, "name", ""))
     caller = str(getattr(item, "caller", ""))
     if is_profile_category(name):
-      categories.add(name)
+      categories.append(name)
     if caller.startswith(("repo_sidecar:", "repo_uop_sidecar:")) and "::" in caller:
       category = caller.rsplit("::", 1)[-1]
       if is_profile_category(category):
-        categories.add(category)
-  return priority_category(categories, prefer_cache_write_phase=prefer_cache_write_phase)
+        categories.append(category)
+  if prefer_cache_write_phase:
+    phase_categories = [category for category in categories if is_cache_write_phase_category(category)]
+    if phase_categories:
+      return phase_categories[-1]
+  return priority_category(set(categories), prefer_cache_write_phase=prefer_cache_write_phase)
 
 
 def merge_metadata(existing, extra) -> tuple[Metadata, ...]:
@@ -844,16 +876,45 @@ def attention_sidecar_patch():
 def kv_projection_phase_sidecar_patch():
   original = GemmaAttention._project_kv
 
+  def realize_phase_value(value):
+    if not _CACHE_WRITE_PHASE_CUTPOINTS:
+      return value
+    if isinstance(value, tuple):
+      return tuple(tensor.realize() for tensor in value)
+    return value.realize()
+
+  def fused_int8_project_kv_with_subphase_sidecars(self, hidden_states, hidden_shape):
+    # Profiler-only mirror of GemmaAttention._project_kv's fused-int8 branch.
+    # Keep this deliberately small: runtime behavior belongs in model.py; this
+    # wrapper only attaches measurement labels to otherwise identical tensor ops.
+    weight, scale = self._fused_int8_kv_weight_scale()
+    with sidecar_scope(attention_phase_category(self, "kv_fused_int8_matmul")):
+      kv = hidden_states.matmul(weight.transpose(), dtype="float")
+      kv = realize_phase_value(kv)
+    with sidecar_scope(attention_phase_category(self, "kv_scale_cast")):
+      kv = (kv * scale.reshape(*([1] * (kv.ndim - 1)), scale.shape[0])).cast(hidden_states.dtype)
+      kv = realize_phase_value(kv)
+    with sidecar_scope(attention_phase_category(self, "kv_chunk_split")):
+      raw_k, raw_v = kv.chunk(2, dim=-1)
+      raw_k, raw_v = realize_phase_value((raw_k, raw_v))
+    with sidecar_scope(attention_phase_category(self, "kv_head_reshape")):
+      result = (
+        raw_k.reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim),
+        raw_v.reshape(*hidden_shape[:-2], self.num_key_value_heads, self.head_dim),
+      )
+      return realize_phase_value(result)
+
   @wraps(original)
   def wrapped(self, hidden_states, hidden_shape):
     category = attention_phase_category(self, "kv_projection")
     if category is None:
       result = original(self, hidden_states, hidden_shape)
+    elif self._can_use_fused_int8_kv():
+      result = fused_int8_project_kv_with_subphase_sidecars(self, hidden_states, hidden_shape)
     else:
       with sidecar_scope(category):
         result = original(self, hidden_states, hidden_shape)
-        if _CACHE_WRITE_PHASE_CUTPOINTS:
-          result = tuple(tensor.realize() for tensor in result)
+        result = realize_phase_value(result)
     context = current_attention_context()
     if context is not None and context.get("attention") is self:
       context["after_kv_project"] = True
@@ -1015,6 +1076,7 @@ def graph_source_count(row: dict[str, Any]) -> int | None:
 def source_slice_summary(items) -> dict[str, Any]:
   category_counts: dict[str, int] = defaultdict(int)
   cache_write_phase_category_counts: dict[str, int] = defaultdict(int)
+  cache_write_phase_group_counts: dict[str, int] = defaultdict(int)
   cache_write_phase_parent_category_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
   program_type_counts: dict[str, int] = defaultdict(int)
   category_basis_counts: dict[str, int] = defaultdict(int)
@@ -1032,6 +1094,7 @@ def source_slice_summary(items) -> dict[str, Any]:
         cache_write_phase_unclassified_count += 1
       else:
         cache_write_phase_category_counts[phase_category] += 1
+        cache_write_phase_group_counts[cache_write_phase_group(phase_category) or "unknown"] += 1
         cache_write_phase_parent_category_counts[phase_category][category] += 1
         if phase_conflict:
           cache_write_phase_conflict_count += 1
@@ -1041,6 +1104,7 @@ def source_slice_summary(items) -> dict[str, Any]:
     "category_counts": dict(sorted(category_counts.items())),
     "category_counts_rollup": category_count_rollups(category_counts),
     "cache_write_phase_category_counts": dict(sorted(cache_write_phase_category_counts.items())),
+    "cache_write_phase_group_counts": dict(sorted(cache_write_phase_group_counts.items())),
     "cache_write_phase_parent_category_counts": {
       phase_category: dict(sorted(parent_counts.items()))
       for phase_category, parent_counts in sorted(cache_write_phase_parent_category_counts.items())
@@ -1156,6 +1220,7 @@ def attach_source_attribution(rows: list[dict[str, Any]], attribution: dict[str,
     row["source_category_counts"] = item["category_counts"]
     row["source_category_counts_rollup"] = item["category_counts_rollup"]
     row["cache_write_phase_category_counts"] = item["cache_write_phase_category_counts"]
+    row["cache_write_phase_group_counts"] = item["cache_write_phase_group_counts"]
     row["cache_write_phase_parent_category_counts"] = item["cache_write_phase_parent_category_counts"]
     row["cache_write_phase_conflict_count"] = item["cache_write_phase_conflict_count"]
     row["cache_write_phase_unclassified_count"] = item["cache_write_phase_unclassified_count"]
@@ -1386,6 +1451,7 @@ def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict
   by_category: dict[str, dict[str, Any]] = {}
   by_parent: dict[str, dict[str, Any]] = {}
   by_phase: dict[str, dict[str, Any]] = {}
+  by_phase_group: dict[str, dict[str, Any]] = {}
   by_phase_parent_category: dict[str, dict[str, dict[str, Any]]] = {}
   total_elapsed = sum(float(item["elapsed_ms"]) for item in attribution["items"])
   phase_source_count = 0
@@ -1413,6 +1479,10 @@ def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict
       phase_entry = by_phase.setdefault(phase, {"source_count": 0, "elapsed_ms": 0.0})
       phase_entry["source_count"] += count_int
       phase_entry["elapsed_ms"] += category_elapsed
+      phase_group = cache_write_phase_group(category) or "unknown"
+      phase_group_entry = by_phase_group.setdefault(phase_group, {"source_count": 0, "elapsed_ms": 0.0})
+      phase_group_entry["source_count"] += count_int
+      phase_group_entry["elapsed_ms"] += category_elapsed
     for phase_category, parent_counts in item.get("cache_write_phase_parent_category_counts", {}).items():
       phase_parent_entry = by_phase_parent_category.setdefault(phase_category, {})
       for parent_category, count in parent_counts.items():
@@ -1421,7 +1491,7 @@ def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict
         parent_entry = phase_parent_entry.setdefault(parent_category, {"source_count": 0, "elapsed_ms": 0.0})
         parent_entry["source_count"] += count_int
         parent_entry["elapsed_ms"] += parent_elapsed
-  for groups in (by_category, by_parent, by_phase):
+  for groups in (by_category, by_parent, by_phase, by_phase_group):
     for entry in groups.values():
       entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed else 0.0
   for parent_groups in by_phase_parent_category.values():
@@ -1436,6 +1506,7 @@ def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict
     "by_category": dict(sorted(by_category.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
     "by_parent": dict(sorted(by_parent.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
     "by_phase": dict(sorted(by_phase.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+    "by_phase_group": dict(sorted(by_phase_group.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
     "by_phase_parent_category": {
       phase_category: dict(sorted(parent_counts.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True))
       for phase_category, parent_counts in sorted(by_phase_parent_category.items(), key=lambda item: sum(v["elapsed_ms"] for v in item[1].values()), reverse=True)
@@ -1461,6 +1532,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
       "source_category_counts",
       "source_category_counts_rollup",
       "cache_write_phase_category_counts",
+      "cache_write_phase_group_counts",
       "cache_write_phase_conflict_count",
       "cache_write_phase_unclassified_count",
       "source_category_basis",
@@ -1477,6 +1549,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "source_category_counts": json.dumps(row.get("source_category_counts", {}), sort_keys=True),
         "source_category_counts_rollup": json.dumps(row.get("source_category_counts_rollup", {}), sort_keys=True),
         "cache_write_phase_category_counts": json.dumps(row.get("cache_write_phase_category_counts", {}), sort_keys=True),
+        "cache_write_phase_group_counts": json.dumps(row.get("cache_write_phase_group_counts", {}), sort_keys=True),
         "cache_write_phase_conflict_count": row.get("cache_write_phase_conflict_count", ""),
         "cache_write_phase_unclassified_count": row.get("cache_write_phase_unclassified_count", ""),
         "source_category_basis": row.get("source_category_basis", ""),
@@ -1555,6 +1628,7 @@ def main() -> None:
     "category_counts": original_source_summary["category_counts"],
     "category_counts_rollup": original_source_summary["category_counts_rollup"],
     "cache_write_phase_category_counts": original_source_summary["cache_write_phase_category_counts"],
+    "cache_write_phase_group_counts": original_source_summary["cache_write_phase_group_counts"],
     "cache_write_phase_parent_category_counts": original_source_summary["cache_write_phase_parent_category_counts"],
     "cache_write_phase_conflict_count": original_source_summary["cache_write_phase_conflict_count"],
     "cache_write_phase_unclassified_count": original_source_summary["cache_write_phase_unclassified_count"],

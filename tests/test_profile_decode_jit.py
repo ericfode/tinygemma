@@ -122,6 +122,49 @@ class FakeTensor:
     return self
 
 
+class EventTensor:
+  def __init__(self, events: list[tuple[str, str | None]], *, shape=(1, 1, 4), ndim=3, dtype="float32"):
+    self.events = events
+    self.shape = shape
+    self.ndim = ndim
+    self.dtype = dtype
+
+  def _record(self, op: str, **overrides):
+    self.events.append((op, profile._SIDECAR_STACK[-1] if profile._SIDECAR_STACK else None))
+    params = {"shape": self.shape, "ndim": self.ndim, "dtype": self.dtype}
+    params.update(overrides)
+    return EventTensor(self.events, **params)
+
+  def transpose(self, *args):
+    del args
+    return self._record("transpose")
+
+  def matmul(self, other, dtype=None):
+    del other
+    return self._record("matmul", dtype=dtype or self.dtype)
+
+  def reshape(self, *shape):
+    return self._record("reshape", shape=shape, ndim=len(shape))
+
+  def __mul__(self, other):
+    del other
+    return self._record("mul")
+
+  def cast(self, dtype):
+    return self._record("cast", dtype=dtype)
+
+  def chunk(self, chunks, dim=0):
+    dim = dim if dim >= 0 else self.ndim + dim
+    chunk_shape = list(self.shape)
+    chunk_shape[dim] = chunk_shape[dim] // chunks
+    self.events.append(("chunk", profile._SIDECAR_STACK[-1] if profile._SIDECAR_STACK else None))
+    return EventTensor(self.events, shape=tuple(chunk_shape), ndim=self.ndim, dtype=self.dtype), EventTensor(self.events, shape=tuple(chunk_shape), ndim=self.ndim, dtype=self.dtype)
+
+  def realize(self):
+    self.events.append(("realize", profile._SIDECAR_STACK[-1] if profile._SIDECAR_STACK else None))
+    return self
+
+
 def test_profile_classifies_repo_sidecar_metadata():
   metadata = [
     FakeMetadata("norm", "repo_sidecar:1::norm"),
@@ -171,6 +214,36 @@ def test_profile_cache_write_phase_category_metadata_is_parseable_without_changi
   assert metadata["rollup"] == "attention_packed_cache_write_shared_source"
   assert profile.sidecar_metadata_category([FakeMetadata(phase, f"repo_uop_sidecar:1::{phase}")]) == parent
   assert profile.sidecar_metadata_category([FakeMetadata(phase, f"repo_uop_sidecar:1::{phase}")], prefer_cache_write_phase=True) == phase
+
+
+def test_profile_cache_write_kv_subphase_categories_roll_up_to_parent():
+  parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
+
+  for phase_name in ("kv_fused_int8_matmul", "kv_scale_cast", "kv_chunk_split", "kv_head_reshape"):
+    phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase=phase_name)
+    metadata = [
+      FakeMetadata(parent, f"repo_uop_sidecar:1::{parent}"),
+      FakeMetadata(phase, f"repo_uop_sidecar:1::{phase}"),
+    ]
+
+    assert profile.parent_cache_write_category(phase) == parent
+    assert profile.cache_write_category_metadata(phase)["phase"] == phase_name
+    assert profile.cache_write_category_metadata(phase)["phase_group"] == "kv_projection"
+    assert profile.cache_write_category_metadata(phase)["parent"] == parent
+    assert profile.category_rollup(phase) == "attention_packed_cache_write_shared_source"
+    assert profile.sidecar_metadata_category(metadata) == parent
+    assert profile.sidecar_metadata_category(metadata, prefer_cache_write_phase=True) == phase
+
+
+def test_profile_prefers_current_cache_write_phase_metadata_over_inherited_phase():
+  matmul = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_fused_int8_matmul")
+  scale = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_scale_cast")
+  metadata = [
+    FakeMetadata(matmul, f"repo_uop_sidecar:1::{matmul}"),
+    FakeMetadata(scale, f"repo_uop_sidecar:1::{scale}"),
+  ]
+
+  assert profile.sidecar_metadata_category(metadata, prefer_cache_write_phase=True) == scale
 
 
 def test_profile_cache_write_phase_category_rejects_unknown_phase():
@@ -507,6 +580,43 @@ def test_profile_cache_update_sidecar_patch_splits_layer13_packed_cache_phases()
   assert events[-1] == ("realize", parent)
 
 
+def test_profile_kv_projection_phase_sidecar_patch_splits_fused_int8_projection_subphases():
+  events = []
+  hidden = EventTensor(events, shape=(1, 1, 4), ndim=3, dtype="bfloat16")
+  weight = EventTensor(events, shape=(8, 4), ndim=2, dtype="int8")
+  scale = EventTensor(events, shape=(8,), ndim=1, dtype="float32")
+
+  class FakeFusedAttention:
+    layer_idx = 13
+    layer_type = "sliding_attention"
+    is_kv_shared_layer = False
+    store_full_length_kv = True
+    num_key_value_heads = 2
+    head_dim = 2
+
+    def _can_use_fused_int8_kv(self):
+      return True
+
+    def _fused_int8_kv_weight_scale(self):
+      return weight, scale
+
+  matmul = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_fused_int8_matmul")
+  scale_cast = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_scale_cast")
+  chunk_split = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_chunk_split")
+  head_reshape = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_head_reshape")
+
+  with profile.kv_projection_phase_sidecar_patch():
+    result = profile.GemmaAttention._project_kv(FakeFusedAttention(), hidden, (1, 1, -1, 2))
+
+  assert len(result) == 2
+  assert tuple(tensor.shape for tensor in result) == ((1, 1, 2, 2), (1, 1, 2, 2))
+  assert ("matmul", matmul) in events
+  assert ("mul", scale_cast) in events
+  assert ("cast", scale_cast) in events
+  assert ("chunk", chunk_split) in events
+  assert events.count(("reshape", head_reshape)) == 2
+
+
 def test_profile_source_attribution_uses_explicit_phase_targets_after_scope_reset():
   local_parent = profile.cache_write_sidecar_category("packed", "local", 12, "sliding_attention")
   local_phase = profile.cache_write_sidecar_category("packed", "local", 12, "sliding_attention", phase="kv_projection")
@@ -650,12 +760,14 @@ def test_profile_source_slice_summary_adds_phase_counts_without_changing_categor
     "attention_packed_cache_write__role_local__layer_12__type_sliding_attention": 1,
   }
   assert summary["cache_write_phase_category_counts"] == {phase: 2}
+  assert summary["cache_write_phase_group_counts"] == {"rmsnorm_rope": 2}
   assert summary["cache_write_phase_unclassified_count"] == 0
 
 
 def test_profile_summarizes_cache_write_phase_attribution_separately():
   parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
-  kv = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_projection")
+  kv_matmul = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_fused_int8_matmul")
+  kv_scale = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="kv_scale_cast")
   store = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="store")
   attribution = {
     "items": [{
@@ -663,7 +775,7 @@ def test_profile_summarizes_cache_write_phase_attribution_separately():
       "source_count": 4,
       "category_counts": {parent: 4},
       "category_basis": "repo_sidecar_uop_creation_metadata",
-      "cache_write_phase_category_counts": {kv: 3, store: 1},
+      "cache_write_phase_category_counts": {kv_matmul: 2, kv_scale: 1, store: 1},
       "cache_write_phase_conflict_count": 1,
       "cache_write_phase_unclassified_count": 0,
     }]
@@ -673,7 +785,11 @@ def test_profile_summarizes_cache_write_phase_attribution_separately():
 
   assert summary["source_count"] == 4
   assert summary["conflict_source_count"] == 1
-  assert summary["by_category"][kv]["elapsed_ms"] == 7.5
+  assert summary["by_category"][kv_matmul]["elapsed_ms"] == 5.0
+  assert summary["by_category"][kv_scale]["elapsed_ms"] == 2.5
   assert summary["by_category"][store]["elapsed_ms"] == 2.5
   assert summary["by_parent"][parent]["elapsed_ms"] == 10.0
-  assert summary["by_phase"]["kv_projection"]["source_count"] == 3
+  assert summary["by_phase"]["kv_fused_int8_matmul"]["source_count"] == 2
+  assert summary["by_phase"]["kv_scale_cast"]["source_count"] == 1
+  assert summary["by_phase_group"]["kv_projection"]["source_count"] == 3
+  assert summary["by_phase_group"]["kv_projection"]["elapsed_ms"] == 7.5
