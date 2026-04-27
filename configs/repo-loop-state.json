@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "evo-frontier-evidence-refresh-049",
-  "next_target_plan": "After exp_0010, do not spend another child on graphable model.py view/cache micro-edits without fresh evidence. The current negative set from exp_0006 through exp_0010 covers scaling guards, one-token K/V rank flattening, attention-output view elision, RMSNorm realized-scale caching, and active shared-KV view reuse; all failed to beat exp_0005 at 28.6153. For 049, first refresh evo scratchpad/frontier and either choose a new evidence-backed model.py surface not in that set or pivot to the separate research-tinygrad metal_int8 MTLB compatibility target before raw rowwise-int8 runner integration. Acceptance remains a default score above 28.6153 with stable E2B int8 METAL hashes, rollout_jit_count matching generated tokens minus one, and decode_fallback=false.",
-  "updated_at": "2026-04-27T00:09:47-0700",
+  "next_target": "metal-int8-raw-runner-capture-safety-050",
+  "next_target_plan": "After 049, the raw rowwise-int8 METAL runner can construct a program under the research tinygrad runtime by passing compiler.compile_cached MTLB bytes to Device.runtime. For 050, do not integrate into RowwiseInt8Linear or GemmaMLP yet; first prove replay/capture behavior for RowwiseInt8DecodeLinearRunner under stock and research tinygrad. Add a focused test/prototype that exercises TinyJit or capturing semantics for the raw runner and verifies repeated calls remain correct and do not silently bypass execution. Only after capture safety is proven should a later increment consider guarded model hot-path integration or local_size tuning.",
+  "updated_at": "2026-04-27T00:23:05-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -662,6 +662,17 @@
       "summary": "Rejected evo exp_0010, a graphable model.py probe from frontier exp_0005 that stored active K/V tensors in shared_kv_states for full-length shared-KV producers instead of reusing the bounded cache entry. The focused red/safety test first caught repeated shared-consumer reslicing and the implementation passed that test plus tests/test_tinygrad_gemma.py and tests/test_profile_decode_jit.py, CLI help, Metal smoke, and short/long E2B int8 METAL hash gates. The default 128/20 score regressed to 28.2824 versus parent exp_0005 at 28.6153, so exp_0010 was discarded and exp_0005 remains the frontier.",
       "artifacts": [
         ".evo/project.md",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    },
+    {
+      "id": "metal-int8-research-mtlb-compatibility-049",
+      "summary": "Accepted a narrow compatibility patch for the dormant raw rowwise-int8 METAL decode-linear runner. _rowwise_int8_decode_linear_program now compiles ROWWISE_INT8_DECODE_LINEAR_SOURCE via Device[METAL].compiler.compile_cached and passes compiled MTLB bytes to Device.runtime, fixing the research tinygrad Invalid library file failure without integrating the raw runner into RowwiseInt8Linear or claiming throughput. A focused TDD test first failed because compile_cached was not called, then passed; the research tinygrad METAL canary printed ok metal_int8 research MTLB canary; full pytest, CLI help, Metal smoke, and git diff --check passed.",
+      "artifacts": [
+        "tinygrad_gemma/metal_int8.py",
+        "tests/test_tinygrad_gemma.py",
+        "docs/plans/2026-04-27-metal-int8-mtlb-compatibility.md",
         "state/evolution-log.md",
         "configs/repo-loop-state.json"
       ]

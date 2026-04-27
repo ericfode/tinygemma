@@ -35,6 +35,7 @@ from tinygrad_gemma import (
   train_step,
 )
 from tinygrad_gemma.cli import DEFAULT_MAX_BEAM, resolve_beam
+import tinygrad_gemma.metal_int8 as metal_int8_module
 from tinygrad_gemma.metal_int8 import metal_rowwise_int8_decode_linear
 from tinygrad_gemma.model import GemmaCacheEntry, GemmaMLP, build_attention_mask
 import tinygrad_gemma.model as model_module
@@ -1137,6 +1138,42 @@ def test_runtime_int8_attention_fused_kv_matches_separate_path(tmp_path: Path):
 
   np.testing.assert_allclose(fused_k.numpy(), separate_k.numpy(), rtol=1e-5, atol=1e-5)
   np.testing.assert_allclose(fused_v.numpy(), separate_v.numpy(), rtol=1e-5, atol=1e-5)
+
+
+def test_metal_rowwise_int8_program_compiles_source_before_runtime(monkeypatch):
+  calls = {}
+
+  class FakeCompiler:
+    def compile_cached(self, source: str) -> bytes:
+      calls["compiled_source"] = source
+      return b"MTLBcompiled-rowwise-int8ENDT"
+
+  class FakeMetalDevice:
+    compiler = FakeCompiler()
+
+    def runtime(self, name: str, library: bytes):
+      calls["runtime_name"] = name
+      calls["runtime_library"] = library
+      return "compiled-program"
+
+  class FakeDeviceRegistry:
+    def __getitem__(self, device: str):
+      assert device == "METAL"
+      return FakeMetalDevice()
+
+  metal_int8_module._rowwise_int8_decode_linear_program.cache_clear()
+  monkeypatch.setattr(metal_int8_module, "prepare_device", lambda device: "METAL")
+  monkeypatch.setattr(metal_int8_module, "Device", FakeDeviceRegistry())
+
+  try:
+    program = metal_int8_module._rowwise_int8_decode_linear_program("METAL")
+  finally:
+    metal_int8_module._rowwise_int8_decode_linear_program.cache_clear()
+
+  assert program == "compiled-program"
+  assert calls["compiled_source"] == metal_int8_module.ROWWISE_INT8_DECODE_LINEAR_SOURCE
+  assert calls["runtime_name"] == "rowwise_int8_decode_linear_threadgroup_x"
+  assert calls["runtime_library"] == b"MTLBcompiled-rowwise-int8ENDT"
 
 
 def test_metal_rowwise_int8_decode_linear_rejects_non_metal():

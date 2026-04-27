@@ -1,5 +1,16 @@
 # Evolution Log
 
+## 2026-04-27 - Metal Int8 MTLB Compatibility Accepted
+
+- Objective: execute `metal-int8-research-mtlb-compatibility-049` as a separate compatibility increment after the evo frontier evidence refresh found no remaining evidence-backed `model.py` micro-surface. The active evo frontier remains `exp_0005` at default score `28.6153`; this increment does not claim a decode throughput improvement.
+- Root cause addressed: `tinygrad_gemma/metal_int8.py` passed raw Metal source bytes directly to `Device["METAL"].runtime(...)`. Stock tinygrad accepts source bytes in its Metal program path, but the research tinygrad runtime used by the E2B harness expects compiled library bytes beginning with `MTLB` and ending with `ENDT`, causing the 047 canary failure `RuntimeError: Invalid library file`.
+- Change: `_rowwise_int8_decode_linear_program()` now resolves the METAL device once, compiles `ROWWISE_INT8_DECODE_LINEAR_SOURCE` through `metal_device.compiler.compile_cached(...)`, and passes the compiled library bytes to `metal_device.runtime(...)`. The active graphable `RowwiseInt8Linear` path and disabled raw Metal gate/up integration remain unchanged.
+- Focused TDD receipt: `tests/test_tinygrad_gemma.py::test_metal_rowwise_int8_program_compiles_source_before_runtime` first failed with `KeyError: 'compiled_source'`, proving the compiler was not called; after the patch it passed.
+- Research-runtime canary: `PYTHONPATH=/Users/ericfode/src/.tinygrad_research:. PYTHONDONTWRITEBYTECODE=1 .venv/bin/python - <<'PY' ...` passed and printed `ok metal_int8 research MTLB canary`, including an assertion that `compile_cached(...)` returned `MTLB...ENDT` bytes and a tiny raw rowwise-int8 decode-linear call produced shape `(1, 1, 32)` with value `16.0`.
+- Verification: `.venv/bin/python -m pytest -q tests/test_tinygrad_gemma.py -k 'metal_rowwise_int8 or RowwiseInt8'` passed (`2 passed, 41 deselected`); `.venv/bin/python -m pytest -q tests/test_tinygrad_gemma.py tests/test_profile_decode_jit.py` passed (`75 passed`); `.venv/bin/python -m pytest -q` passed (`80 passed`); `.venv/bin/tinygrad-gemma --help >/dev/null` passed; `PYTHONPATH=/Users/ericfode/src/.tinygrad_research:. .venv/bin/python scripts/smoke_metal.py` reported `default_device=METAL`, `loaded_model_device=METAL`, `logits_device=METAL`, `generated_tokens=4`, `rollout_jit_count=3`, and `decode_fallback=False`; `git diff --check` passed.
+- Plan artifact: `docs/plans/2026-04-27-metal-int8-mtlb-compatibility.md` records the scope, non-goals, and acceptance criteria.
+- Decision: accept the compatibility patch only. Do not wire `metal_rowwise_int8_decode_linear` into `RowwiseInt8Linear` or `GemmaMLP` yet, and do not tune `local_size` or report E2B throughput from this change. The next credible increment is `metal-int8-raw-runner-capture-safety-050`: prove raw-runner replay/capture behavior under stock and research tinygrad before any model hot-path integration.
+
 ## 2026-04-27 - Evo Active Shared-KV View Reuse Rejected
 
 - Objective: execute `evo-frontier-graphable-model-probe-048` from frontier `exp_0005` (`28.6153` default `128/20` score) while avoiding already-rejected K/V rank/view, RMSNorm cache, scaling-guard, and raw-runner surfaces.

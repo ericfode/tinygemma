@@ -49,9 +49,11 @@ def _rowwise_int8_decode_linear_program(device: str):
   resolved_device = prepare_device(device)
   if resolved_device != "METAL":
     raise RuntimeError("raw rowwise-int8 decode linear is METAL-only")
-  return Device[resolved_device].runtime(
+  metal_device = Device[resolved_device]
+  compiled_library = metal_device.compiler.compile_cached(ROWWISE_INT8_DECODE_LINEAR_SOURCE)
+  return metal_device.runtime(
     "rowwise_int8_decode_linear_threadgroup_x",
-    ROWWISE_INT8_DECODE_LINEAR_SOURCE.encode(),
+    compiled_library,
   )
 
 
