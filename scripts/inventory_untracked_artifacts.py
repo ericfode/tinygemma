@@ -100,6 +100,7 @@ def collect_inventory(*, cwd: Path) -> list[dict[str, Any]]:
 
 
 def render_markdown(rows: list[dict[str, Any]], *, timestamp: str) -> str:
+  rows = sorted(rows, key=lambda row: (0 if row["refs"] else 1, -len(row["refs"]), row["path"]))
   by_category = Counter(row["category"] for row in rows)
   by_suffix = Counter(Path(row["path"]).suffix or "<none>" for row in rows)
   total_size = sum(int(row["size"]) for row in rows)
@@ -134,14 +135,14 @@ def render_markdown(rows: list[dict[str, Any]], *, timestamp: str) -> str:
     "- Treat uncited progress logs as cleanup candidates after review.",
     "- Hold dependency lockfiles local until the project has an explicit lockfile policy.",
     "",
-    "## Inventory",
+    "## Reference-ranked candidates",
     "",
-    "| Path | Category | Size bytes | Referenced by | Suggested disposition |",
-    "|---|---:|---:|---|---|",
+    "| Path | Reference count | Referenced by | Category | Size bytes | Suggested disposition |",
+    "|---|---:|---|---:|---:|---|",
   ])
   for row in rows:
     refs = "<br>".join(row["refs"]) if row["refs"] else "—"
-    lines.append(f"| `{row['path']}` | `{row['category']}` | `{row['size']}` | {refs} | {row['disposition']} |")
+    lines.append(f"| `{row['path']}` | `{len(row['refs'])}` | {refs} | `{row['category']}` | `{row['size']}` | {row['disposition']} |")
   lines.append("")
   return "\n".join(lines)
 

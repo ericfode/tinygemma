@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 075 - Artifact inventory reference ranking
+
+- Status: accepted infrastructure improvement.
+- Change: `scripts/inventory_untracked_artifacts.py` now renders a reference-ranked candidates table, sorting docs/state/config-referenced artifacts ahead of uncited generated files and adding an explicit reference-count column.
+- Verification: artifact inventory tests passed; helper/profiler/paired-helper slice passed with 42 tests and 2 warnings; real-repo smoke inventoried 56 untracked paths and ranked referenced JSON/profile evidence first; py_compile, repo-loop JSON, and diff checks passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 074 - Artifact inventory stdout contract
 
 - Status: accepted infrastructure hardening.

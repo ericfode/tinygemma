@@ -68,3 +68,32 @@ def test_inventory_untracked_artifacts_stdout_mode_is_pure_markdown(tmp_path: Pa
   assert "`artifact.csv`" in proc.stdout
   assert "inventoried" not in proc.stdout
   assert "inventoried 1 untracked path(s)" in proc.stderr
+
+
+def test_inventory_untracked_artifacts_ranks_referenced_artifacts_first(tmp_path: Path):
+  repo = tmp_path / "repo"
+  repo.mkdir()
+  run_git(repo, "init")
+  (repo / "docs").mkdir()
+  (repo / "docs" / "a.md").write_text("Keep hot.json and also warm.csv\n")
+  (repo / "docs" / "b.md").write_text("Second reference to hot.json\n")
+  (repo / "tracked.txt").write_text("tracked\n")
+  run_git(repo, "add", "docs/a.md", "docs/b.md", "tracked.txt")
+
+  (repo / "cold.csv").write_text("score\n0\n")
+  (repo / "hot.json").write_text('{"score": 2}\n')
+  (repo / "warm.csv").write_text("score\n1\n")
+
+  proc = subprocess.run(
+    [sys.executable, str(SCRIPT), "--timestamp", "2026-04-27T03:30:00-0700"],
+    cwd=repo,
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+  )
+
+  assert proc.returncode == 0, proc.stderr
+  inventory_lines = [line for line in proc.stdout.splitlines() if line.startswith("| `")]
+  assert [line.split("`", 2)[1] for line in inventory_lines] == ["hot.json", "warm.csv", "cold.csv"]
+  assert "## Reference-ranked candidates" in proc.stdout
+  assert "| `hot.json` | `2` | docs/a.md<br>docs/b.md |" in proc.stdout

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-helper-stdout-contract-074",
+  "current_checkpoint": "artifact-inventory-reference-ranking-075",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-reference-ranking-075",
+  "next_target": "artifact-inventory-reference-ranking-doc-076",
   "next_target_plan": [
-    "Improve the inventory helper to rank referenced untracked artifacts by tracked documentation references so likely evidence-to-keep files are easier to review.",
-    "Add deterministic tests against a temporary git repo with multiple docs referencing the same artifact.",
-    "Keep helper read-only and avoid changing artifact disposition."
+    "Document the reference-ranked inventory table in README so operators understand why referenced artifacts appear first.",
+    "Run artifact inventory tests and diff checks.",
+    "Keep generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:20:52-0700",
+  "updated_at": "2026-04-27T03:23:28-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1103,6 +1103,26 @@
         "git diff --check: passed"
       ],
       "decision": "Accepted helper contract hardening; no generated benchmark/profile artifacts were deleted, staged, ignored, or committed."
+    },
+    {
+      "id": "artifact-inventory-reference-ranking-075",
+      "completed_at": "2026-04-27T03:23:28-0700",
+      "status": "accepted-infrastructure",
+      "summary": "Ranked untracked artifact inventory rows by tracked-reference count so likely evidence-to-keep files surface first.",
+      "artifacts": [
+        "scripts/inventory_untracked_artifacts.py",
+        "tests/test_artifact_inventory.py",
+        "docs/plans/2026-04-27-artifact-inventory-reference-ranking.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 3 passed",
+        "helper/profiler/paired-helper slice: 42 passed, 2 warnings",
+        "real-repo helper smoke inventoried 56 untracked path(s) and ranked docs/state/config-referenced JSON evidence first",
+        "scripts/inventory_untracked_artifacts.py py_compile: passed",
+        "configs/repo-loop-state.json parsed successfully",
+        "git diff --check: passed"
+      ],
+      "decision": "Accepted evidence-ranking improvement; no generated benchmark/profile artifacts were deleted, staged, ignored, or committed."
     }
   ]
 }
