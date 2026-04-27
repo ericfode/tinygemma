@@ -1,5 +1,14 @@
 # Evolution Log
 
+## 2026-04-26 - Evo RMSNorm Scale Cache Rejected
+
+- Objective: execute `rmsnorm-inference-scale-cache-046` from the current evo frontier `exp_0005` (`28.6153` default `128/20` score, current long `1000/20` hash floor at `--min-score 18.0`).
+- `exp_0009` tested caching immutable inference RMSNorm scale tensors for both ordinary `weight.float()` and Gemma plus-one `(1 + weight.float())` paths. The implementation avoided putting cached tensors on module instances after an initial state-dict/optimizer-load failure showed that instance Tensor caches are visible to tinygrad state traversal; the final probe used a module-level cache keyed by the `Tensor` weight object.
+- Verification before evo: new focused RMSNorm tests first failed on the missing cache, then passed; `.venv/bin/python -m pytest -q tests/test_tinygrad_gemma.py tests/test_profile_decode_jit.py` passed with `75 passed, 1 skipped`; CLI help passed; `scripts/smoke_metal.py` reported `default_device=METAL`, `rollout_jit_count=3`, and `decode_fallback=False`.
+- Rejection evidence: `evo run exp_0009` measured default score `26.1647` (`measured_decode_tokens_per_second=26.164706`, stable short hash, `rollout_jit_count=127`, `decode_fallback=false`), below parent `28.6153`, and failed the inherited `e2b_int8_metal_hash1000_current_floor` gate. `evo discard exp_0009` recorded the rejection.
+- Decision: do not cache realized RMSNorm scale tensors in `model.py` under the current decode benchmark. The transformation is behaviorally tidy but performance-hostile; tinygrad has declined the offering with its usual tact.
+- Next target: `metal-int8-kernel-local-size-survey-047`. Shift away from model.py-local view/cache tweaks and inspect `tinygrad_gemma/metal_int8.py` kernel/local-size or shape-specialization surfaces, likely requiring a new evo target/run or a narrow manual probe with real E2B int8 METAL gates.
+
 ## 2026-04-26 - Evo Layer-13 Rank/View Probes Rejected
 
 - Objective: finish the two follow-up `model.py` evo probes against the calibrated current frontier. Parent remains `exp_0005`, the no-code calibration point at default `128/20` score `28.6153`, with inherited current long gate `e2b_int8_metal_hash1000_current_floor` at `--min-score 18.0` and stable hash `aa4944455473e236807f6c711a77a969caf73680ea5ea9725648294e5fd23cfa`.
