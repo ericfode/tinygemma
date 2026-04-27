@@ -1,5 +1,13 @@
 # Evolution Log
 
+## 2026-04-27 061 - Paired baseline/candidate benchmark helper accepted
+
+- Status: accepted infrastructure; no runtime code changed.
+- Change: added `scripts/paired_e2b_decode_benchmark.py`, which runs a benchmark script against `--baseline-target` and `--candidate-target` in one session, forwards extra args after `--`, parses JSON scores, and writes score deltas plus command/stdout/stderr provenance.
+- Test: added `tests/test_paired_decode_benchmark.py` with a fake benchmark to verify argument forwarding, output file/stdout equivalence, delta/relative-delta computation, and provenance capture.
+- Verification: full suite passed (`85 passed, 2 warnings`); CLI help, research METAL smoke, helper py_compile/help, and `git diff --check` passed.
+- Decision: infrastructure only; no throughput claim.
+
 ## 2026-04-27 060 - Frontier saturation and RMSNorm cache review accepted
 
 - Status: accepted negative review; no runtime code changed.
