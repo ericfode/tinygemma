@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-invalid-category-validation-086",
+  "current_checkpoint": "artifact-inventory-invalid-category-doc-087",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-invalid-category-doc-087",
+  "next_target": "artifact-inventory-final-helper-review-088",
   "next_target_plan": [
-    "Document that unknown --only-category values fail and --list-categories is the discovery path.",
-    "Run artifact inventory tests plus invalid-category smoke and diff checks.",
-    "Keep generated artifacts untouched."
+    "Run a final focused review of inventory helper UX/API and decide whether further local-only increments are justified before returning to the push/artifact-cleanup user decision.",
+    "Inspect git status, helper --help/list/categories, and latest tests.",
+    "Record final helper state; do not push or delete artifacts."
   ],
-  "updated_at": "2026-04-27T03:45:10-0700",
+  "updated_at": "2026-04-27T03:46:29-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1322,6 +1322,22 @@
         "git diff --check: passed"
       ],
       "decision": "Accepted typo protection; generated benchmark/profile artifacts remain untracked and untouched."
+    },
+    {
+      "id": "artifact-inventory-invalid-category-doc-087",
+      "completed_at": "2026-04-27T03:46:29-0700",
+      "status": "accepted-docs",
+      "summary": "Documented invalid --only-category behavior in README.",
+      "artifacts": [
+        "README.md",
+        "docs/plans/2026-04-27-artifact-inventory-invalid-category-doc.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 9 passed",
+        "invalid-category smoke exited nonzero and stderr mentioned unknown category plus --list-categories",
+        "git diff --check: passed"
+      ],
+      "decision": "Documentation-only; generated benchmark/profile artifacts remain untracked and untouched."
     }
   ]
 }

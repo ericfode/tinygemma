@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 087 - Artifact inventory invalid category documented
+
+- Status: accepted docs increment.
+- Change: README now documents that unknown `--only-category` values fail before inventory collection and point users to `--list-categories`.
+- Verification: artifact inventory tests passed; invalid-category smoke exited nonzero with expected guidance; `git diff --check` passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 086 - Artifact inventory invalid category validation
 
 - Status: accepted infrastructure improvement.
