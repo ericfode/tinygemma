@@ -1,5 +1,16 @@
 # Evolution Log
 
+## 2026-04-27 056 - Phase overlap reporting accepted
+
+- Status: accepted profiler instrumentation.
+- Change: added `cache_write_phase_parent_category_counts` per source row and original capture, plus `source_attributed_cache_write_phase_summary.by_phase_parent_category`.
+- Test: `test_profile_phase_summary_reports_parent_category_overlap` failed before overlap reporting existed, then passed.
+- Artifact: `benchmarks/gemma4-metal-decode-graph-local-layer12-phase-overlap-700.json` shows 7 MetalGraph batches, 0 raw gate/up runners, phase source count 256, and exact local-layer12 parent overlap for every local-layer12 phase bucket.
+- Corrected local-layer12 bucket: `kv_projection` is 250 sources / ~2.954 ms (~5.96% elapsed); total local-layer12 phase bucket is 256 sources.
+- Verification: full suite passed (`84 passed, 2 warnings`); METAL smoke passed with `rollout_jit_count=3`, `decode_fallback=False`.
+- Decision: attribution is now reliable, but the exclusive surface is small and needs comparison against neighboring exact targets before another runtime experiment.
+- Next target: compare exact neighboring phase targets (`local-layer11`, `local-layer12`, `shared-source-layer13`, etc.) and select only if a non-rejected transformation appears.
+
 ## 2026-04-27 055 - Local layer12 phase attribution scope fix accepted
 
 - Status: accepted profiler fix; no runtime probe launched.

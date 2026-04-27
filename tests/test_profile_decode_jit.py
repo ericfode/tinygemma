@@ -528,6 +528,26 @@ def test_profile_source_attribution_uses_explicit_phase_targets_after_scope_rese
   assert attribution["items"][0]["cache_write_phase_unclassified_count"] == 0
 
 
+def test_profile_phase_summary_reports_parent_category_overlap():
+  local_parent = profile.cache_write_sidecar_category("packed", "local", 12, "sliding_attention")
+  local_phase = profile.cache_write_sidecar_category("packed", "local", 12, "sliding_attention", phase="kv_projection")
+  shared_parent = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention")
+  shared_phase = profile.cache_write_sidecar_category("packed", "shared_source", 13, "sliding_attention", phase="store")
+  items = [
+    FakeItem(local_parent, ast=FakeAst(FakeUOp("STORE", [FakeMetadata(local_phase, f"repo_uop_sidecar:1::{local_phase}")]))),
+    FakeItem(shared_parent, ast=FakeAst(FakeUOp("STORE", [FakeMetadata(shared_phase, f"repo_uop_sidecar:1::{shared_phase}")]))),
+  ]
+  targets = profile.parse_cache_write_phase_targets(["local-layer12", "shared-source-layer13"])
+
+  with profile.cache_write_phase_target_scope(targets):
+    summary = profile.source_slice_summary(items)
+
+  assert summary["cache_write_phase_parent_category_counts"] == {
+    local_phase: {local_parent: 1},
+    shared_phase: {shared_parent: 1},
+  }
+
+
 def test_graph_batch_attribution_maps_batched_display_to_source_ranges():
   first_batch = [
     FakeItem("attention"),

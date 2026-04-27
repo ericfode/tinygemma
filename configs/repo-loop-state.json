@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "local-layer12-phase-attribution-scope-fixed-055",
+  "current_checkpoint": "phase-overlap-reporting-accepted-056",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,9 +644,9 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "phase-overlap-reporting-and-next-runtime-surface-056",
+  "next_target": "compare-neighbor-exact-phase-targets-057",
   "next_target_plan": "Return to graphable Tensor/tinygrad program surfaces after pruning the raw custom Runner branch. Refresh evo scratchpad/frontier evidence and the profiler-backed hot-path summary, then pick one narrow model.py or profiler-supported graphable increment. Do not re-open raw metal_int8 custom Runner integration unless tinygrad exposes a first-class graphable custom-call or CompiledRunner-compatible surface.",
-  "updated_at": "2026-04-27T02:01:33-0700",
+  "updated_at": "2026-04-27T02:08:02-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -770,6 +770,25 @@
         "Corrected local-layer12 profile: graph_batch_count=7, raw_gate_up_runner_count=0, phase parent source_count=256, kv_projection source_count=250, elapsed_ms\u22483.178"
       ],
       "decision": "Do not launch a runtime evo child from the old local-layer12 artifact; the corrected exclusive surface is real but too small and overlaps already rejected K/V projection variants."
+    },
+    {
+      "id": "phase-overlap-reporting-and-next-runtime-surface-056",
+      "completed_at": "2026-04-27T02:08:02-0700",
+      "status": "accepted-profiler-instrumentation",
+      "summary": "Added exact cache-write phase parent-category overlap reporting to the profiler. Generated a local-layer12 overlap profile proving the corrected phase bucket is exclusive to local-layer12, but small: 256 phase sources, with 250 kv_projection sources at ~2.954 ms.",
+      "artifacts": [
+        "docs/plans/2026-04-27-phase-overlap-reporting-and-next-runtime-surface.md",
+        "benchmarks/gemma4-metal-decode-graph-local-layer12-phase-overlap-700.json (untracked local artifact)",
+        "benchmarks/gemma4-metal-decode-graph-local-layer12-phase-overlap-700.csv (untracked local artifact)"
+      ],
+      "verification": [
+        "RED: test_profile_phase_summary_reports_parent_category_overlap failed before cache_write_phase_parent_category_counts existed",
+        ".venv/bin/python -m pytest -q tests/test_profile_decode_jit.py -> 35 passed, 2 warnings",
+        ".venv/bin/python -m pytest -q -> 84 passed, 2 warnings",
+        "PYTHONPATH=/Users/ericfode/src/.tinygrad_research:. .venv/bin/python scripts/smoke_metal.py -> rollout_jit_count=3 decode_fallback=False",
+        "local-layer12 overlap artifact: graph_batch_count=7, raw_gate_up_runner_count=0, phase_source_count=256, kv_projection=250 sources / ~2.954 ms"
+      ],
+      "decision": "Profiler overlap now proves local-layer12 attribution exclusivity, but the surface is too small for an immediate runtime patch without a new transformation beyond rejected K/V projection variants."
     }
   ]
 }

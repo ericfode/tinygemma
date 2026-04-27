@@ -1015,6 +1015,7 @@ def graph_source_count(row: dict[str, Any]) -> int | None:
 def source_slice_summary(items) -> dict[str, Any]:
   category_counts: dict[str, int] = defaultdict(int)
   cache_write_phase_category_counts: dict[str, int] = defaultdict(int)
+  cache_write_phase_parent_category_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
   program_type_counts: dict[str, int] = defaultdict(int)
   category_basis_counts: dict[str, int] = defaultdict(int)
   unclassified_items = []
@@ -1031,6 +1032,7 @@ def source_slice_summary(items) -> dict[str, Any]:
         cache_write_phase_unclassified_count += 1
       else:
         cache_write_phase_category_counts[phase_category] += 1
+        cache_write_phase_parent_category_counts[phase_category][category] += 1
         if phase_conflict:
           cache_write_phase_conflict_count += 1
     if category == "other":
@@ -1039,6 +1041,10 @@ def source_slice_summary(items) -> dict[str, Any]:
     "category_counts": dict(sorted(category_counts.items())),
     "category_counts_rollup": category_count_rollups(category_counts),
     "cache_write_phase_category_counts": dict(sorted(cache_write_phase_category_counts.items())),
+    "cache_write_phase_parent_category_counts": {
+      phase_category: dict(sorted(parent_counts.items()))
+      for phase_category, parent_counts in sorted(cache_write_phase_parent_category_counts.items())
+    },
     "cache_write_phase_conflict_count": cache_write_phase_conflict_count,
     "cache_write_phase_unclassified_count": cache_write_phase_unclassified_count,
     "program_type_counts": dict(sorted(program_type_counts.items())),
@@ -1150,6 +1156,7 @@ def attach_source_attribution(rows: list[dict[str, Any]], attribution: dict[str,
     row["source_category_counts"] = item["category_counts"]
     row["source_category_counts_rollup"] = item["category_counts_rollup"]
     row["cache_write_phase_category_counts"] = item["cache_write_phase_category_counts"]
+    row["cache_write_phase_parent_category_counts"] = item["cache_write_phase_parent_category_counts"]
     row["cache_write_phase_conflict_count"] = item["cache_write_phase_conflict_count"]
     row["cache_write_phase_unclassified_count"] = item["cache_write_phase_unclassified_count"]
     row["source_category_basis"] = item["category_basis"]
@@ -1379,6 +1386,7 @@ def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict
   by_category: dict[str, dict[str, Any]] = {}
   by_parent: dict[str, dict[str, Any]] = {}
   by_phase: dict[str, dict[str, Any]] = {}
+  by_phase_parent_category: dict[str, dict[str, dict[str, Any]]] = {}
   total_elapsed = sum(float(item["elapsed_ms"]) for item in attribution["items"])
   phase_source_count = 0
   conflict_source_count = 0
@@ -1405,8 +1413,19 @@ def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict
       phase_entry = by_phase.setdefault(phase, {"source_count": 0, "elapsed_ms": 0.0})
       phase_entry["source_count"] += count_int
       phase_entry["elapsed_ms"] += category_elapsed
+    for phase_category, parent_counts in item.get("cache_write_phase_parent_category_counts", {}).items():
+      phase_parent_entry = by_phase_parent_category.setdefault(phase_category, {})
+      for parent_category, count in parent_counts.items():
+        count_int = int(count)
+        parent_elapsed = elapsed_ms * (count_int / source_count)
+        parent_entry = phase_parent_entry.setdefault(parent_category, {"source_count": 0, "elapsed_ms": 0.0})
+        parent_entry["source_count"] += count_int
+        parent_entry["elapsed_ms"] += parent_elapsed
   for groups in (by_category, by_parent, by_phase):
     for entry in groups.values():
+      entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed else 0.0
+  for parent_groups in by_phase_parent_category.values():
+    for entry in parent_groups.values():
       entry["elapsed_share"] = entry["elapsed_ms"] / total_elapsed if total_elapsed else 0.0
   return {
     "source_count": phase_source_count,
@@ -1417,6 +1436,10 @@ def summarize_cache_write_phase_attribution(attribution: dict[str, Any]) -> dict
     "by_category": dict(sorted(by_category.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
     "by_parent": dict(sorted(by_parent.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
     "by_phase": dict(sorted(by_phase.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True)),
+    "by_phase_parent_category": {
+      phase_category: dict(sorted(parent_counts.items(), key=lambda item: item[1]["elapsed_ms"], reverse=True))
+      for phase_category, parent_counts in sorted(by_phase_parent_category.items(), key=lambda item: sum(v["elapsed_ms"] for v in item[1].values()), reverse=True)
+    },
   }
 
 
@@ -1532,6 +1555,7 @@ def main() -> None:
     "category_counts": original_source_summary["category_counts"],
     "category_counts_rollup": original_source_summary["category_counts_rollup"],
     "cache_write_phase_category_counts": original_source_summary["cache_write_phase_category_counts"],
+    "cache_write_phase_parent_category_counts": original_source_summary["cache_write_phase_parent_category_counts"],
     "cache_write_phase_conflict_count": original_source_summary["cache_write_phase_conflict_count"],
     "cache_write_phase_unclassified_count": original_source_summary["cache_write_phase_unclassified_count"],
     "category_basis_counts": original_source_summary["category_basis_counts"],
