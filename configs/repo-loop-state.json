@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "tinygrad-gemma",
-  "current_checkpoint": "artifact-inventory-list-categories-084",
+  "current_checkpoint": "artifact-inventory-list-categories-doc-085",
   "accepted_increments": [
     {
       "id": "codex-local-env-001",
@@ -644,13 +644,13 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "artifact-inventory-list-categories-doc-085",
+  "next_target": "artifact-inventory-invalid-category-validation-086",
   "next_target_plan": [
-    "Document --list-categories in README near --only-category.",
-    "Run artifact inventory tests plus --list-categories smoke and diff checks.",
-    "Keep generated artifacts untouched."
+    "Reject unknown --only-category values before inventory collection so typos do not silently return empty reports.",
+    "Use strict TDD and confirm the error message points to --list-categories.",
+    "Keep helper read-only and generated artifacts untouched."
   ],
-  "updated_at": "2026-04-27T03:42:21-0700",
+  "updated_at": "2026-04-27T03:43:25-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1286,6 +1286,22 @@
         "git diff --check: passed"
       ],
       "decision": "Accepted category discovery; generated benchmark/profile artifacts remain untracked and untouched."
+    },
+    {
+      "id": "artifact-inventory-list-categories-doc-085",
+      "completed_at": "2026-04-27T03:43:25-0700",
+      "status": "accepted-docs",
+      "summary": "Documented --list-categories for the artifact inventory helper in README.",
+      "artifacts": [
+        "README.md",
+        "docs/plans/2026-04-27-artifact-inventory-category-listing-doc.md"
+      ],
+      "verification": [
+        "tests/test_artifact_inventory.py: 8 passed",
+        "--list-categories smoke wrote nonempty category list",
+        "git diff --check: passed"
+      ],
+      "decision": "Documentation-only; generated benchmark/profile artifacts remain untracked and untouched."
     }
   ]
 }

@@ -1,5 +1,12 @@
 # Evolution Log
 
+## 2026-04-27 085 - Artifact inventory category listing documented
+
+- Status: accepted docs increment.
+- Change: README now documents `--list-categories` as the discovery path for names used by repeatable `--only-category`.
+- Verification: artifact inventory tests passed; `--list-categories` smoke produced a nonempty list; `git diff --check` passed.
+- Decision: no generated benchmark/profile artifacts were deleted, staged, ignored, or committed.
+
 ## 2026-04-27 084 - Artifact inventory category listing
 
 - Status: accepted infrastructure improvement.
