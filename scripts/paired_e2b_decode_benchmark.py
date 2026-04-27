@@ -94,6 +94,7 @@ def build_payload(
   candidate_target: Path,
   benchmark_args: list[str],
   cwd: Path,
+  min_delta: float | None = None,
 ) -> dict[str, Any]:
   started_at = utc_now()
   baseline = run_one(
@@ -113,6 +114,7 @@ def build_payload(
   ended_at = utc_now()
   delta = candidate["score"] - baseline["score"]
   relative_delta = delta / baseline["score"] if baseline["score"] else None
+  passed_min_delta = min_delta is None or delta >= min_delta
   return {
     "label": label,
     "started_at": started_at,
@@ -124,6 +126,8 @@ def build_payload(
     "delta": delta,
     "relative_delta": relative_delta,
     "candidate_improved": delta > 0,
+    "min_delta": min_delta,
+    "passed_min_delta": passed_min_delta,
   }
 
 
@@ -136,6 +140,11 @@ def main(argv: list[str] | None = None) -> int:
   parser.add_argument("--candidate-target", type=Path, required=True)
   parser.add_argument("--out", type=Path)
   parser.add_argument("--label", default="paired-decode-benchmark")
+  parser.add_argument(
+    "--min-delta",
+    type=float,
+    help="Exit nonzero after writing output if candidate_score - baseline_score is below this threshold.",
+  )
   args, benchmark_args = parser.parse_known_args(argv)
   if benchmark_args and benchmark_args[0] == "--":
     benchmark_args = benchmark_args[1:]
@@ -149,12 +158,19 @@ def main(argv: list[str] | None = None) -> int:
     candidate_target=args.candidate_target,
     benchmark_args=benchmark_args,
     cwd=cwd,
+    min_delta=args.min_delta,
   )
   text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
   if args.out is not None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text)
   print(text, end="")
+  if not payload["passed_min_delta"]:
+    print(
+      f"candidate delta {payload['delta']:.6g} below --min-delta {args.min_delta:.6g}",
+      file=sys.stderr,
+    )
+    return 1
   return 0
 
 

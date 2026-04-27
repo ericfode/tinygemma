@@ -1,5 +1,13 @@
 # Evolution Log
 
+## 2026-04-27 065 - Paired helper min-delta gate accepted
+
+- Status: accepted infrastructure.
+- Change: added `--min-delta <float>` to `scripts/paired_e2b_decode_benchmark.py`; JSON is written before the helper exits `1` when the candidate delta is below the floor.
+- Payload: now includes `min_delta` and `passed_min_delta`.
+- Tests: fake-benchmark regression coverage proves a worse candidate writes an artifact and exits nonzero.
+- Verification: full suite passed (`87 passed, 2 warnings`); CLI help, research METAL smoke, helper py_compile/help, and `git diff --check` passed.
+
 ## 2026-04-27 064 - Post-frontier handoff recorded
 
 - Status: accepted documentation-only increment.
