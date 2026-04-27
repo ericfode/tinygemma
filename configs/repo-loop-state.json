@@ -644,14 +644,14 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "short-floor-graph-size-weighted-evo-child-090",
+  "next_target": "short-floor-dominant-source-mass-candidate-091",
   "next_target_plan": [
-    "Create an evo child from exp_0005.",
-    "Target a graph/source-count reduction candidate rather than a micro-elision or previously rejected K/V projection/view tweak.",
-    "Run only the default short benchmark and current inherited short/smoke/help gates.",
-    "Record score versus exp_0005=28.6153; defer long 1000/20 until short frontier appears saturated or candidate is strong."
+    "Continue from evo frontier exp_0005; do not use discarded exp_0013 as parent.",
+    "Keep optimizing only the default short 128/20 benchmark until short floor appears saturated.",
+    "Before coding, identify a candidate that can plausibly reduce dominant captured source mass, not just local view count.",
+    "Defer long 1000/20 evaluation unless a candidate beats or essentially ties the short frontier with a meaningful graph/source reduction."
   ],
-  "updated_at": "2026-04-27T03:55:32-0700",
+  "updated_at": "2026-04-27T04:17:23-0700",
   "completed_increments": [
     {
       "id": "metal-int8-kernel-local-size-survey-047",
@@ -1376,6 +1376,18 @@
         "read-only scan of exp_0006..exp_0012 completed and found no default short-score improvers over exp_0005=28.6153"
       ],
       "decision": "Next child should optimize default 128/20 short score and treat graph/source-count reductions as important selection evidence; do not run long floor per child."
+    },
+    {
+      "id": "singleton-kv-broadcast-evo-probe-rejected-090",
+      "summary": "Rejected evo exp_0013 under the short-floor-first, graph-size-weighted policy. The singleton-KV-head broadcast attention probe replaced the grouped-GQA path for num_key_value_heads==1 inside the experiment worktree and passed a focused red/green attention-shape test plus core cache/full-forward checks, but evo default 128/20 score regressed to 28.2658 versus exp_0005 at 28.6153. A post-window METAL decode graph profile measured source_count=2994, graph_batch_count=7, and elapsed_ms=43.54, so the candidate did not earn retention by graph-size reduction either; exp_0013 was discarded and exp_0005 remains the frontier.",
+      "artifacts": [
+        ".evo/project.md",
+        "docs/plans/2026-04-27-singleton-kv-broadcast-evo-probe.md",
+        "benchmarks/gemma4-metal-decode-graph-singleton-kv-broadcast-exp0013-512.json",
+        "benchmarks/gemma4-metal-decode-graph-singleton-kv-broadcast-exp0013-512.csv",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
     }
   ]
 }

@@ -1586,3 +1586,20 @@
   `cache0_key_device=METAL`.
 - Real-checkpoint Metal coverage remains outside this bootstrap until local
   checkpoints are present and a command loads them on `METAL`.
+
+## 2026-04-27 04:17:23 - singleton-kv-broadcast-evo-probe-rejected-090
+
+Rejected evo exp_0013 under the short-floor-first, graph-size-weighted policy. The singleton-KV-head broadcast attention probe replaced the grouped-GQA path for num_key_value_heads==1 inside the experiment worktree and passed a focused red/green attention-shape test plus core cache/full-forward checks, but evo default 128/20 score regressed to 28.2658 versus exp_0005 at 28.6153. A post-window METAL decode graph profile measured source_count=2994, graph_batch_count=7, and elapsed_ms=43.54, so the candidate did not earn retention by graph-size reduction either; exp_0013 was discarded and exp_0005 remains the frontier.
+
+Verification:
+- Focused exp_0013 tests: `5 passed, 2 warnings`.
+- `evo run exp_0013`: `score=28.2658`, parent `exp_0005=28.6153`, score regressed.
+- Graph profile: `benchmarks/gemma4-metal-decode-graph-singleton-kv-broadcast-exp0013-512.json`, `source_count=2994`, `graph_batch_count=7`, `elapsed_ms=43.54`.
+- `evo discard exp_0013 --reason ...` completed; `evo frontier` reports `exp_0005` rank 1.
+
+Artifacts:
+- `docs/plans/2026-04-27-singleton-kv-broadcast-evo-probe.md`
+- `benchmarks/gemma4-metal-decode-graph-singleton-kv-broadcast-exp0013-512.json`
+- `benchmarks/gemma4-metal-decode-graph-singleton-kv-broadcast-exp0013-512.csv`
+- `configs/repo-loop-state.json`
+- `state/evolution-log.md`
