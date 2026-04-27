@@ -644,7 +644,18 @@
     ".venv/bin/tinygrad-gemma --help",
     ".venv/bin/python scripts/smoke_metal.py"
   ],
-  "next_target": "metal-int8-kernel-local-size-survey-047",
-  "next_target_plan": "The model.py-local RMSNorm scale-cache probe was correct but slow and failed the long gate, so do not continue caching realized RMSNorm scales in the current evo run. Next inspect the adjacent rowwise-int8 METAL decode kernel surface in tinygrad_gemma/metal_int8.py: recover the current kernel implementation, run its existing focused tests/benchmarks, and survey local-size or shape-specialization candidates without claiming improvement until a real E2B int8 METAL default/hash gate verifies it. Because the active evo run targets tinygrad_gemma/model.py, either create a new evo run targeting metal_int8.py or run a narrow manual probe with committed benchmark artifacts before adopting changes.",
-  "updated_at": "2026-04-26T23:34:25-0700"
+  "next_target": "evo-frontier-graphable-model-probe-048",
+  "next_target_plan": "The raw metal_int8 local-size surface is not actionable for the active E2B harness: it is dormant in the graphable model path and fails under the research tinygrad source-byte runtime. Resume from evo frontier exp_0005 with graphable model.py-only probes unless a separate compatibility increment first teaches metal_int8.py to compile source to MTLB under /Users/ericfode/src/.tinygrad_research. Before another runtime edit, run evo scratchpad/frontier and choose a probe tied to the layer-13 K/V projection source-mass evidence; acceptance remains default score above 28.6153 plus stable E2B int8 METAL hash gates with decode_fallback=false.",
+  "updated_at": "2026-04-26T23:48:25-0700",
+  "completed_increments": [
+    {
+      "id": "metal-int8-kernel-local-size-survey-047",
+      "summary": "Surveyed the dormant raw rowwise-int8 METAL decode-linear runner before making code changes. Focused RowwiseInt8/metal_int8 tests passed, and a stock-tinygrad prototype sweep for shape 1536->12288 measured local_size 64/128/256 at 0.300875/0.124333/0.104708 ms median with correctness passing. The actual research tinygrad path used by the E2B evo harness failed a direct raw-runner canary with RuntimeError: Invalid library file because metal_int8.py passes Metal source bytes to Device.runtime while the research MetalProgram expects compiled MTLB bytes. A real E2B int8 METAL hash16 gate on unchanged source passed with 30.327774 measured tok/s, stable hash, rollout_jit_count=15, and decode_fallback=false. No code change was adopted; do not integrate the raw runner into RowwiseInt8Linear or tune its default local_size under the active benchmark without a separate compatibility target.",
+      "artifacts": [
+        "benchmarks/metal-int8-kernel-local-size-survey-047.json",
+        "state/evolution-log.md",
+        "configs/repo-loop-state.json"
+      ]
+    }
+  ]
 }

@@ -1,0 +1,96 @@
+{
+  "commands": {
+    "focused_tests": ".venv/bin/python -m pytest -q tests/test_tinygrad_gemma.py -k 'metal_rowwise_int8 or RowwiseInt8'",
+    "real_e2b_hash16_gate": "PYTHONPATH=/Users/ericfode/src/.tinygrad_research:. .venv/bin/python scripts/benchmark_gemma4_matrix.py --root checkpoints --sizes E2B --formats int8 --devices METAL --beams 0 --prompt hello --max-new-tokens 16 --decode-warmup-tokens 4 --progress-every 0 --out /tmp/metal-int8-047-e2b-hash16.csv",
+    "research_raw_runner_canary": "PYTHONPATH=/Users/ericfode/src/.tinygrad_research:. .venv/bin/python - <<'PY' ... metal_rowwise_int8_decode_linear(...) ... PY",
+    "stock_local_size_sweep": ".venv/bin/python scripts/prototype_metal_rowwise_int8_linear.py --device METAL --in-features 1536 --out-features 12288 --local-size {64,128,256} --warmups 5 --repeats 20"
+  },
+  "created_at": "2026-04-26T23:48:25-0700",
+  "decision": {
+    "code_change": "none",
+    "reason": "Integrating metal_rowwise_int8_decode_linear into RowwiseInt8Linear would contradict the current raw-runner-disabled policy, risk graph fragmentation, and fail the actual research tinygrad benchmark path unless a separate compatibility target first compiles source to MTLB. A local_size default tweak would only affect a dormant prototype path."
+  },
+  "focused_tests": {
+    "passed": true,
+    "tests": "1 passed, 41 deselected"
+  },
+  "id": "metal-int8-kernel-local-size-survey-047",
+  "real_e2b_hash16_gate": {
+    "passed": true,
+    "row": {
+      "beam": "0",
+      "checkpoint": "checkpoints/gemma-4-E2B-int8",
+      "decode_fallback": "false",
+      "decode_warmup_tokens": "4",
+      "device": "METAL",
+      "error": "",
+      "format": "int8",
+      "generated_tokens": "16",
+      "load_seconds": "73.362373",
+      "measured_decode_seconds": "0.395677",
+      "measured_decode_tokens": "12",
+      "measured_decode_tokens_per_second": "30.327774",
+      "output_prefix": "236764 108 236777 735 496 2608 607 1041 236743 236778 236771 236771 236828 236743 236800 236778",
+      "output_sha256": "12c16f74b486dc759fa8064b549cac92c2aef68ced13b8202b4e55e9171a8c62",
+      "prompt_tokens": "2",
+      "rollout_jit_count": "15",
+      "seconds": "22.334370",
+      "size": "E2B",
+      "status": "ok",
+      "target_new_tokens": "16",
+      "tokens_per_second": "0.716385"
+    }
+  },
+  "research_raw_runner_canary": {
+    "error": "RuntimeError: Invalid library file",
+    "passed": false,
+    "root_cause": "The local research tinygrad MetalProgram path expects compiled MTLB bytes; tinygrad_gemma.metal_int8 currently passes Metal source bytes to Device.runtime."
+  },
+  "status": "rejected_no_code_change",
+  "stock_local_size_sweep": {
+    "interpretation": "Prototype-only evidence; this raw runner is not on the active graphable Gemma decode path.",
+    "results": {
+      "128": {
+        "correctness_passed": true,
+        "max_abs_error": 0.00023651123046875,
+        "threadgroup_x_median_ms": 0.1243333681486547,
+        "threadgroup_x_min_ms": 0.11799996718764305,
+        "threadgroups": [
+          96,
+          1,
+          1
+        ],
+        "tinygrad_path": "/Users/ericfode/Downloads/tinygrad-gemma/.venv/lib/python3.14/site-packages/tinygrad/__init__.py"
+      },
+      "256": {
+        "correctness_passed": true,
+        "max_abs_error": 0.00023651123046875,
+        "threadgroup_x_median_ms": 0.1047083642333746,
+        "threadgroup_x_min_ms": 0.09654159657657146,
+        "threadgroups": [
+          48,
+          1,
+          1
+        ],
+        "tinygrad_path": "/Users/ericfode/Downloads/tinygrad-gemma/.venv/lib/python3.14/site-packages/tinygrad/__init__.py"
+      },
+      "64": {
+        "correctness_passed": true,
+        "max_abs_error": 0.00023651123046875,
+        "threadgroup_x_median_ms": 0.30087499180808663,
+        "threadgroup_x_min_ms": 0.27929164934903383,
+        "threadgroups": [
+          192,
+          1,
+          1
+        ],
+        "tinygrad_path": "/Users/ericfode/Downloads/tinygrad-gemma/.venv/lib/python3.14/site-packages/tinygrad/__init__.py"
+      }
+    },
+    "shape": {
+      "in_features": 1536,
+      "out_features": 12288
+    }
+  },
+  "summary": "Raw rowwise-int8 Metal local-size tuning is not actionable for the active E2B decode path: stock tinygrad can run the prototype and local_size=256 looked fastest in one local sweep, but the actual research tinygrad path used by the evo harness rejects the raw source-byte MetalProgram with RuntimeError: Invalid library file. The real E2B hash16 gate remains healthy without code changes."
+}

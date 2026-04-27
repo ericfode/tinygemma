@@ -1,5 +1,14 @@
 # Evolution Log
 
+## 2026-04-26 - Metal Int8 Local-Size Survey Rejected
+
+- Objective: execute `metal-int8-kernel-local-size-survey-047` before touching the runtime path. The candidate surface was `tinygrad_gemma/metal_int8.py`, especially the dormant raw rowwise-int8 METAL decode-linear runner and its `local_size` parameter.
+- Baseline receipts: `.venv/bin/python -m pytest -q tests/test_tinygrad_gemma.py -k 'metal_rowwise_int8 or RowwiseInt8'` passed (`1 passed, 41 deselected`). Stock-tinygrad prototype sweeps for shape `1536 -> 12288` passed correctness and measured threadgroup-x medians of `0.300875 ms` (`local_size=64`), `0.124333 ms` (`128`), and `0.104708 ms` (`256`) in this local run.
+- Compatibility blocker: the actual E2B evo harness prefers `/Users/ericfode/src/.tinygrad_research`; under that path, a direct `metal_rowwise_int8_decode_linear` canary failed with `RuntimeError: Invalid library file`. Root cause: `metal_int8.py` passes Metal source bytes to `Device.runtime`, while the research `MetalProgram` path expects compiled `MTLB` bytes.
+- Real E2B sanity gate on unchanged source: `PYTHONPATH=/Users/ericfode/src/.tinygrad_research:. .venv/bin/python scripts/benchmark_gemma4_matrix.py --root checkpoints --sizes E2B --formats int8 --devices METAL --beams 0 --prompt hello --max-new-tokens 16 --decode-warmup-tokens 4 --progress-every 0 --out /tmp/metal-int8-047-e2b-hash16.csv` passed with `measured_decode_tokens_per_second=30.327774`, output hash `12c16f74b486dc759fa8064b549cac92c2aef68ced13b8202b4e55e9171a8c62`, `rollout_jit_count=15`, and `decode_fallback=false`.
+- Decision: adopt no code change. A `local_size` tweak would affect only a dormant prototype path, and integrating the raw runner into `RowwiseInt8Linear` would contradict the current raw-runner-disabled/graph-breaking policy while also failing the actual research tinygrad benchmark path. Artifact: `benchmarks/metal-int8-kernel-local-size-survey-047.json`.
+- Next target: `evo-frontier-graphable-model-probe-048`. Return to `exp_0005` and graphable `model.py`-local probes tied to layer-13 K/V projection source-mass evidence, unless a separate compatibility increment first makes `metal_int8.py` source compilation research-tinygrad-compatible. A tidy raw kernel is still raw; tinygrad is not obliged to admire it.
+
 ## 2026-04-26 - Evo RMSNorm Scale Cache Rejected
 
 - Objective: execute `rmsnorm-inference-scale-cache-046` from the current evo frontier `exp_0005` (`28.6153` default `128/20` score, current long `1000/20` hash floor at `--min-score 18.0`).
